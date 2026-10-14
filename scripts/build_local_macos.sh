@@ -20,7 +20,7 @@ if [[ ! -x "$qt_dir/bin/qmake" || ! -x "$qt_dir/bin/macdeployqt" ]]; then
   exit 1
 fi
 
-export PATH="$qt_dir/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$qt_dir/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 unset QT_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH
 
 make -C "$repo_dir/mupdf" HAVE_GLUT=no -j"$jobs"
