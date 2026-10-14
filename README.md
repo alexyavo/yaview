@@ -1,6 +1,6 @@
 <img src="resources/yaview-icon.png" alt="yaview icon" width="128">
 
-# yaview
+# yaview -- a PDF Viewer
 
 [![Memory leak tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/alexyavo/yaview/badges/memory-tests.json)](https://github.com/alexyavo/yaview/actions/workflows/memory-tests.yml)
 
@@ -21,7 +21,7 @@ sudo dnf install qt5-qtbase-devel qt5-qtbase-static qt5-qt3d-devel harfbuzz-deve
 git clone --recursive https://github.com/alexyavo/yaview
 cd yaview
 ./build_linux.sh
-``` 
+```
 
 #### Generic distribution
 1. Install Qt 5 and make sure `qmake` is in `PATH`.
