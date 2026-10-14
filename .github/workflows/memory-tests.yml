@@ -77,3 +77,30 @@ jobs:
           name: memory-test-results
           path: ${{ runner.temp }}/memory-results
           if-no-files-found: ignore
+
+  # GitHub's own workflow badge can't show a date, so this job publishes the result and date of
+  # the run as a shields.io endpoint badge (memory-tests.json on the orphan `badges` branch, which
+  # the README's badge reads). It's a separate job so the build and tests never get a token that
+  # can write to the repository. Cancelled runs leave the badge alone.
+  badge:
+    needs: memory-tests
+    if: always() && contains(fromJSON('["success", "failure"]'), needs.memory-tests.result)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish badge
+        env:
+          RESULT: ${{ needs.memory-tests.result }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$RESULT" = success ]; then message=passing color=brightgreen; else message=failing color=red; fi
+          mkdir badges && cd badges
+          git init -q -b badges
+          printf '{"schemaVersion": 1, "label": "memory leak tests", "message": "%s · %s", "color": "%s"}\n' \
+            "$message" "$(date -u +%Y-%m-%d)" "$color" > memory-tests.json
+          git add memory-tests.json
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "Memory leak tests $message: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          git push -q -f "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" badges

@@ -29,7 +29,7 @@ To run without your Mac at all, use the GitHub Actions workflow
 suite, and uploads the reports as the `memory-test-results` artifact. It never runs on pushes:
 start it from the repository's Actions tab, or with
 `gh workflow run memory-tests.yml -f iterations=40 -f scenarios=popups`. It also runs every Sunday
-at 06:00 UTC. The badge at the top of the repository's README shows the latest run's result.
+at 06:00 UTC. The badge at the top of the repository's README shows the latest run's result and date.
 
 ## What it does
 
