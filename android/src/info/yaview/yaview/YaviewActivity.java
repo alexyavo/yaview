@@ -1,5 +1,5 @@
 
-package info.sioyek.sioyek;
+package info.yaview.yaview;
 
 import org.qtproject.qt.android.QtNative;
 
@@ -65,7 +65,7 @@ import android.view.MenuItem;
 
 
 
-public class SioyekActivity extends QtActivity{
+public class YaviewActivity extends QtActivity{
     public static native void setFileUrlReceived(String url);
     public static native void qDebug(String msg);
     public static native void onTts(int begin, int end);
@@ -78,7 +78,7 @@ public class SioyekActivity extends QtActivity{
     public static boolean isInitialized;
     public static boolean isPaused = true;
 
-    private static SioyekActivity instance = null;
+    private static YaviewActivity instance = null;
 
     private MediaController mediaController = null;
     private SessionToken ttsSessionToken = null;
@@ -126,7 +126,7 @@ public class SioyekActivity extends QtActivity{
                     if (intentUri.toString().startsWith("content://") && (!intentUri.toString().startsWith("content://com.android")) && (!intentUri.toString().startsWith("content://media")) && (intentUri.toString().indexOf("@media") == -1)){
                         //Toast.makeText(this, "Opening files from other apps is not supported. Download the file and open it from file manager.", Toast.LENGTH_LONG).show();
 
-                        Intent viewIntent = new Intent(getApplicationContext(), SioyekActivity.class);
+                        Intent viewIntent = new Intent(getApplicationContext(), YaviewActivity.class);
                         // viewIntent.setUri(intentUri);
                         viewIntent.setAction(Intent.ACTION_VIEW);
                         viewIntent.putExtra("sharedData", intentUri.toString());
@@ -169,12 +169,12 @@ public class SioyekActivity extends QtActivity{
                 mediaController = controllerFuture.get();
             }
             catch(Exception e){
-                qDebug("sioyek: could not get media controller");
+                qDebug("yaview: could not get media controller");
             }
         }, MoreExecutors.directExecutor());
-        LocalBroadcastManager.getInstance(this).registerReceiver(messageReceiver, new IntentFilter("sioyek_tts"));
-        LocalBroadcastManager.getInstance(this).registerReceiver(stateMessageReceiver, new IntentFilter("sioyek_tts_state"));
-        LocalBroadcastManager.getInstance(this).registerReceiver(externalStateMessageReceiver, new IntentFilter("sioyek_external_tts_state"));
+        LocalBroadcastManager.getInstance(this).registerReceiver(messageReceiver, new IntentFilter("yaview_tts"));
+        LocalBroadcastManager.getInstance(this).registerReceiver(stateMessageReceiver, new IntentFilter("yaview_tts_state"));
+        LocalBroadcastManager.getInstance(this).registerReceiver(externalStateMessageReceiver, new IntentFilter("yaview_external_tts_state"));
     }
 
     @Override
@@ -431,7 +431,7 @@ public class SioyekActivity extends QtActivity{
                 setFileUrlReceived(realPath);
             }
             catch(IOException e){
-                qDebug("sioyek: could not open" + realPath);
+                qDebug("yaview: could not open" + realPath);
             }
         }
         return;

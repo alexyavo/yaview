@@ -2470,7 +2470,7 @@ void Document::embed_annotations(std::wstring new_file_path) {
     }
 
     if (output_file == nullptr) {
-        show_error_message(L"Could not open the output file. Make sure the file is not opened in sioyek or another application.");
+        show_error_message(L"Could not open the output file. Make sure the file is not opened in yaview or another application.");
         return;
     }
 
@@ -2481,8 +2481,8 @@ void Document::embed_annotations(std::wstring new_file_path) {
 
     get_pdf_annotations(pdf_bookmarks, pdf_highlights, pdf_drawings);
 
-    const std::vector<Highlight>& doc_highlights = get_new_sioyek_highlights(pdf_highlights);
-    const std::vector<BookMark>& doc_bookmarks = get_new_sioyek_bookmarks(pdf_bookmarks);
+    const std::vector<Highlight>& doc_highlights = get_new_yaview_highlights(pdf_highlights);
+    const std::vector<BookMark>& doc_bookmarks = get_new_yaview_bookmarks(pdf_bookmarks);
 
     for (auto highlight : doc_highlights) {
         int page_number = get_offset_page_number(highlight.selection_begin.y);
@@ -3571,16 +3571,16 @@ void Document::delete_page_intersecting_drawings(int page, AbsoluteRect absolute
     is_drawings_dirty = true;
 }
 
-std::wstring Document::get_addtional_sioyek_file_path(QString type) {
+std::wstring Document::get_addtional_yaview_file_path(QString type) {
     if (ANNOTATIONS_DIR_PATH.size() == 0) {
         Path path = Path(file_name);
         QString filename = QString::fromStdWString(path.filename().value());
-        QString drawing_file_name = filename + ".sioyek." + type;
+        QString drawing_file_name = filename + ".yaview." + type;
         return path.file_parent().slash(drawing_file_name.toStdWString()).get_path();
     }
     else {
         Path parent_path(ANNOTATIONS_DIR_PATH);
-        std::wstring escaped_path = (QString::fromStdWString(file_name).replace("/", "_").replace("\\", "_").replace(":", "_") + ".sioyek." + type).toStdWString();
+        std::wstring escaped_path = (QString::fromStdWString(file_name).replace("/", "_").replace("\\", "_").replace(":", "_") + ".yaview." + type).toStdWString();
         return parent_path.slash(escaped_path).get_path();
 
     }
@@ -3588,24 +3588,24 @@ std::wstring Document::get_addtional_sioyek_file_path(QString type) {
 
 std::wstring Document::get_drawings_file_path() {
     Path path = Path(file_name);
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     if (file_name == L":/tutorial.pdf") {
         QString parent_path = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).at(0);
-        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.sioyek.drawings").get_path();
+        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.yaview.drawings").get_path();
     }
 #endif
-    return get_addtional_sioyek_file_path("drawings");
+    return get_addtional_yaview_file_path("drawings");
 }
 
 std::wstring Document::get_scratchpad_file_path() {
     Path path = Path(file_name);
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     if (file_name == L":/tutorial.pdf") {
         QString parent_path = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).at(0);
-        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.sioyek.scratchpad").get_path();
+        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.yaview.scratchpad").get_path();
     }
 #endif
-    return get_addtional_sioyek_file_path("scratchpad");
+    return get_addtional_yaview_file_path("scratchpad");
 }
 
 std::wstring Document::get_extras_file_path() {
@@ -3631,13 +3631,13 @@ bool Document::annotations_file_is_newer_than_database() {
 
 std::wstring Document::get_annotations_file_path() {
     Path path = Path(file_name);
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     if (file_name == L":/tutorial.pdf") {
         QString parent_path = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).at(0);
-        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.sioyek.annotations").get_path();
+        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.yaview.annotations").get_path();
     }
 #endif
-    return get_addtional_sioyek_file_path("annotations");
+    return get_addtional_yaview_file_path("annotations");
 }
 
 
@@ -4067,7 +4067,7 @@ bool Document::get_should_render_pdf_annotations() {
     return should_render_annotations;
 }
 
-std::vector<BookMark> Document::get_new_sioyek_bookmarks(const std::vector<BookMark>& pdf_bookmarks) {
+std::vector<BookMark> Document::get_new_yaview_bookmarks(const std::vector<BookMark>& pdf_bookmarks) {
     std::vector<BookMark> res;
 
     for (auto bookmark : bookmarks) {
@@ -4086,7 +4086,7 @@ std::vector<BookMark> Document::get_new_sioyek_bookmarks(const std::vector<BookM
     return res;
 }
 
-std::vector<Highlight> Document::get_new_sioyek_highlights(const std::vector<Highlight>& pdf_highlights) {
+std::vector<Highlight> Document::get_new_yaview_highlights(const std::vector<Highlight>& pdf_highlights) {
     std::vector<Highlight> res;
 
     for (auto highlight : highlights) {
@@ -4423,6 +4423,21 @@ int DocumentManager::add_tab(const std::wstring& path) {
     return tab_index;
 }
 
+int DocumentManager::add_tab_after(const std::wstring& path, const std::optional<std::wstring>& after_path) {
+    int tab_index = get_tab_index(path);
+    if (tab_index != -1) {
+        return tab_index;
+    }
+    int after_index = after_path ? get_tab_index(after_path.value()) : -1;
+    if (after_index == -1) {
+        tabs.push_back(path);
+    }
+    else {
+        tabs.insert(tabs.begin() + after_index + 1, path);
+    }
+    return -1;
+}
+
 void DocumentManager::remove_tab(const std::wstring& path) {
     int index = get_tab_index(path);
     if (index != -1) {
@@ -4443,6 +4458,11 @@ std::wstring Document::detect_paper_name(fz_context* context, fz_document* doc) 
     if (detected_paper_name.size() > 0) return detected_paper_name;
 
     fz_stext_page* stext_page = get_stext_with_page_number(context, 0, doc);
+    // get_stext_with_page_number caches (and owns) only pages of this document's own fz_document; a
+    // page of another fz_document, such as the worker thread's in load_page_dimensions, is ours to drop.
+    // It wasn't dropped, which leaked a text page per loaded document.
+    bool owns_stext_page = (doc != nullptr) && (doc != this->doc);
+    std::wstring paper_name = L"";
     if (stext_page) {
 
         //std::wstring max_block_text = L"";
@@ -4482,15 +4502,18 @@ std::wstring Document::detect_paper_name(fz_context* context, fz_document* doc) 
             }
         }
         if (max_block) {
-            return get_string_from_stext_block(max_block, true);
+            paper_name = get_string_from_stext_block(max_block, true);
         }
         else {
-            char buffer[1000];
+            char buffer[1000] = { 0 }; // stays empty when the document has no title
             fz_lookup_metadata(context, doc, FZ_META_INFO_TITLE, buffer, 1000);
-            return utf8_decode(buffer);
+            paper_name = utf8_decode(buffer);
+        }
+        if (owns_stext_page) {
+            fz_drop_stext_page(context, stext_page);
         }
     }
-    return L"";
+    return paper_name;
 }
 
 PageIterator Document::page_iterator(int page_number) {

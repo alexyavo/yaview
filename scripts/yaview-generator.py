@@ -1,7 +1,7 @@
 '''
-script used to generate sioyek.py file
+script used to generate yaview.py file
 '''
-sioyek_commands = {
+yaview_commands = {
     "goto_begining": [False,	False,	False,	True],
     "goto_end": [False,	False,	False,	True],
     "goto_definition": [False,	False,	False,	False],
@@ -159,5 +159,5 @@ def print_method(command_name, requires_text, requires_symbol, requires_filename
     print(res)
 
 if __name__ == '__main__':
-    for command_name, (requires_text, requires_symbol, requires_filename, _) in sioyek_commands.items():
+    for command_name, (requires_text, requires_symbol, requires_filename, _) in yaview_commands.items():
         print_method(command_name, requires_text, requires_symbol, requires_filename)

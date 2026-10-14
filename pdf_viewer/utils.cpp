@@ -1,7 +1,7 @@
 //#include <Windows.h>
 #include <cwctype>
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 #include <unistd.h>
 #endif
 
@@ -16,6 +16,9 @@
 #include <string>
 #include <qclipboard.h>
 #include <qguiapplication.h>
+#include <qpalette.h>
+#include <qstylehints.h>
+#include <qfontdatabase.h>
 #include <qprocess.h>
 #include <qdesktopservices.h>
 #include <qurl.h>
@@ -35,7 +38,7 @@
 #include <qjsondocument.h>
 #include "path.h"
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 #include <QtCore/private/qandroidextras_p.h>
 #include <qjniobject.h>
 #endif
@@ -67,6 +70,17 @@ extern Path last_opened_file_address_path;
 
 extern float UI_BACKGROUND_COLOR[3];
 extern float UI_TEXT_COLOR[3];
+extern std::wstring UI_THEME;
+extern float UI_DARK_BACKGROUND_COLOR[3];
+extern float UI_DARK_TEXT_COLOR[3];
+extern float UI_DARK_SELECTED_BACKGROUND_COLOR[3];
+extern float UI_DARK_SELECTED_TEXT_COLOR[3];
+extern float UI_DARK_BORDER_COLOR[3];
+extern float UI_LIGHT_BACKGROUND_COLOR[3];
+extern float UI_LIGHT_TEXT_COLOR[3];
+extern float UI_LIGHT_SELECTED_BACKGROUND_COLOR[3];
+extern float UI_LIGHT_SELECTED_TEXT_COLOR[3];
+extern float UI_LIGHT_BORDER_COLOR[3];
 
 extern std::wstring PAPER_SEARCH_URL_PATH;
 extern std::wstring PAPER_SEARCH_TILE_PATH;
@@ -95,7 +109,7 @@ std::wstring to_lower(const std::wstring& inp) {
 std::wstring get_path_extras_file_name(const std::wstring& path_) {
     Path path = Path(path_);
     QString filename = QString::fromStdWString(path.filename().value());
-    QString drawing_file_name = filename + ".sioyek.extras";
+    QString drawing_file_name = filename + ".yaview.extras";
     std::wstring extras_file_path = path.file_parent().slash(drawing_file_name.toStdWString()).get_path();
     return extras_file_path;
 }
@@ -296,7 +310,7 @@ void install_app(const char* argv0)
     OPEN_KEY(software, "Classes", classes);
     OPEN_KEY(classes, ".pdf", dotpdf);
     OPEN_KEY(dotpdf, "OpenWithProgids", pdf_progids);
-    OPEN_KEY(classes, "Sioyek", testpdf);
+    OPEN_KEY(classes, "Yaview", testpdf);
     OPEN_KEY(testpdf, "SupportedTypes", supported_types);
     OPEN_KEY(testpdf, "shell", shell);
     OPEN_KEY(shell, "open", open);
@@ -304,10 +318,10 @@ void install_app(const char* argv0)
 
     sprintf(buf, "\"%s\" \"%%1\"", argv0);
 
-    SET_KEY(open, "FriendlyAppName", "Sioyek");
+    SET_KEY(open, "FriendlyAppName", "Yaview");
     SET_KEY(command, "", buf);
     SET_KEY(supported_types, ".pdf", "");
-    SET_KEY(pdf_progids, "sioyek", "");
+    SET_KEY(pdf_progids, "yaview", "");
 
     RegCloseKey(dotpdf);
     RegCloseKey(testpdf);
@@ -1904,34 +1918,34 @@ QCommandLineParser* get_command_line_parser() {
 
     QCommandLineParser* parser = new QCommandLineParser();
 
-    parser->setApplicationDescription("Sioyek is a PDF reader designed for reading research papers and technical books.");
+    parser->setApplicationDescription("Yaview is a PDF reader designed for reading research papers and technical books.");
     //parser->addVersionOption();
 
     //QCommandLineOption reuse_instance_option("reuse-instance");
-    //reuse_instance_option.setDescription("When opening a new file, reuse the previous instance of sioyek instead of opening a new window.");
+    //reuse_instance_option.setDescription("When opening a new file, reuse the previous instance of yaview instead of opening a new window.");
     //parser->addOption(reuse_instance_option);
 
     QCommandLineOption new_instance_option("new-instance");
-    new_instance_option.setDescription("When opening a new file, create a new instance of sioyek.");
+    new_instance_option.setDescription("When opening a new file, create a new instance of yaview.");
     parser->addOption(new_instance_option);
 
-    QCommandLineOption instance_name_option("instance-name", "Select a specific sioyek instance by name.", "name");
+    QCommandLineOption instance_name_option("instance-name", "Select a specific yaview instance by name.", "name");
     parser->addOption(instance_name_option);
 
     QCommandLineOption new_window_option("new-window");
-    new_window_option.setDescription("Open the file in a new window but within the same sioyek instance (reuses the previous window if a sioyek window with the same file already exists).");
+    new_window_option.setDescription("Open the file in a new window but within the same yaview instance (reuses the previous window if a yaview window with the same file already exists).");
     parser->addOption(new_window_option);
 
     QCommandLineOption reuse_window_option("reuse-window");
-    reuse_window_option.setDescription("Force sioyek to reuse the current window even when should_launch_new_window is set.");
+    reuse_window_option.setDescription("Force yaview to reuse the current window even when should_launch_new_window is set.");
     parser->addOption(reuse_window_option);
 
     QCommandLineOption nofocus_option("nofocus");
-    nofocus_option.setDescription("Do not bring the sioyek instance to foreground.");
+    nofocus_option.setDescription("Do not bring the yaview instance to foreground.");
     parser->addOption(nofocus_option);
 
     QCommandLineOption version_option("version");
-    version_option.setDescription("Print sioyek version.");
+    version_option.setDescription("Print yaview version.");
     parser->addOption(version_option);
 
 
@@ -1949,7 +1963,7 @@ QCommandLineParser* get_command_line_parser() {
  In <command>, %1 is filled with the file name and %2 is filled with the line number.", "command");
     parser->addOption(inverse_search_option);
 
-    QCommandLineOption command_option("execute-command", "The command to execute on running instance of sioyek", "execute-command");
+    QCommandLineOption command_option("execute-command", "The command to execute on running instance of yaview", "execute-command");
     parser->addOption(command_option);
 
     QCommandLineOption command_data_option("execute-command-data", "Optional data for execute-command command", "execute-command-data");
@@ -2013,7 +2027,7 @@ std::wstring concatenate_path(const std::wstring& prefix, const std::wstring& su
 }
 
 std::wstring get_canonical_path(const std::wstring& path) {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     if (path.size() > 0) {
         if (path[0] == ':') { // it is a resouce file
             return path;
@@ -2669,8 +2683,36 @@ QString get_color_stylesheet(float* bg_color, float* text_color, bool nofont, in
     }
 }
 
+bool is_system_dark_mode() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+#else
+    return QGuiApplication::palette().color(QPalette::Window).lightness() < 128;
+#endif
+}
+
+QString get_mixed_color_qml_string(const float* from, const float* to, float t) {
+    return get_color_qml_string(
+        from[0] + (to[0] - from[0]) * t,
+        from[1] + (to[1] - from[1]) * t,
+        from[2] + (to[2] - from[2]) * t);
+}
+
+UiColors get_ui_colors() {
+    if (UI_THEME == L"custom") {
+        return { UI_BACKGROUND_COLOR, UI_TEXT_COLOR, UI_SELECTED_BACKGROUND_COLOR, UI_SELECTED_TEXT_COLOR, UI_SELECTED_BACKGROUND_COLOR };
+    }
+
+    bool dark = (UI_THEME == L"dark") || ((UI_THEME != L"light") && is_system_dark_mode());
+    if (dark) {
+        return { UI_DARK_BACKGROUND_COLOR, UI_DARK_TEXT_COLOR, UI_DARK_SELECTED_BACKGROUND_COLOR, UI_DARK_SELECTED_TEXT_COLOR, UI_DARK_BORDER_COLOR };
+    }
+    return { UI_LIGHT_BACKGROUND_COLOR, UI_LIGHT_TEXT_COLOR, UI_LIGHT_SELECTED_BACKGROUND_COLOR, UI_LIGHT_SELECTED_TEXT_COLOR, UI_LIGHT_BORDER_COLOR };
+}
+
 QString get_ui_stylesheet(bool nofont, int font_size) {
-    return get_color_stylesheet(UI_BACKGROUND_COLOR, UI_TEXT_COLOR, nofont, font_size);
+    UiColors colors = get_ui_colors();
+    return get_color_stylesheet(colors.background, colors.text, nofont, font_size);
 }
 
 QString get_status_stylesheet(bool nofont, int font_size) {
@@ -2682,18 +2724,19 @@ QString get_list_item_stylesheet() {
 }
 
 QString get_selected_stylesheet(bool nofont) {
+    UiColors colors = get_ui_colors();
     if ((!nofont) && STATUS_BAR_FONT_SIZE > -1) {
         QString	font_size_stylesheet = QString("font-size: %1px").arg(STATUS_BAR_FONT_SIZE);
         return QString("background-color: %1; color: %2; border: 0; %3;").arg(
-            get_color_qml_string(UI_SELECTED_BACKGROUND_COLOR[0], UI_SELECTED_BACKGROUND_COLOR[1], UI_SELECTED_BACKGROUND_COLOR[2]),
-            get_color_qml_string(UI_SELECTED_TEXT_COLOR[0], UI_SELECTED_TEXT_COLOR[1], UI_SELECTED_TEXT_COLOR[2]),
+            get_color_qml_string(colors.selected_background[0], colors.selected_background[1], colors.selected_background[2]),
+            get_color_qml_string(colors.selected_text[0], colors.selected_text[1], colors.selected_text[2]),
             font_size_stylesheet
         );
     }
     else {
         return QString("background-color: %1; color: %2; border: 0;").arg(
-            get_color_qml_string(UI_SELECTED_BACKGROUND_COLOR[0], UI_SELECTED_BACKGROUND_COLOR[1], UI_SELECTED_BACKGROUND_COLOR[2]),
-            get_color_qml_string(UI_SELECTED_TEXT_COLOR[0], UI_SELECTED_TEXT_COLOR[1], UI_SELECTED_TEXT_COLOR[2])
+            get_color_qml_string(colors.selected_background[0], colors.selected_background[1], colors.selected_background[2]),
+            get_color_qml_string(colors.selected_text[0], colors.selected_text[1], colors.selected_text[2])
         );
     }
 }
@@ -2711,7 +2754,7 @@ void convert_color3(const float* in_color, int* out_color) {
     out_color[2] = (int)(in_color[2] * 255);
 }
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 
 std::optional<std::function<void(int, int)>> android_global_word_callback = {};
 std::optional<std::function<void(QString)>> android_global_state_change_callback = {};
@@ -2732,7 +2775,7 @@ QString android_file_uri_from_content_uri(QString uri) {
     QJniObject activity = QNativeInterface::QAndroidApplication::context();
     QJniObject uri_object = parseUriString(uri);
 
-    QJniObject file_uri_object = QJniObject::callStaticObjectMethod("info/sioyek/sioyek/SioyekActivity",
+    QJniObject file_uri_object = QJniObject::callStaticObjectMethod("info/yaview/yaview/YaviewActivity",
         "getPathFromUri",
         "(Landroid/content/Context;Landroid/net/Uri;)Ljava/lang/String;", activity.object(), uri_object.object());
     return file_uri_object.toString();
@@ -2776,7 +2819,7 @@ void android_tts_set_rest_of_document(QString rest){
 
 fz_document* open_document_with_file_name(fz_context* context, std::wstring file_name) {
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 
     QFile pdf_qfile(QString::fromStdWString(file_name));
 
@@ -2849,7 +2892,7 @@ void convert_qcolor_to_float4(const QColor& color, float* out_floats) {
     *(out_floats + 3) = static_cast<float>(color.alpha()) / 255.0f;
 }
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 
 #include "main_widget.h"
 extern std::vector<MainWidget*> windows;
@@ -2949,7 +2992,7 @@ QString on_android_get_rest_on_pause(){
 
 extern "C" {
     JNIEXPORT void JNICALL
-        Java_info_sioyek_sioyek_SioyekActivity_setFileUrlReceived(JNIEnv* env,
+        Java_info_yaview_yaview_YaviewActivity_setFileUrlReceived(JNIEnv* env,
             jobject obj,
             jstring url)
     {
@@ -2961,7 +3004,7 @@ extern "C" {
     }
 
     JNIEXPORT void JNICALL
-        Java_info_sioyek_sioyek_SioyekActivity_qDebug(JNIEnv* env,
+        Java_info_yaview_yaview_YaviewActivity_qDebug(JNIEnv* env,
             jobject obj,
             jstring url)
     {
@@ -2973,7 +3016,7 @@ extern "C" {
     }
 
     JNIEXPORT void JNICALL
-        Java_info_sioyek_sioyek_SioyekActivity_onTts(JNIEnv* env,
+        Java_info_yaview_yaview_YaviewActivity_onTts(JNIEnv* env,
             jobject obj,
             jint begin, jint end)
     {
@@ -2981,7 +3024,7 @@ extern "C" {
     }
 
     JNIEXPORT void JNICALL
-        Java_info_sioyek_sioyek_SioyekActivity_onTtsStateChange(JNIEnv* env,
+        Java_info_yaview_yaview_YaviewActivity_onTtsStateChange(JNIEnv* env,
             jobject obj,
             jstring new_state)
     {
@@ -2993,7 +3036,7 @@ extern "C" {
     }
 
     JNIEXPORT void JNICALL
-        Java_info_sioyek_sioyek_SioyekActivity_onExternalTtsStateChange(JNIEnv* env,
+        Java_info_yaview_yaview_YaviewActivity_onExternalTtsStateChange(JNIEnv* env,
             jobject obj,
             jstring new_state)
     {
@@ -3005,7 +3048,7 @@ extern "C" {
     }
 
     JNIEXPORT void JNICALL
-        Java_info_sioyek_sioyek_SioyekActivity_onResumeState(JNIEnv* env,
+        Java_info_yaview_yaview_YaviewActivity_onResumeState(JNIEnv* env,
             jobject obj,
             jboolean is_playing,
             jboolean reading_rest,
@@ -3017,7 +3060,7 @@ extern "C" {
     }
 
     JNIEXPORT jstring JNICALL
-        Java_info_sioyek_sioyek_SioyekActivity_getRestOnPause(JNIEnv* env,
+        Java_info_yaview_yaview_YaviewActivity_getRestOnPause(JNIEnv* env,
               jobject obj)
     {
 
@@ -3957,7 +4000,7 @@ std::vector<SearchResult> search_text_with_index(const std::wstring& super_fast_
 
     auto pred = get_pred(case_sensitive, query);
     auto hash = get_hash(case_sensitive, query);
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     // for some reason at the time of this commit std::boyer_moore_searcher doesn't
     // compile on android even though we are using c++17
     auto searcher = std::default_searcher(query.begin(), query.end(), pred);
@@ -4277,12 +4320,17 @@ bool should_trigger_delete(QKeyEvent *key_event) {
 }
 
 QString get_ui_font_face_name() {
-    if (UI_FONT_FACE_NAME.empty()) {
-        return "";
+    QString family = QString::fromStdWString(UI_FONT_FACE_NAME);
+#ifdef YAVIEW_QT6
+    bool is_installed = QFontDatabase::hasFamily(family);
+#else
+    bool is_installed = QFontDatabase().hasFamily(family);
+#endif
+    // fall back to the bundled monospace font when ui_font is unset or not installed
+    if (family.isEmpty() || !is_installed) {
+        return global_font_family;
     }
-    else {
-        return QString::fromStdWString(UI_FONT_FACE_NAME);
-    }
+    return family;
 }
 
 QString get_status_font_face_name() {
@@ -4391,7 +4439,7 @@ QString translate_key_mapping_to_macos(QString mapping){
     return mapping;
 }
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 
 AndroidTextToSpeechHandler::AndroidTextToSpeechHandler() {
 }

@@ -34,8 +34,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./uploads/sioyek-release-mac.zip
-        asset_name: sioyek-release-mac.zip
+        asset_path: ./uploads/yaview-release-mac.zip
+        asset_name: yaview-release-mac.zip
         asset_content_type: application/zip   
 
   build-mac:
@@ -66,4 +66,4 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: uploads
-        path: sioyek-release-mac.zip
+        path: yaview-release-mac.zip

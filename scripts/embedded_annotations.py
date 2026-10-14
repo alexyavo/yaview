@@ -14,7 +14,7 @@ And here is a `keys_user.config` file that can be used:
 	execute_command_b b
 	execute_command_h;add_highlight h
 
-which basically adds both sioyek and embedded highlights and bookmarks (if `ADD_BOOKMARKS_TO_SIOYEK` is True). Alternatively, you can use
+which basically adds both yaview and embedded highlights and bookmarks (if `ADD_BOOKMARKS_TO_YAVIEW` is True). Alternatively, you can use
 a different keybinding for embedded annotations so you have control over what happens. Now you can use alt+b or alt+h to bookmark/highlight.
 
 	execute_command_b <A-b>
@@ -25,9 +25,9 @@ import sys
 import fitz
 import subprocess
 
-# if set to true, we re-add the bookmarks into sioyek, so we have both types of bookmarks
-ADD_BOOKMARKS_TO_SIOYEK = False
-PATH_TO_SIOYEK = r'path/to/sioyek.exe'
+# if set to true, we re-add the bookmarks into yaview, so we have both types of bookmarks
+ADD_BOOKMARKS_TO_YAVIEW = False
+PATH_TO_YAVIEW = r'path/to/yaview.exe'
 
 def add_bookmark(doc_path, page_number, location, text):
 	doc = fitz.open(doc_path)
@@ -35,9 +35,9 @@ def add_bookmark(doc_path, page_number, location, text):
 	page.addTextAnnot(location, text)
 	doc.saveIncr()
 	doc.close()
-	if ADD_BOOKMARKS_TO_SIOYEK:
-		subprocess.run([PATH_TO_SIOYEK, '--execute-command', 'add_bookmark','--execute-command-data', text])
-		subprocess.run([PATH_TO_SIOYEK, '--execute-command', 'reload'])
+	if ADD_BOOKMARKS_TO_YAVIEW:
+		subprocess.run([PATH_TO_YAVIEW, '--execute-command', 'add_bookmark','--execute-command-data', text])
+		subprocess.run([PATH_TO_YAVIEW, '--execute-command', 'reload'])
 
 
 def add_highlight(doc_path, page_number, text):

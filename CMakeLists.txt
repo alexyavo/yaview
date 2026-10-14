@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(sioyek VERSION 2.0.0 LANGUAGES C CXX)
+project(yaview VERSION 2.0.0 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
@@ -32,7 +32,7 @@ endif()
 
 qt_standard_project_setup()
 
-qt_add_executable(sioyek WIN32 MACOSX_BUNDLE
+qt_add_executable(yaview WIN32 MACOSX_BUNDLE
     resources.qrc
     pdf_viewer/OpenWithApplication.cpp pdf_viewer/OpenWithApplication.h
     pdf_viewer/RunGuard.cpp pdf_viewer/RunGuard.h
@@ -81,14 +81,14 @@ qt_add_executable(sioyek WIN32 MACOSX_BUNDLE
 )
 
 if(APPLE)
-    file(GLOB_RECURSE SIOYEK_SHADER_FILES CONFIGURE_DEPENDS
+    file(GLOB_RECURSE YAVIEW_SHADER_FILES CONFIGURE_DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/pdf_viewer/shaders/*"
     )
 
-    target_sources(sioyek PRIVATE
+    target_sources(yaview PRIVATE
       pdf_viewer/keys.config
       pdf_viewer/prefs.config
-      ${SIOYEK_SHADER_FILES}
+      ${YAVIEW_SHADER_FILES}
     )
 
     set_source_files_properties(
@@ -98,30 +98,30 @@ if(APPLE)
     )
 
     set_source_files_properties(
-      ${SIOYEK_SHADER_FILES}
+      ${YAVIEW_SHADER_FILES}
         PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/shaders"
     )
 
-  target_sources(sioyek PRIVATE
+  target_sources(yaview PRIVATE
         pdf_viewer/macos_specific.mm
   )
 endif()
 
-target_compile_options(sioyek PRIVATE -Wno-inconsistent-missing-override)
+target_compile_options(yaview PRIVATE -Wno-inconsistent-missing-override)
 
-target_include_directories(sioyek PRIVATE 
+target_include_directories(yaview PRIVATE 
     pdf_viewer 
     mupdf/include
     ${SQLite3_INCLUDE_DIRS}
 )
 
-target_compile_definitions(sioyek PRIVATE
+target_compile_definitions(yaview PRIVATE
     QT_OPENGLEXTENSIONS_LIB
     QT_OPENGL_LIB
     QT_WIDGETS_LIB
 )
 
-target_link_libraries(sioyek PRIVATE
+target_link_libraries(yaview PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Network
@@ -133,30 +133,30 @@ target_link_libraries(sioyek PRIVATE
 )
 
 if(NOT ANDROID)
-  target_sources(sioyek PUBLIC
+  target_sources(yaview PUBLIC
         pdf_viewer/synctex/synctex_parser.c pdf_viewer/synctex/synctex_parser.h
         pdf_viewer/synctex/synctex_parser_utils.c pdf_viewer/synctex/synctex_parser_utils.h
   )
 else()
-  target_compile_definitions(sioyek PRIVATE
-        SIOYEK_ANDROID
+  target_compile_definitions(yaview PRIVATE
+        YAVIEW_ANDROID
   )
 endif()
 
 if(WIN32)
-  target_compile_definitions(sioyek PRIVATE
+  target_compile_definitions(yaview PRIVATE
         _CRT_SECURE_NO_WARNINGS
         _CRT_NONSTDC_NO_DEPRECATE
         NOMINMAX
   )
 
   if(MSVC)
-    target_compile_options(sioyek PRIVATE /bigobj /MP)
+    target_compile_options(yaview PRIVATE /bigobj /MP)
   endif()
 endif()
 
 if(UNIX AND NOT APPLE)
-  target_compile_definitions(sioyek PRIVATE
+  target_compile_definitions(yaview PRIVATE
         LINUX_STANDARD_PATHS
   )
 endif()
@@ -166,11 +166,11 @@ find_package(HarfBuzz REQUIRED)
 find_package(SQLite3 REQUIRED)
 
 if((QT_VERSION_MAJOR GREATER 5))
-  target_compile_definitions(sioyek PRIVATE
-        SIOYEK_QT6
+  target_compile_definitions(yaview PRIVATE
+        YAVIEW_QT6
   )
 
-  target_link_libraries(sioyek PRIVATE
+  target_link_libraries(yaview PRIVATE
         Qt::OpenGLWidgets
   )
 endif()
@@ -180,7 +180,7 @@ add_library(fzf STATIC
     fzf/fzf.h
 )
 
-target_link_libraries(sioyek PRIVATE
+target_link_libraries(yaview PRIVATE
     ${CMAKE_DL_LIBS}
     mupdf
     ${HARFBUZZ_LIBRARIES}
@@ -190,12 +190,12 @@ target_link_libraries(sioyek PRIVATE
 )
 
 if(APPLE)
-  # target_link_libraries(sioyek PRIVATE
+  # target_link_libraries(yaview PRIVATE
   #       "-framework AppKit"
   #       mupdf-third
   #       mupdf-threads
   # )
-  target_link_libraries(sioyek PRIVATE
+  target_link_libraries(yaview PRIVATE
       "-framework AppKit"
       -ldl
       -L${CMAKE_CURRENT_SOURCE_DIR}/mupdf/build/release
@@ -208,28 +208,28 @@ else()
   string(REPLACE "-mno-direct-extern-access" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
-install(TARGETS sioyek
+install(TARGETS yaview
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 if(UNIX AND NOT APPLE AND NOT ANDROID)
   install(DIRECTORY pdf_viewer/shaders/
-          DESTINATION ${CMAKE_INSTALL_DATADIR}/sioyek/shaders)
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/yaview/shaders)
   install(FILES tutorial.pdf
-          DESTINATION ${CMAKE_INSTALL_DATADIR}/sioyek)
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/yaview)
   install(FILES pdf_viewer/keys.config pdf_viewer/prefs.config
-          DESTINATION ${CMAKE_INSTALL_DATADIR}/sioyek)
-  install(FILES resources/sioyek.desktop
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/yaview)
+  install(FILES resources/yaview.desktop
           DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-  install(FILES resources/sioyek-icon-linux.png
+  install(FILES resources/yaview-icon-linux.png
           DESTINATION ${CMAKE_INSTALL_DATADIR}/pixmaps)
-  install(FILES resources/sioyek.1
+  install(FILES resources/yaview.1
           DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 endif()
 
 qt_generate_deploy_app_script(
-    TARGET sioyek
+    TARGET yaview
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
 )

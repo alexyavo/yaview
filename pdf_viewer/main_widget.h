@@ -31,6 +31,8 @@ class QDragEvent;
 class QDropEvent;
 class QScrollBar;
 class QTabBar;
+class QScrollArea;
+class QToolButton;
 class QTextToSpeech;
 class QStringListModel;
 class QLabel;
@@ -68,13 +70,13 @@ enum class SelectionMode {
     Line
 };
 
-enum class SioyekVisibleObjectType {
+enum class YaviewVisibleObjectType {
     Highlight,
     Bookmark
 };
 
-struct SioyekVisibleObjectIndex {
-    SioyekVisibleObjectType type;
+struct YaviewVisibleObjectIndex {
+    YaviewVisibleObjectType type;
     int index;
 };
 
@@ -149,7 +151,7 @@ enum class PaperDownloadFinishedAction {
 // if we inherit from QWidget there are problems on high refresh rate smartphone displays
 struct WindowState;
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 class MainWidget : public QQuickWidget {
 #else
 class MainWidget : public QMainWindow {
@@ -217,7 +219,7 @@ public:
     // the index in the `history` array that we will jump to when `prev_state` is called.
     int current_history_index = -1;
 
-    // custom message to be displayed in sioyek's statusbar
+    // custom message to be displayed in yaview's statusbar
     std::wstring custom_status_message = L"";
 
     // A flag which indicates whether the application should quit. We use this to inform other threads
@@ -343,7 +345,7 @@ public:
     bool should_show_status_label_ = true;
     bool should_show_status_label(bool check_network=true);
 
-    // the location of current character in sioyek's typing minigame
+    // the location of current character in yaview's typing minigame
     std::optional<CharacterAddress> typing_location;
 
     int main_window_width = 0;
@@ -361,6 +363,15 @@ public:
     // Tab bar listing the open documents (document_manager tabs). It floats over the top edge of
     // the document view, like status_label at the bottom, so mouse coordinates are unaffected.
     QTabBar* tab_bar = nullptr;
+    // holds tab_bar so that tabs that don't fit can be scrolled
+    QScrollArea* tab_scroll_area = nullptr;
+    // background behind the tab bar, including the space for the macOS window buttons; dragging it moves the window
+    QWidget* tab_strip = nullptr;
+    // whether the tab bar currently replaces the macOS title bar (macos_tabs_in_titlebar)
+    bool tabs_in_titlebar = false;
+    // shown at the ends of the tab bar while tabs are hidden in that direction; clicking scrolls
+    QToolButton* tab_scroll_left_button = nullptr;
+    QToolButton* tab_scroll_right_button = nullptr;
     int text_suggestion_index = 0;
 
     int last_pause_rest_of_document_page = -1;
@@ -383,7 +394,7 @@ public:
     bool is_ui_invalidated = false;
 
     // this is a niche option to show the last executed command in the status bar
-    // (I used it when recording sioyek's video tutorial to show the command being executed)
+    // (I used it when recording yaview's video tutorial to show the command being executed)
     bool should_show_last_command = false;
 
     // last page to be fit when we are in smart fit mode
@@ -654,8 +665,13 @@ public:
     int get_current_tab_index();
     void goto_ith_next_tab(int i);
     void update_tab_bar();
+    void update_tab_bar_style();
+    void update_tab_scroll_buttons();
     static void update_all_tab_bars();
     void close_current_tab();
+    void close_tab_with_path(const std::wstring& path);
+    // go back / forward in the jump history (mouse back and forward buttons)
+    void navigate_history(bool forward);
 
     void handle_vertical_move(int amount);
     void handle_horizontal_move(int amount);
@@ -806,7 +822,7 @@ public:
     std::optional<PdfLink> get_selected_link(const std::wstring& text);
 
     int num_visible_links();
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     //    void onApplicationStateChanged(Qt::ApplicationState applicationState);
     bool pending_intents_checked = false;
 #endif
@@ -1024,7 +1040,7 @@ public:
     void set_selected_bookmark_index(int index);
     void handle_highlight_tags_pre_perform(const std::vector<int>& visible_highlight_indices);
     void handle_visible_bookmark_tags_pre_perform(const std::vector<int>& visible_bookmark_indices);
-    void handle_visible_objects_tags_pre_perform(const std::vector<SioyekVisibleObjectIndex>& visible_object_indices);
+    void handle_visible_objects_tags_pre_perform(const std::vector<YaviewVisibleObjectIndex>& visible_object_indices);
     void clear_keyboard_select_highlights();
     void highlight_link_destination(int page, float y_offset, float x_offset);
     void handle_goto_link_with_page_and_offset(int page, float y_offset, float x_offset);

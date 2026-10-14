@@ -1,9 +1,9 @@
 '''
 Creates a dual panel version of current PDF file. Here is example configuration in `prefs_user.config`:
 
-new_command _dual_panelify python /path/to/dual_panelify.py "%{sioyek_path}" "%{file_path}"
+new_command _dual_panelify python /path/to/dual_panelify.py "%{yaview_path}" "%{file_path}"
 
-now you can execute _dual_panelify command using sioyek's command window.
+now you can execute _dual_panelify command using yaview's command window.
 '''
 
 import sys
@@ -73,7 +73,7 @@ def get_document_cropbox(doc):
 if __name__ == '__main__':
     last_update_time = datetime.datetime.now()
 
-    sioyek_path = sys.argv[1]
+    yaview_path = sys.argv[1]
     single_panel_file_path = sys.argv[2]
 
     dual_panel_file_path = single_panel_file_path.replace('.pdf', '_dual_panel.pdf')
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     for i in range(pdf_reader.numPages // 2):
         if (datetime.datetime.now() - last_update_time).seconds > UPDATE_EVERY_SECONDS:
             last_update_time = datetime.datetime.now()
-            subprocess.run([sioyek_path, '--execute-command', 'set_status_string', '--execute-command-data', 'Dual panelifying {} / {}'.format((i+1) * 2, pdf_reader.numPages)])
+            subprocess.run([yaview_path, '--execute-command', 'set_status_string', '--execute-command-data', 'Dual panelifying {} / {}'.format((i+1) * 2, pdf_reader.numPages)])
 
         page1 = pdf_reader.getPage(2 * i)
         page2 = pdf_reader.getPage(2 * i+1)
@@ -110,9 +110,9 @@ if __name__ == '__main__':
     if pdf_reader.numPages % 2 == 1:
         pdf_writer.add_page(pdf_reader.getPage(pdf_reader.numPages - 1))
 
-    subprocess.run([sioyek_path, '--execute-command', 'set_status_string', '--execute-command-data', 'Writing new file to disk'])
+    subprocess.run([yaview_path, '--execute-command', 'set_status_string', '--execute-command-data', 'Writing new file to disk'])
     with open(dual_panel_file_path, 'wb') as f:
         pdf_writer.write(f)
 
-    subprocess.run([sioyek_path, '--execute-command', 'clear_status_string'])
-    subprocess.run([sioyek_path, '--new-window', dual_panel_file_path])
+    subprocess.run([yaview_path, '--execute-command', 'clear_status_string'])
+    subprocess.run([yaview_path, '--new-window', dual_panel_file_path])

@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <mutex>
 #include <qdatetime.h>
+#include <qpointer.h>
+#include <qlocalsocket.h>
 
 #include "path.h"
 #include "coordinates.h"
@@ -43,7 +45,9 @@ protected:
 public:
 
     static inline const bool developer_only = false;
-    QLocalSocket* result_socket = nullptr;
+    // QPointer: the client may disconnect, and its socket be deleted, before a waiting command
+    // (wait_for_renders_to_finish, ...) finishes; a raw pointer then crashed on the answer.
+    QPointer<QLocalSocket> result_socket = nullptr;
     std::wstring* result_holder = nullptr;
     bool* is_done = nullptr;
 
@@ -108,7 +112,7 @@ public:
     void register_command(std::string alias_name="") {
         bool is_developer_mode = false;
 
-#ifdef SIOYEK_DEVELOPER
+#ifdef YAVIEW_DEVELOPER
         is_developer_mode = true;
 #endif
 

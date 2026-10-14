@@ -1,4 +1,4 @@
-rm -r Sioyek*
-rm sioyek
+rm -r Yaview*
+rm yaview
 rm *.o
-rm -r sioyek-release
+rm -r yaview-release

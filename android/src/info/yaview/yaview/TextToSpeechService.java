@@ -1,4 +1,4 @@
-package info.sioyek.sioyek;
+package info.yaview.yaview;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -104,13 +104,13 @@ public class TextToSpeechService extends MediaSessionService {
         player.prepare();
 
         mediaSession = new MediaSession.Builder(this, player)
-                .setId("sioyek")
+                .setId("yaview")
                 .setCallback(new MediaSession.Callback() {
 
                     @Override
                     public int onPlayerCommandRequest(MediaSession session, MediaSession.ControllerInfo controller, int playerCommand) {
 
-                        boolean isFromSioyek = controller.getPackageName().equals(getApplicationContext().getPackageName()); 
+                        boolean isFromYaview = controller.getPackageName().equals(getApplicationContext().getPackageName()); 
 
                         if (playerCommand == SimpleBasePlayer.COMMAND_PLAY_PAUSE){
 
@@ -234,20 +234,20 @@ public class TextToSpeechService extends MediaSessionService {
     }
 
     private void sendMessage(int begin, int end){
-        Intent intent = new Intent("sioyek_tts");
+        Intent intent = new Intent("yaview_tts");
         intent.putExtra("begin", begin);
         intent.putExtra("end", end);
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
 
     private void publishTtsState(String state){
-        Intent intent = new Intent("sioyek_tts_state");
+        Intent intent = new Intent("yaview_tts_state");
         intent.putExtra("state", state);
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
 
     private void publishExternalTtsState(String state){
-        Intent intent = new Intent("sioyek_external_tts_state");
+        Intent intent = new Intent("yaview_external_tts_state");
         intent.putExtra("state", state);
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
@@ -287,7 +287,7 @@ public class TextToSpeechService extends MediaSessionService {
         tempPauseLocation = 0;
         restOfDocument.clear();
         restIndex = 0;
-        SioyekActivity.onResumeState(isPlaying, isOnRest, offset);
+        YaviewActivity.onResumeState(isPlaying, isOnRest, offset);
     }
 
 }

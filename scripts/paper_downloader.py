@@ -1,20 +1,20 @@
 '''
-Allows sioyek to automatically download papers from scihub by clicking on their names
+Allows yaview to automatically download papers from scihub by clicking on their names
 Requires the following python packages to be installed:
 * PyPaperBot: https://github.com/ferru97/PyPaperBot
 * habanero: https://github.com/sckott/habanero
 
 Here is an example `prefs_user.config` file which uses this script:
 
-    execute_command_l python /path/to/paper_downloader.py "%{sioyek_path}" "%{paper_name}"
+    execute_command_l python /path/to/paper_downloader.py "%{yaview_path}" "%{paper_name}"
     control_click_command execute_command_l
 
-Now, you can control+click on paper names to download them and open them in sioyek.
+Now, you can control+click on paper names to download them and open them in yaview.
 '''
 
 # where to put downloaded papers, if it is None, we use a papers folder next to this script
 PAPERS_FOLDER_PATH = None
-SIOYEK_PATH = None
+YAVIEW_PATH = None
 PYTHON_EXECUTABLE = 'python'
 
 import os
@@ -34,9 +34,9 @@ def log(file_name, text):
 
 def show_status(string):
     if len(string) > 0:
-        subprocess.run([SIOYEK_PATH, '--execute-command', 'set_status_string','--execute-command-data', string])
+        subprocess.run([YAVIEW_PATH, '--execute-command', 'set_status_string','--execute-command-data', string])
     else:
-        subprocess.run([SIOYEK_PATH, '--execute-command', 'clear_status_string'])
+        subprocess.run([YAVIEW_PATH, '--execute-command', 'clear_status_string'])
         
 
 def clean_paper_name(paper_name):
@@ -165,7 +165,7 @@ def get_paper_file_name_with_doi_and_name(doi, paper_name):
 
 if __name__ == '__main__':
 
-    SIOYEK_PATH = sys.argv[1]
+    YAVIEW_PATH = sys.argv[1]
     paper_name = clean_paper_name(sys.argv[2])
 
     show_status('finding doi ...')
@@ -176,7 +176,7 @@ if __name__ == '__main__':
             file_name = get_paper_file_name_with_doi_and_name(doi, paper_name)
             show_status("")
             if file_name:
-                subprocess.run([SIOYEK_PATH, str(file_name), '--new-window'])
+                subprocess.run([YAVIEW_PATH, str(file_name), '--new-window'])
         else:
             show_status('doi not found')
             time.sleep(5)

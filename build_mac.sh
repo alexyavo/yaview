@@ -27,20 +27,20 @@ make -j$MAKE_PARALLEL
 
 rm -rf build 2> /dev/null
 mkdir build
-mv sioyek.app build/
-cp -r pdf_viewer/shaders build/sioyek.app/Contents/Resources/shaders
+mv yaview.app build/
+cp -r pdf_viewer/shaders build/yaview.app/Contents/Resources/shaders
 
-cp pdf_viewer/prefs.config build/sioyek.app/Contents/Resources/prefs.config
-cp pdf_viewer/prefs_user.config build/sioyek.app/Contents/Resources/prefs_user.config
-cp pdf_viewer/keys.config build/sioyek.app/Contents/Resources/keys.config
-cp pdf_viewer/keys_user.config build/sioyek.app/Contents/Resources/keys_user.config
-cp tutorial.pdf build/sioyek.app/Contents/Resources/tutorial.pdf
+cp pdf_viewer/prefs.config build/yaview.app/Contents/Resources/prefs.config
+cp pdf_viewer/prefs_user.config build/yaview.app/Contents/Resources/prefs_user.config
+cp pdf_viewer/keys.config build/yaview.app/Contents/Resources/keys.config
+cp pdf_viewer/keys_user.config build/yaview.app/Contents/Resources/keys_user.config
+cp tutorial.pdf build/yaview.app/Contents/Resources/tutorial.pdf
 
 # Capture the current PATH
 CURRENT_PATH=$(echo $PATH)
 
 # Define the path to the Info.plist file inside the app bundle
-INFO_PLIST="build/sioyek.app/Contents/Info.plist"
+INFO_PLIST="build/yaview.app/Contents/Info.plist"
 
 # Add LSEnvironment key with PATH to Info.plist
 /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" || echo "LSEnvironment already exists"
@@ -56,9 +56,9 @@ fi
 sleep 5
 
 # mac deploys with qml currently don't work due to a qt bug
-# macdeployqt build/sioyek.app -qmldir=./pdf_viewer/touchui -dmg
-macdeployqt build/sioyek.app -dmg
+# macdeployqt build/yaview.app -qmldir=./pdf_viewer/touchui -dmg
+macdeployqt build/yaview.app -dmg
 
-codesign --force --deep --sign - build/sioyek.app
+codesign --force --deep --sign - build/yaview.app
 
-zip -r sioyek-release-mac.zip build/sioyek.dmg
+zip -r yaview-release-mac.zip build/yaview.dmg

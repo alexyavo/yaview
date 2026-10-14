@@ -39,12 +39,12 @@ import platform
 if (platform.system() == "Darwin"):
     # cached audio files will be stored in this directory
     DATA_FOLDER = "./tts-output/"
-    SIOYEK_PATH = "sioyek"
+    YAVIEW_PATH = "yaview"
     POWER_SHELL = "pwsh"
 else:
     # cached audio files will be stored in this directory
     DATA_FOLDER = "D:\\tts-output\\"
-    SIOYEK_PATH = "sioyek.exe"
+    YAVIEW_PATH = "yaview.exe"
     POWER_SHELL = "powershell"
 
 if(not os.path.exists(DATA_FOLDER)):
@@ -258,7 +258,7 @@ class Manager:
         return -1
 
     def highlight_line(self, line_text):
-        subprocess.run([SIOYEK_PATH, "--focus-text", '"{}"'.format(line_text), "--focus-text-page", str(self.current_state[1]), "--nofocus"])
+        subprocess.run([YAVIEW_PATH, "--focus-text", '"{}"'.format(line_text), "--focus-text-page", str(self.current_state[1]), "--nofocus"])
 
     def better_audio_is_available(self):
         if self.current_state[-1].endswith("_fast") and self.has_good_tts(self.current_state[0], self.current_state[1]):

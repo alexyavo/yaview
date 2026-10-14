@@ -3876,7 +3876,7 @@ public:
 
 class GenericVisibleAnnotationCommand : public GenericVisibleSelectCommand {
 
-    std::vector<SioyekVisibleObjectIndex> visible_objects;
+    std::vector<YaviewVisibleObjectIndex> visible_objects;
 
 public:
     GenericVisibleAnnotationCommand(std::string name, MainWidget* w) : GenericVisibleSelectCommand(name, w) {};
@@ -3896,11 +3896,11 @@ public:
         std::vector<int> visible_highlight_indices = widget->main_document_view->get_visible_highlight_indices();
 
         for (const auto& index : visible_bookmark_indices) {
-            visible_objects.push_back({ SioyekVisibleObjectType::Bookmark, index });
+            visible_objects.push_back({ YaviewVisibleObjectType::Bookmark, index });
             visible_object_indices.push_back(visible_object_indices.size());
         }
         for (const auto& index : visible_highlight_indices) {
-            visible_objects.push_back({ SioyekVisibleObjectType::Highlight, index });
+            visible_objects.push_back({ YaviewVisibleObjectType::Highlight, index });
             visible_object_indices.push_back(visible_object_indices.size());
         }
 
@@ -3917,11 +3917,11 @@ public:
     void perform_with_selected_index(std::optional<int> index) override {
         if (index) {
             if (index < visible_objects.size()) {
-                if (visible_objects[index.value()].type == SioyekVisibleObjectType::Highlight) {
+                if (visible_objects[index.value()].type == YaviewVisibleObjectType::Highlight) {
                     widget->set_selected_highlight_index(visible_objects[index.value()].index);
                     widget->set_selected_bookmark_index(-1);
                 }
-                else if (visible_objects[index.value()].type == SioyekVisibleObjectType::Bookmark) {
+                else if (visible_objects[index.value()].type == YaviewVisibleObjectType::Bookmark) {
                     widget->set_selected_bookmark_index(visible_objects[index.value()].index);
                     widget->set_selected_highlight_index(-1);
                 }
@@ -5951,7 +5951,7 @@ public:
 class GotoWindowCommand : public Command {
 public:
     static inline const std::string cname = "goto_window";
-    static inline const std::string hname = "Open a list of all sioyek windows";
+    static inline const std::string hname = "Open a list of all yaview windows";
     GotoWindowCommand(MainWidget* w) : Command(cname, w) {};
 
     void perform() {
@@ -6188,7 +6188,7 @@ public:
 class DonateCommand : public Command {
 public:
     static inline const std::string cname = "donate";
-    static inline const std::string hname = "Donate to support sioyek's development";
+    static inline const std::string hname = "Donate to support yaview's development";
     DonateCommand(MainWidget* w) : Command(cname, w) {};
 
     void perform() {
@@ -6375,7 +6375,7 @@ public:
 class ImportAnnotationsCommand : public Command {
 public:
     static inline const std::string cname = "import_annotations";
-    static inline const std::string hname = "Import PDF annotations into sioyek";
+    static inline const std::string hname = "Import PDF annotations into yaview";
     ImportAnnotationsCommand(MainWidget* w) : Command(cname, w) {};
 
     void perform() {

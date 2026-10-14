@@ -40,8 +40,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./mac-uploads/sioyek-release-mac.zip
-        asset_name: sioyek-release-mac.zip
+        asset_path: ./mac-uploads/yaview-release-mac.zip
+        asset_name: yaview-release-mac.zip
         asset_content_type: application/zip   
 
     - name: upload mac arm
@@ -51,8 +51,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./mac-arm-uploads/sioyek-release-mac-arm.zip
-        asset_name: sioyek-release-mac-arm.zip
+        asset_path: ./mac-arm-uploads/yaview-release-mac-arm.zip
+        asset_name: yaview-release-mac-arm.zip
         asset_content_type: application/zip   
 
     - name: upload linux
@@ -62,8 +62,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./linux-uploads/sioyek-release-linux.zip
-        asset_name: sioyek-release-linux.zip
+        asset_path: ./linux-uploads/yaview-release-linux.zip
+        asset_name: yaview-release-linux.zip
         asset_content_type: application/zip   
     - name: upload windows
       id: upload-windows
@@ -72,8 +72,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./windows-uploads/sioyek-release-windows.zip
-        asset_name: sioyek-release-windows.zip
+        asset_path: ./windows-uploads/yaview-release-windows.zip
+        asset_name: yaview-release-windows.zip
         asset_content_type: application/zip
 
   build-linux:
@@ -129,7 +129,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: linux-uploads
-        path: sioyek-release-linux.zip
+        path: yaview-release-linux.zip
     - name: Workaround apt-get cache permission (https://github.com/actions/cache/issues/324)
       run: |
         export USER_NAME=$(whoami)
@@ -158,7 +158,7 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
       
       
-    - name: Build Sioyek
+    - name: Build Yaview
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: .\build_windows.bat non_portable
       
@@ -166,7 +166,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: windows-uploads
-        path: sioyek-release-windows.zip
+        path: yaview-release-windows.zip
         
   build-mac:
 
@@ -210,7 +210,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: mac-uploads
-        path: sioyek-release-mac.zip
+        path: yaview-release-mac.zip
 
   build-mac-arm:
 
@@ -249,10 +249,10 @@ jobs:
       run: |
         chmod +x build_mac.sh
         MAKE_PARALLEL=$(sysctl -n hw.logicalcpu) ./build_mac.sh
-        mv sioyek-release-mac.zip sioyek-release-mac-arm.zip
+        mv yaview-release-mac.zip yaview-release-mac-arm.zip
         
     - name: upload mac artifact
       uses: actions/upload-artifact@v4
       with:
         name: mac-arm-uploads
-        path: sioyek-release-mac-arm.zip
+        path: yaview-release-mac-arm.zip

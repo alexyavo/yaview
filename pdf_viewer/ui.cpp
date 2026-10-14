@@ -2,6 +2,8 @@
 #include <qfiledialog.h>
 
 #include <QItemSelectionModel>
+#include <QStyleHints>
+#include <algorithm>
 #include <QTapGesture>
 #include <main_widget.h>
 
@@ -24,6 +26,9 @@ extern float VISUAL_MARK_NEXT_PAGE_THRESHOLD;
 extern float HIGHLIGHT_COLORS[26 * 3];
 extern float TTS_RATE;
 extern float MENU_SCREEN_WDITH_RATIO;
+extern float MENU_SCREEN_HEIGHT_RATIO;
+extern float MENU_SCREEN_CENTER_X;
+extern float MENU_SCREEN_CENTER_Y;
 extern bool SHOW_MOST_RECENT_COMMANDS_FIRST;
 
 std::wstring select_command_file_name(std::string command_name, std::optional<QString> root_dir) {
@@ -105,7 +110,7 @@ void ConfigFileChangeListener::notify_config_file_changed(ConfigManager* new_con
 bool HierarchialSortFilterProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const
 {
     // custom behaviour :
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
     if (filterRegularExpression().pattern().size() == 0)
 #else
     if (filterRegExp().isEmpty() == false)
@@ -118,7 +123,7 @@ bool HierarchialSortFilterProxyModel::filterAcceptsRow(int source_row, const QMo
             // check current index itself :
             QString key = sourceModel()->data(source_index, filterRole()).toString();
 
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
             bool parent_contains = key.contains(filterRegularExpression());
 #else
             bool parent_contains = key.contains(filterRegExp());
@@ -1261,7 +1266,8 @@ QList<QStandardItem*> CommandSelector::get_item(std::string command_name) {
 
 QStandardItemModel* CommandSelector::get_standard_item_model(std::vector<std::string> command_names) {
 
-    QStandardItemModel* res = new QStandardItemModel();
+    // parented, so the last model is deleted with the selector (it leaked with every command palette)
+    QStandardItemModel* res = new QStandardItemModel(this);
 
     for (size_t i = 0; i < command_names.size(); i++) {
         res->appendRow(get_item(command_names[i]));
@@ -1456,6 +1462,7 @@ BaseSelectorWidget::BaseSelectorWidget(QAbstractItemView* item_view, bool fuzzy,
     bool is_tree = dynamic_cast<QTreeView*>(item_view) != nullptr;
     is_fuzzy = fuzzy;
     proxy_model = new MySortFilterProxyModel(fuzzy, is_tree);
+    proxy_model->setParent(this); // deleted with the selector; it had no owner
     proxy_model->setFilterCaseSensitivity(Qt::CaseSensitivity::CaseInsensitive);
 
     if (item_model) {
@@ -1463,10 +1470,14 @@ BaseSelectorWidget::BaseSelectorWidget(QAbstractItemView* item_view, bool fuzzy,
     }
 
     resize(300, 800);
+    // the object name lets the stylesheet draw the popup frame without also framing every child widget
+    setObjectName("yaview_menu");
+    setAttribute(Qt::WA_StyledBackground);
     QVBoxLayout* layout = new QVBoxLayout;
     setLayout(layout);
 
     line_edit = new MyLineEdit(parent);
+    line_edit->setAttribute(Qt::WA_MacShowFocusRect, false);
     abstract_item_view = item_view;
     abstract_item_view->setParent(this);
     abstract_item_view->setModel(proxy_model);
@@ -1491,6 +1502,12 @@ BaseSelectorWidget::BaseSelectorWidget(QAbstractItemView* item_view, bool fuzzy,
     }
 
     QTreeView* tree_view = dynamic_cast<QTreeView*>(abstract_item_view);
+    QTableView* table_view = dynamic_cast<QTableView*>(abstract_item_view);
+
+    if (table_view) {
+        // grid lines cut through the selected row between the name and keybinding columns
+        table_view->setShowGrid(false);
+    }
 
     if (tree_view) {
         int n_columns = item_model->columnCount();
@@ -1507,7 +1524,7 @@ BaseSelectorWidget::BaseSelectorWidget(QAbstractItemView* item_view, bool fuzzy,
     layout->addWidget(abstract_item_view);
 
     line_edit->installEventFilter(this);
-    abstract_item_view->installEventFilter(this); // for Ctrl+N / Ctrl+P, see eventFilter
+    abstract_item_view->installEventFilter(this); // for Ctrl+N/P/D/U, see eventFilter
     line_edit->setFocus();
 
     if (!TOUCH_MODE) {
@@ -1531,6 +1548,13 @@ BaseSelectorWidget::BaseSelectorWidget(QAbstractItemView* item_view, bool fuzzy,
         abstract_item_view->setFont(font_face);
         line_edit->setFont(font_face);
     }
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    // follow the system switching between light and dark appearance while the popup is open
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this]() {
+        on_config_file_changed();
+        });
+#endif
 }
 
 void BaseSelectorWidget::on_text_changed(const QString& text) {
@@ -1590,21 +1614,46 @@ std::wstring BaseSelectorWidget::get_selected_text() {
 }
 
 bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
-    // emacs-style Ctrl+N / Ctrl+P move one line down / up (physical Ctrl key, also on macOS).
-    // Handled for both the search box and the list, because focus moves to the list once it is
-    // navigated; the list ignores Ctrl+N/P and would pass them on to the main window.
+    // emacs-style Ctrl+N / Ctrl+P move one line down / up and vim-style Ctrl+D / Ctrl+U one page
+    // down / up (physical Ctrl key, also on macOS). Handled for both the search box and the list,
+    // because focus moves to the list once it is navigated; the list ignores these keys and would
+    // pass them on to the main window, which would move the document behind the popup instead.
     if ((obj == line_edit || obj == get_view()) && event->type() == QEvent::KeyPress) {
         QKeyEvent* key_event = static_cast<QKeyEvent*>(event);
-        if (is_platform_control_pressed(key_event) && !key_event->modifiers().testFlag(Qt::ShiftModifier) &&
-            (key_event->key() == Qt::Key_N || key_event->key() == Qt::Key_P)) {
-            Qt::Key arrow = key_event->key() == Qt::Key_N ? Qt::Key_Down : Qt::Key_Up;
-            // Forwarded without modifiers: Ctrl+arrow in an item view moves focus without selecting.
-            QCoreApplication::postEvent(get_view(), new QKeyEvent(QEvent::KeyPress, arrow, Qt::NoModifier));
-            return true;
+        if (is_platform_control_pressed(key_event) && !key_event->modifiers().testFlag(Qt::ShiftModifier)) {
+            std::optional<Qt::Key> move_key;
+            switch (key_event->key()) {
+            case Qt::Key_N: move_key = Qt::Key_Down; break;
+            case Qt::Key_P: move_key = Qt::Key_Up; break;
+            case Qt::Key_D: move_key = Qt::Key_PageDown; break;
+            case Qt::Key_U: move_key = Qt::Key_PageUp; break;
+            default: break;
+            }
+            if (move_key) {
+                // Forwarded without modifiers: Ctrl+arrow in an item view moves focus without selecting.
+                QCoreApplication::postEvent(get_view(), new QKeyEvent(QEvent::KeyPress, move_key.value(), Qt::NoModifier));
+                return true;
+            }
+        }
+
+        // Tab completes (file browser) or moves down, Shift+Tab moves up. Handled for the list too:
+        // there Tab would otherwise move the focus out of the popup and reach the main window,
+        // where it runs goto_portal.
+        if (!is_platform_control_pressed(key_event)) {
+            if (key_event->key() == Qt::Key_Tab) {
+                if (!on_tab_complete()) {
+                    QCoreApplication::postEvent(get_view(), new QKeyEvent(QEvent::KeyPress, Qt::Key_Down, Qt::NoModifier));
+                }
+                return true;
+            }
+            if (key_event->key() == Qt::Key_Backtab) {
+                QCoreApplication::postEvent(get_view(), new QKeyEvent(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier));
+                return true;
+            }
         }
     }
     if (obj == line_edit) {
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
         if (event->type() == QEvent::KeyRelease) {
             QKeyEvent* key_event = static_cast<QKeyEvent*>(event);
             if (should_trigger_delete(key_event)) {
@@ -1645,7 +1694,7 @@ bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
                 if (!line_edit->hasSelectedText()){
                     bool is_tree = get_view_stylesheet_type_name() == "QTreeView";
                     if (is_tree || (key_event->key() == Qt::Key_Down) || (key_event->key() == Qt::Key_Up)){
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
                         QKeyEvent* newEvent = key_event->clone();
 #else
                         QKeyEvent* newEvent = new QKeyEvent(*key_event);
@@ -1656,11 +1705,6 @@ bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
                     }
                 }
             }
-            if (key_event->key() == Qt::Key_Tab) {
-                QKeyEvent* new_key_event = new QKeyEvent(key_event->type(), Qt::Key_Down, key_event->modifiers());
-                QCoreApplication::postEvent(get_view(), new_key_event);
-                return true;
-            }
             if ((key_event->key() == Qt::Key_PageDown)) {
                 QKeyEvent* new_key_event = new QKeyEvent(key_event->type(), Qt::Key_PageDown, key_event->modifiers());
                 QCoreApplication::postEvent(get_view(), new_key_event);
@@ -1668,11 +1712,6 @@ bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
             }
             if ((key_event->key() == Qt::Key_PageUp)) {
                 QKeyEvent* new_key_event = new QKeyEvent(key_event->type(), Qt::Key_PageUp, key_event->modifiers());
-                QCoreApplication::postEvent(get_view(), new_key_event);
-                return true;
-            }
-            if (key_event->key() == Qt::Key_Backtab) {
-                QKeyEvent* new_key_event = new QKeyEvent(key_event->type(), Qt::Key_Up, key_event->modifiers());
                 QCoreApplication::postEvent(get_view(), new_key_event);
                 return true;
             }
@@ -1846,7 +1885,7 @@ void BaseSelectorWidget::handle_edit() {
     }
 }
 
-#ifndef SIOYEK_QT6
+#ifndef YAVIEW_QT6
     void BaseSelectorWidget::keyReleaseEvent(QKeyEvent* event) {
 		if (should_trigger_delete(event)) {
             handle_delete();
@@ -1858,19 +1897,58 @@ void BaseSelectorWidget::handle_edit() {
 void BaseSelectorWidget::on_config_file_changed() {
     QString font_size_stylesheet = "";
     if (FONT_SIZE > 0) {
-        font_size_stylesheet = QString("font-size: %1px").arg(FONT_SIZE);
+        font_size_stylesheet = QString("font-size: %1px;").arg(FONT_SIZE);
     }
 
-    setStyleSheet(get_ui_stylesheet(true) + font_size_stylesheet);
-    get_view()->setStyleSheet(get_view_stylesheet_type_name() + "::item::selected{" + get_selected_stylesheet() + "}");
+    UiColors colors = get_ui_colors();
+    auto color = [](const float* c) {
+        return get_color_qml_string(c[0], c[1], c[2]);
+        };
+    // a color between the background (t = 0) and the text color (t = 1)
+    auto shade = [&](float t) {
+        return get_mixed_color_qml_string(colors.background, colors.text, t);
+        };
+
+    QString font_family_stylesheet = "";
+    QString font_face = get_ui_font_face_name();
+    if (font_face.size() > 0) {
+        font_family_stylesheet = QString("font-family: \"%1\";").arg(font_face);
+    }
+
+    setStyleSheet(QString(
+        "* { %1 %2 }"
+        "#yaview_menu { border: 2px solid %3; border-radius: 8px; }"
+        "QLineEdit { background-color: %4; border: 1px solid %3; border-radius: 4px; padding: 4px 8px;"
+        " selection-background-color: %5; selection-color: %6; }"
+        "QAbstractItemView { outline: 0; }"
+        "QAbstractItemView::item:selected, QTreeView::branch:selected { %7 }"
+        "QScrollBar:vertical { width: 10px; } QScrollBar:horizontal { height: 10px; }"
+        "QScrollBar::handle { background-color: %8; border-radius: 5px; min-width: 24px; min-height: 24px; }"
+        "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }"
+        "QScrollBar::add-page, QScrollBar::sub-page { background: none; }"
+    ).arg(
+        get_ui_stylesheet(true),
+        font_size_stylesheet + font_family_stylesheet,
+        color(colors.border),
+        shade(0.08f),
+        color(colors.selected_background),
+        color(colors.selected_text),
+        get_selected_stylesheet(true),
+        shade(0.3f)
+    ));
 }
 
 void BaseSelectorWidget::resizeEvent(QResizeEvent* resize_event) {
     QWidget::resizeEvent(resize_event);
     int parent_width = parentWidget()->width();
     int parent_height = parentWidget()->height();
-    setFixedSize(parent_width * MENU_SCREEN_WDITH_RATIO, parent_height);
-    move(parent_width * (1 - MENU_SCREEN_WDITH_RATIO) / 2, 0);
+    int menu_width = parent_width * MENU_SCREEN_WDITH_RATIO;
+    int menu_height = parent_height * MENU_SCREEN_HEIGHT_RATIO;
+    // menu_screen_center_x/y place the popup's center as a fraction of the window, keeping the popup inside the window
+    int menu_x = std::clamp(static_cast<int>(parent_width * MENU_SCREEN_CENTER_X) - menu_width / 2, 0, parent_width - menu_width);
+    int menu_y = std::clamp(static_cast<int>(parent_height * MENU_SCREEN_CENTER_Y) - menu_height / 2, 0, parent_height - menu_height);
+    setFixedSize(menu_width, menu_height);
+    move(menu_x, menu_y);
     on_config_file_changed();
 }
 

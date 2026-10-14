@@ -1,5 +1,5 @@
 import sys
-from sioyek import Sioyek
+from yaview import Yaview
 
 colormap = {'a': (0.94, 0.64, 1.00),
             'b': (0.00, 0.46, 0.86),
@@ -30,14 +30,14 @@ colormap = {'a': (0.94, 0.64, 1.00),
 }
 
 if __name__ == '__main__':
-    SIOYEK_PATH = sys.argv[1]
+    YAVIEW_PATH = sys.argv[1]
     LOCAL_DATABASE_PATH = sys.argv[2]
     SHARED_DATABASE_PATH = sys.argv[3]
     FILE_PATH = sys.argv[4]
 
-    sioyek = Sioyek(SIOYEK_PATH, LOCAL_DATABASE_PATH, SHARED_DATABASE_PATH)
-    document = sioyek.get_document(FILE_PATH)
+    yaview = Yaview(YAVIEW_PATH, LOCAL_DATABASE_PATH, SHARED_DATABASE_PATH)
+    document = yaview.get_document(FILE_PATH)
     document.embed_new_annotations(save=True, colormap=colormap)
     document.close()
-    sioyek.reload()
-    sioyek.close()
+    yaview.reload()
+    yaview.close()

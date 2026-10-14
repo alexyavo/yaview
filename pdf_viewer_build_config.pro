@@ -1,5 +1,5 @@
 TEMPLATE = app
-TARGET = sioyek
+TARGET = yaview
 VERSION = 2.0.0
 
 INCLUDEPATH += ./pdf_viewer \
@@ -14,7 +14,7 @@ QT += core opengl gui widgets network quickwidgets svg texttospeech
 
 greaterThan(QT_MAJOR_VERSION, 5){
 	QT += openglwidgets
-	DEFINES += SIOYEK_QT6
+	DEFINES += YAVIEW_QT6
 }
 else{
 	QT += openglextensions
@@ -69,7 +69,7 @@ HEADERS += \
     pdf_viewer/touchui/TouchMainMenu.h
 
 android{
-    DEFINES += SIOYEK_ANDROID
+    DEFINES += YAVIEW_ANDROID
     QT += core-private
 }
 
@@ -154,7 +154,7 @@ win32{
     QMAKE_CXXFLAGS += /MP
 
     DEFINES += _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE NOMINMAX
-    RC_ICONS = pdf_viewer\icon2.ico
+    RC_ICONS = resources\yaview.ico
 
     LIBS += -Lmupdf\platform\win32\x64\Release -llibmupdf -Lzlib -lzlib
 
@@ -186,18 +186,18 @@ unix:!mac:!android {
         PREFIX = /usr
     }
     target.path = $$PREFIX/bin
-    shortcutfiles.files = resources/sioyek.desktop
+    shortcutfiles.files = resources/yaview.desktop
     shortcutfiles.path = $$PREFIX/share/applications/
-    icon.files = resources/sioyek-icon-linux.png
+    icon.files = resources/yaview-icon-linux.png
     icon.path = $$PREFIX/share/pixmaps/
     shaders.files = pdf_viewer/shaders/
-    shaders.path = $$PREFIX/share/sioyek/
+    shaders.path = $$PREFIX/share/yaview/
     tutorial.files = tutorial.pdf
-    tutorial.path = $$PREFIX/share/sioyek/
+    tutorial.path = $$PREFIX/share/yaview/
     keys.files = pdf_viewer/keys.config
-    keys.path = $$PREFIX/etc/sioyek
+    keys.path = $$PREFIX/etc/yaview
     prefs.files = pdf_viewer/prefs.config
-    prefs.path = $$PREFIX/etc/sioyek
+    prefs.path = $$PREFIX/etc/yaview
     INSTALLS += target
     INSTALLS += shortcutfiles
     INSTALLS += icon
@@ -205,8 +205,8 @@ unix:!mac:!android {
     INSTALLS += tutorial
     INSTALLS += keys
     INSTALLS += prefs	
-    DISTFILES += resources/sioyek.desktop\
-        resources/sioyek-icon-linux.png
+    DISTFILES += resources/yaview.desktop\
+        resources/yaview-icon-linux.png
 }
 
 mac {
@@ -214,7 +214,7 @@ mac {
     LIBS += -ldl -L$$PWD/mupdf/build/release -lmupdf -lmupdf-third -lmupdf-threads -lz
     CONFIG+=sdk_no_version_check
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 15
-    ICON = pdf_viewer\icon2.ico
+    ICON = resources/yaview.icns
     QMAKE_INFO_PLIST = resources/Info.plist
     LIBS += -framework AppKit
     OBJECTIVE_SOURCES += pdf_viewer/macos_specific.mm

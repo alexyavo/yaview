@@ -140,6 +140,9 @@ protected:
     // should return true when we want to manually handle text change events
     virtual bool on_text_change(const QString& text);
 
+    // Tab completion; should return true when handled. Otherwise Tab moves down the list.
+    virtual bool on_tab_complete() { return false; }
+
     virtual QString get_view_stylesheet_type_name() = 0;
 
 public:
@@ -164,7 +167,7 @@ public:
     QString get_selected_item();
 
 
-#ifndef SIOYEK_QT6
+#ifndef YAVIEW_QT6
     void keyReleaseEvent(QKeyEvent* event) override;
 #endif
 
@@ -268,6 +271,7 @@ public:
 
 
         QStandardItemModel* model = create_table_model(table);
+        model->setParent(this); // deleted with the selector; it had no owner and leaked
         //model->setItem(selected_index, 0, new QStandardItem(QString::fromStdWString(std_string_list[selected_index])));
         //QStandardItemModel* model = new QStandardItemModel();
 
@@ -653,7 +657,8 @@ public:
             }
         }
 
-        list_model = new QStringListModel(dir_contents);
+        // parented, so the last model is deleted with the selector (the models had no owner and leaked)
+        list_model = new QStringListModel(dir_contents, this);
         last_root = root_path;
         line_edit->setText(last_root);
 
@@ -682,7 +687,7 @@ public:
         }
 
         QStringList match_list = get_dir_contents(root_path, partial_name);
-        QStringListModel* new_list_model = new QStringListModel(match_list);
+        QStringListModel* new_list_model = new QStringListModel(match_list, this);
         dynamic_cast<QListView*>(get_view())->setModel(new_list_model);
         delete list_model;
         list_model = new_list_model;
@@ -736,6 +741,19 @@ public:
             }
         }
         return result;
+    }
+
+    // Tab completes the typed path with the highlighted entry, like a shell. Completing a folder lists
+    // its contents; Enter then opens the file.
+    bool on_tab_complete() override {
+        std::optional<QModelIndex> index = get_selected_index();
+        if (!index) return true;
+        QString name = list_model->data(index.value()).toString();
+        QString text = line_edit->text();
+        int last_separator = std::max(text.lastIndexOf(QDir::separator()), text.lastIndexOf('/'));
+        line_edit->setText(text.left(last_separator + 1) + name);
+        line_edit->setFocus();
+        return true;
     }
 
     void on_select(const QModelIndex& index) {

@@ -1,4 +1,4 @@
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
 #ifndef SINGLE_INSTANCE_GUARD_H
 #define SINGLE_INSTANCE_GUARD_H
 
@@ -84,4 +84,4 @@ private:
 
 #endif // SINGLE_INSTANCE_GUARD_H
 
-#endif // SIOYEK_ANDROID
+#endif // YAVIEW_ANDROID

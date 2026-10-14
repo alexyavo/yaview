@@ -57,7 +57,7 @@
 
 
 
-\title{Sioyek Tutorial}
+\title{Yaview Tutorial}
 \begin{document}
 \maketitle
 
@@ -88,20 +88,20 @@
 \end{itemize}
 \section{Command Palette}
 \begin{itemize}
-	\item Press \keystroke{:} to open a searchable list of all sioyek commands
+	\item Press \keystroke{:} to open a searchable list of all yaview commands
 	\item If the command is bound to a key, the keybinding is shown on the right (multiple keybinds are separated by | symbol)
 \end{itemize}
 \section{Search}
 \begin{itemize}
 	\item Press \keystroke{Ctrl}+\keystroke{f} or \keystroke{/}  to search.
 	\item Press \keystroke{n}/\keystroke{Shift}+\keystroke{n} to go to the next/previous match.
-	\item In order to quickly jump in search results, you can use \verb+[NUM]+\keystroke{n} where \verb+[NUM]+ is a number. For example in order to jump to the 10th next occurance of current search term, enter \keystroke{10n}. In fact most commands in sioyek can be prefixed with a number \verb+N+ which is equivalent to repeating them \verb+N+ times.
+	\item In order to quickly jump in search results, you can use \verb+[NUM]+\keystroke{n} where \verb+[NUM]+ is a number. For example in order to jump to the 10th next occurance of current search term, enter \keystroke{10n}. In fact most commands in yaview can be prefixed with a number \verb+N+ which is equivalent to repeating them \verb+N+ times.
 \end{itemize}
 \section{Marks}
 \begin{itemize}
-	\item Press \keystroke{m} to set a mark in current location. After you press m, sioyek waits for you to press another symbol which is the name of the mark. For example to create a mark named u, enter \keystroke{mu}.
+	\item Press \keystroke{m} to set a mark in current location. After you press m, yaview waits for you to press another symbol which is the name of the mark. For example to create a mark named u, enter \keystroke{mu}.
 	\item In order to go to a mark, press \keystroke{\`} (backtick) followed by the name of the mark. For example in order to go to the mark in previous example, we enter \keystroke{\`\ u}. Note that the backtick character \keystroke{\`} is different from the single quote character \keystroke{'}.
-	\item Note that marks are persistent (they are saved even after sioyek is closed). Lower case marks are local to each file, while upper case marks are global.
+	\item Note that marks are persistent (they are saved even after yaview is closed). Lower case marks are local to each file, while upper case marks are global.
 	\item You can right click on any line to create a visual mark which highlights below the line. This highlight has multiple functions.
 	 First, it can reduce disorientation when scrolling by first right clicking the line we are reading and then scrolling. Second, it can also act as a mark, so we can jump back to the location where we last put the highlight by pressing \keystroke{\`} and then right clicking. You can try it out here:\\
 	  {\color{red} Right click on me!}
@@ -154,7 +154,7 @@
 \section{Configuration}
 \begin{itemize}
 \item There are four configuration files: two of them are system-wide and are not meant to be edited by the user (\verb+keys.config+ and \verb+prefs.config+), while the other two are user-editable (\verb+keys_user.config+ and \verb+prefs_user.config+).
-\item The former (i.e., the system-wide configuration files) are always loaded by sioyek before the latter. This implies that configuration options set in the user-editable configuration files always overwrite the ones in the system-wide files.
+\item The former (i.e., the system-wide configuration files) are always loaded by yaview before the latter. This implies that configuration options set in the user-editable configuration files always overwrite the ones in the system-wide files.
 \item In order to edit any configuration, copy the configuration line you want to edit to the user-editable config file and change it there. \\ For example, suppose we want to change the key that opens the table of contents. We search for `table of contents' in \verb+keys.config+ and find the following:
 \begin{verbatim}
 # Open table of contents.
@@ -164,7 +164,7 @@ We copy this line to \verb+keys_user.config+ and change the key. For example, su
 \begin{verbatim}
 goto_toc T
 \end{verbatim}
-\item In portable builds, the config files are located in the same place where \verb+sioyek+ executable file is located. In non-portable builds, their location is OS-dependent. You can also open them by pressing \keystroke{:} to open the command window and then entering one of the following:
+\item In portable builds, the config files are located in the same place where \verb+yaview+ executable file is located. In non-portable builds, their location is OS-dependent. You can also open them by pressing \keystroke{:} to open the command window and then entering one of the following:
 \begin{itemize}
 	\item \verb+prefs+ 
 	\item \verb+prefs_user+ 
@@ -185,7 +185,7 @@ inverse_search_command 		"C:\path\to\vscode\Code.exe" -r -g %1:%2
 \%1 stands for the name of the file and \%2 stands for the line number in the file.
 \item Here is the forward search configuration for Latex Workshop for VsCode:
 \begin{verbatim}
-"latex-workshop.view.pdf.external.synctex.command": "C:\\path\\to\\sioyek.exe",
+"latex-workshop.view.pdf.external.synctex.command": "C:\\path\\to\\yaview.exe",
 "latex-workshop.view.pdf.external.synctex.args": [
 	"--inverse-search",
 	"\"C:\\path\\to\\vscode\\Code.exe\" -r -g %1:%2",
@@ -200,12 +200,12 @@ inverse_search_command 		"C:\path\to\vscode\Code.exe" -r -g %1:%2
 And here is example configuration for VimTeX:
 
 \begin{verbatim}
-let g:vimtex_view_method = 'sioyek'
+let g:vimtex_view_method = 'yaview'
 \end{verbatim}
 \end{itemize}
 
 \section{Extensions}
-You can extend sioyek by writing your own extensions. See \href{https://sioyek-documentation.readthedocs.io/en/latest/scripting.html}{the documentation} on how to do it.
+You can extend yaview by writing your own extensions. See \href{https://sioyek-documentation.readthedocs.io/en/latest/scripting.html}{the documentation} on how to do it.
 We also have some extensions \href{https://github.com/ahrm/sioyek-python-extensions}{available here}. For example we have an extension that downloads the paper from google scholar just by control+clicking on its name.
 
 \bibliographystyle{unsrt}

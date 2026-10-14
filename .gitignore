@@ -341,7 +341,7 @@ ASALocalRun/
 healthchecksdb
 *.o
 *.db
-sioyek-release/*
+yaview-release/*
 linux-deploy-binaries/*
 build/*
 .build
@@ -361,7 +361,7 @@ lib_release/*
 pdf_viewer/fonts/*
 *.stash
 pdf_viewer/todo.txt
-sioyek_log.txt
+yaview_log.txt
 fast/*
 debuglibs/*
 tutorial/*.aux
@@ -374,8 +374,8 @@ tutorial/*.blg
 *.o.d
 compile_commands.json
 
-sioyek_autogen/*
-sioyek.app/*
+yaview_autogen/*
+yaview.app/*
 qrc_resources.cpp
 *.cmake
 bak/*

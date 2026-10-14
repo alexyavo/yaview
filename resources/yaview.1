@@ -673,11 +673,11 @@
 .\" Public License instead of this License.  But first, please read
 .\" <https://www.gnu.org/licenses/why-not-lgpl.html>.
 .\"
-.TH SIOYEK 1 2022-06-18 "SIOYEK" "User Commands"
+.TH YAVIEW 1 2022-06-18 "YAVIEW" "User Commands"
 .SH NAME
-sioyek \- a PDF viewer designed for reading research papers and technical books.
+yaview \- a PDF viewer designed for reading research papers and technical books.
 .SH SYNOPSIS
-.B sioyek
+.B yaview
 [OPTIONS] [FILENAME]
 .SH DESCRIPTION
 .PP
@@ -693,15 +693,15 @@ Displays version information
 .HP
 .B --instance-name
 
-Select a specific sioyek instance by name.
+Select a specific yaview instance by name.
 .HP
 .B --new-window
 
-Open the file in a new window but within the same sioyek instance.
+Open the file in a new window but within the same yaview instance.
 .HP
 .B --reuse-window
 
-Force sioyek to reuse the current window even when should_launch_new_window is set.
+Force yaview to reuse the current window even when should_launch_new_window is set.
 .HP
 .B --page
 .I PAGE
@@ -776,33 +776,33 @@ Displays help including Qt specific options
 
 .SH FILES
 .HP
-.B /etc/sioyek/keys.config
+.B /etc/yaview/keys.config
 
 Default key bindings
 .HP
-.B /etc/sioyek/prefs.config
+.B /etc/yaview/prefs.config
 
 Default preferences
 .HP
-.B /usr/share/sioyek/shaders
+.B /usr/share/yaview/shaders
 
 Default shader files
 .HP
-.B /usr/share/sioyek/tutorial.pdf
+.B /usr/share/yaview/tutorial.pdf
 
-sioyek tutorial PDF
+yaview tutorial PDF
 .HP
-.B $XDG_CONFIG_HOME/sioyek/keys_user.config
+.B $XDG_CONFIG_HOME/yaview/keys_user.config
 
 User key bindings
 .HP
-.B $XDG_CONFIG_HOME/sioyek/prefs_user.config
+.B $XDG_CONFIG_HOME/yaview/prefs_user.config
 
 User preferences
 
 .SH CONFIGURATION
 .PP
-Sioyek supports many preferences that can be set in a file as
+Yaview supports many preferences that can be set in a file as
 described above.
 .PP
 Each preference is a token, some whitespace, and a value. A value can
@@ -941,14 +941,14 @@ If the last opened document is empty, load the tutorial pdf instead..
 .B should_launch_new_instance
 .I boolean
 
-If it is 0, then we use the previous instance of sioyek when launching
+If it is 0, then we use the previous instance of yaview when launching
 a new file.  otherwise a new instance is launched every time we open a
 new file.
 .HP
 .B should_launch_new_window
 .I boolean
 
-Open the file in a new window but within the same sioyek instance.
+Open the file in a new window but within the same yaview instance.
 .HP
 .B should_draw_unrendered_pages
 .I boolean
@@ -959,7 +959,7 @@ default we display nothing).
 .B check_for_updates_on_startup
 .I boolean
 
-If set, shows a notification on startup if a new version of sioyek is
+If set, shows a notification on startup if a new version of yaview is
 available.
 .HP
 .B sort_bookmarks_by_location
@@ -973,9 +973,9 @@ creation time.
 
 Path to shared.db database file. If not set, we use the default path.
 you can set this to be a file in a synced folder (e.g. dropbox folder)
-to automatically sync sioyek across multiple computers.
+to automatically sync yaview across multiple computers.
 
-On GNU/Linux, this refers to ~/.local/share/sioyek/shared.db.
+On GNU/Linux, this refers to ~/.local/share/yaview/shared.db.
 .HP
 .B hover_overview
 .I boolean
@@ -1190,7 +1190,7 @@ implementation of such a server based on a language model is available
 here:
 https://github.com/ahrm/sioyek/blob/main/scripts/summary_highlight_server.py.
 
-By default, both this script and sioyek will bind to localhost:5000.
+By default, both this script and yaview will bind to localhost:5000.
 
 .HP
 .B text_summary_should_refine
@@ -1223,7 +1223,7 @@ every word to emphasize.
 .B papers_folder_path
 .I string
 
-A directory which sioyek watches for new papers. If a new paper added
+A directory which yaview watches for new papers. If a new paper added
 to this directory while we are creating a portal from another
 document, this new document will automatically be used as the
 destination of the portal.
@@ -1328,5 +1328,5 @@ and regex search are case-insensitive.
 If set to 1, jump to the first result as soon as you start typing. If set to 0,
 wait until enter is pressed.
 .SH BUGS
-If you find a bug in sioyek please report it at
+If you find a bug in yaview please report it at
 https://github.com/ahrm/sioyek/issues

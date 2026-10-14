@@ -339,8 +339,8 @@ public:
     bool is_highlight_new(const Highlight& highlight);
     bool is_drawing_new(const FreehandDrawing& drawing);
     int num_freehand_drawings();
-    std::vector<BookMark> get_new_sioyek_bookmarks(const std::vector<BookMark>& pdf_bookmarks);
-    std::vector<Highlight> get_new_sioyek_highlights(const std::vector<Highlight>& pdf_highlights);
+    std::vector<BookMark> get_new_yaview_bookmarks(const std::vector<BookMark>& pdf_bookmarks);
+    std::vector<Highlight> get_new_yaview_highlights(const std::vector<Highlight>& pdf_highlights);
     fz_context* get_mupdf_context();
 
     int get_page_offset();
@@ -394,7 +394,7 @@ public:
         std::vector<std::wstring>* line_texts = nullptr,
         std::vector<std::vector<PagelessDocumentRect>>* out_line_rects = nullptr);
 
-    std::wstring get_addtional_sioyek_file_path(QString type);
+    std::wstring get_addtional_yaview_file_path(QString type);
     std::wstring get_drawings_file_path();
     std::wstring get_scratchpad_file_path();
     std::wstring get_extras_file_path();
@@ -459,6 +459,8 @@ public:
 
     int get_tab_index(const std::wstring& path);
     int add_tab(const std::wstring& path);
+    // like add_tab, but a new tab goes right after `after_path`'s tab (the end when it has none)
+    int add_tab_after(const std::wstring& path, const std::optional<std::wstring>& after_path);
     void remove_tab(const std::wstring& path);
     std::vector<std::wstring> get_tabs();
 

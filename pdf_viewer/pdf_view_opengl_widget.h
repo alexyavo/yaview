@@ -14,7 +14,7 @@
 #include <qopengl.h>
 
 
-#ifndef SIOYEK_QT6
+#ifndef YAVIEW_QT6
 #include <qdesktopwidget.h>
 #endif
 

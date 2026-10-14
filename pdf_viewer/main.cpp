@@ -7,14 +7,14 @@
 #include <utility>
 #include <filesystem>
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 #include <QtCore/private/qandroidextras_p.h>
 #endif
 
 #include <QDebug>
 #include <qapplication.h>
 #include <qpushbutton.h>
-#ifndef SIOYEK_QT6
+#ifndef YAVIEW_QT6
 #include <qopenglwidget.h>
 #endif
 #include <qopenglextrafunctions.h>
@@ -37,7 +37,7 @@
 #include <qtextedit.h>
 #include <qfilesystemwatcher.h>
 
-#ifndef SIOYEK_QT6
+#ifndef YAVIEW_QT6
 #include <qdesktopwidget.h>
 #endif
 
@@ -85,8 +85,8 @@
 
 std::string APPLICATION_VERSION = "2.0.0";
 int DATABASE_VERSION = 2;
-std::wstring APPLICATION_NAME = L"sioyek";
-std::string LOG_FILE_NAME = "sioyek_log.txt";
+std::wstring APPLICATION_NAME = L"yaview";
+std::string LOG_FILE_NAME = "yaview_log.txt";
 std::ofstream LOG_FILE;
 
 Path standard_data_path;
@@ -98,14 +98,14 @@ Path database_file_path(L"");
 Path local_database_file_path(L"");
 Path global_database_file_path(L"");
 
-#ifdef SIOYEK_MOBILE
+#ifdef YAVIEW_MOBILE
 Path tutorial_path(L":/tutorial.pdf");
 Path android_config_path(L"");
 #else
 Path tutorial_path(L"");
 #endif
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 extern Path android_config_path;
 #endif
 
@@ -196,7 +196,7 @@ QStringList convert_arguments(QStringList input_args) {
     return output_args;
 }
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 void configure_paths_android() {
 
     char* APPDIR = std::getenv("XDG_CONFIG_HOME");
@@ -207,7 +207,7 @@ void configure_paths_android() {
     }
 
     standard_data_path = Path(utf8_decode(APPDIR));
-    standard_data_path = standard_data_path.slash(L".local").slash(L"share").slash(L"Sioyek");
+    standard_data_path = standard_data_path.slash(L".local").slash(L"share").slash(L"Yaview");
     standard_data_path.create_directories();
 
     database_file_path = standard_data_path.slash(L"test.db");
@@ -221,7 +221,7 @@ void configure_paths_android() {
 #endif
 
 void configure_paths() {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     configure_paths_android();
 #else
 
@@ -239,7 +239,7 @@ void configure_paths() {
     default_keys_path = mac_resources_path.slash(L"keys.config");
     tutorial_path = mac_resources_path.slash(L"tutorial.pdf");
     Path mac_home_path(QDir::homePath().toStdWString());
-    Path mac_standard_config_path = mac_home_path.slash(L".config").slash(L"sioyek");
+    Path mac_standard_config_path = mac_home_path.slash(L".config").slash(L"yaview");
     user_keys_paths.push_back(mac_standard_config_path.slash(L"keys_user.config"));
     user_config_paths.push_back(mac_standard_config_path.slash(L"prefs_user.config"));
 #endif
@@ -253,9 +253,9 @@ void configure_paths() {
 
 #ifdef LINUX_STANDARD_PATHS
     Path home_path(QDir::homePath().toStdWString());
-    standard_data_path = home_path.slash(L".local").slash(L"share").slash(L"sioyek");
-    Path standard_config_path = Path(L"/etc/sioyek");
-    Path read_only_data_path = Path(L"/usr/share/sioyek");
+    standard_data_path = home_path.slash(L".local").slash(L"share").slash(L"yaview");
+    Path standard_config_path = Path(L"/etc/yaview");
+    Path read_only_data_path = Path(L"/usr/share/yaview");
     standard_data_path.create_directories();
 
     default_config_path = read_only_data_path.slash(L"prefs.config");
@@ -279,7 +279,7 @@ void configure_paths() {
         standard_data_path = Path(utf8_decode(APPDIR));
     }
 
-    standard_data_path = standard_data_path.slash(L"sioyek");
+    standard_data_path = standard_data_path.slash(L"yaview");
     standard_data_path.create_directories();
 
     default_config_path = parent_path.slash(L"prefs.config");
@@ -293,7 +293,7 @@ void configure_paths() {
     tutorial_path = standard_data_path.slash(L"tutorial.pdf");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
 
-    Path linux_standard_config_path = linux_home_path.slash(L".config").slash(L"sioyek");
+    Path linux_standard_config_path = linux_home_path.slash(L".config").slash(L"yaview");
     //user_keys_paths.push_back(mac_standard_config_path.slash(L"keys_user.config"));
     //user_config_paths.push_back(mac_standard_config_path.slash(L"prefs_user.config"));
     user_keys_paths.push_back(linux_standard_config_path.slash(L"keys_user.config"));
@@ -534,7 +534,7 @@ MainWidget* handle_args(const QStringList& arguments, QLocalSocket* origin=nullp
     pdf_file_name = strip_uri(pdf_file_name, &page);
 
     if ((pdf_file_name.size() > 0) && (!QFile::exists(QString::fromStdWString(pdf_file_name)))) {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
         if (!((pdf_file_name[0] == ':') || (pdf_file_name.substr(0, 2) == L"/:"))) {
             return nullptr;
         }
@@ -672,7 +672,7 @@ int main(int argc, char* args[]) {
     SEARCH_URLS['s' - 'a'] = L"https://kagi.com/search?q=";
     SEARCH_URLS['c' - 'a'] = L"https://scholar.google.com/scholar?q=";
     SEARCH_URLS['g' - 'a'] = L"https://www.google.com/search?q=";
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 
     auto r = QtAndroidPrivate::checkPermission("android.permission.WRITE_EXTERNAL_STORAGE").result();
     if (r == QtAndroidPrivate::Denied) {
@@ -686,7 +686,7 @@ int main(int argc, char* args[]) {
 #endif
 
     if (has_arg(argc, args, "--version")) {
-        std::cout << "sioyek " << APPLICATION_VERSION << "\n";
+        std::cout << "yaview " << APPLICATION_VERSION << "\n";
         return 0;
     }
     if (has_arg(argc, args, "--verbose")) {
@@ -703,7 +703,7 @@ int main(int argc, char* args[]) {
     //load_npy(":/data/linear.npy", linear_weights, &nrows, &ncols);
 
     QSurfaceFormat format;
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     format.setVersion(3, 1);
 #else
     format.setVersion(3, 3);
@@ -751,7 +751,7 @@ int main(int argc, char* args[]) {
     verify_config_paths();
 
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     ConfigManager config_manager(android_config_path, auto_config_path, user_config_paths);
 #else
     ConfigManager config_manager(default_config_path, auto_config_path, user_config_paths);
@@ -782,8 +782,8 @@ int main(int argc, char* args[]) {
         use_single_instance = false;
     }
 
-#ifndef SIOYEK_ANDROID
-    std::string instance_name_string = "sioyek";
+#ifndef YAVIEW_ANDROID
+    std::string instance_name_string = "yaview";
     char* instance_name = get_argv_value(argc, args, "--instance-name");
 
     if (instance_name) {
@@ -792,7 +792,7 @@ int main(int argc, char* args[]) {
 
     if (instance_name == nullptr && (!use_single_instance)) {
         std::wstring instance_uuid = new_uuid();
-        instance_name_string = "sioyek_" + utf8_encode(instance_uuid);
+        instance_name_string = "yaview_" + utf8_encode(instance_uuid);
         std::wcout << L"instance name: " << utf8_decode(instance_name_string) << L"\n";
     }
 
@@ -806,7 +806,7 @@ int main(int argc, char* args[]) {
     }
 #endif
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     if (VOLUME_UP_COMMAND.size() > 0 || VOLUME_DOWN_COMMAND.size() > 0){
         qputenv("QT_ANDROID_VOLUME_KEYS", "1");
     }
@@ -866,7 +866,7 @@ int main(int argc, char* args[]) {
     pdf_renderer->set_num_cached_pages(NUM_CACHED_PAGES);
     pdf_renderer->start_threads();
 
-    qDebug() << "SIOYEK";
+    qDebug() << "YAVIEW";
     InputHandler input_handler(default_keys_path, user_keys_paths, command_manager);
 
     std::vector<std::pair<std::wstring, std::wstring>> prev_path_hash_pairs;
@@ -887,7 +887,7 @@ int main(int argc, char* args[]) {
     MainWidget* main_widget = new MainWidget(mupdf_context, &db_manager, &document_manager, &config_manager, command_manager, &input_handler, &checksummer, &quit, pdf_renderer);
     windows.push_back(main_widget);
 
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
     guard.on_delete = std::move([&](QLocalSocket* deleted_socket) {
         if (windows.size() > 0) {
             windows[0]->on_socket_deleted(deleted_socket);
@@ -905,7 +905,7 @@ int main(int argc, char* args[]) {
     NewFileChecker new_file_checker(PAPERS_FOLDER_PATH, main_widget);
 
 
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
     if (guard.isPrimary()) {
         QObject::connect(&guard, &RunGuard::messageReceived, [&main_widget](const QByteArray& message, QLocalSocket* socket) {
             QStringList args = deserialize_string_array(message);
@@ -950,7 +950,7 @@ int main(int argc, char* args[]) {
     //main_widget->run_multiple_commands(STARTUP_COMMANDS);
 
     // live reload the config files, no need to live reload on android because we are not changing config files anyway
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
     QObject::connect(&pref_file_watcher, &QFileSystemWatcher::fileChanged, [&]() {
 
         std::vector<std::string> changed_config_file_names;

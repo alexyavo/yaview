@@ -1,6 +1,18 @@
-# Sioyek
+# yaview
 
-Sioyek is a PDF viewer with a focus on textbooks and research papers.
+[![Memory leak tests](https://github.com/alexyavo/yaview/actions/workflows/memory-tests.yml/badge.svg)](https://github.com/alexyavo/yaview/actions/workflows/memory-tests.yml)
+
+yaview is a PDF viewer with a focus on textbooks and research papers.
+
+yaview is a fork of [sioyek](https://github.com/ahrm/sioyek) by [ahrm](https://github.com/ahrm) and the sioyek
+contributors. It was renamed from sioyek and modified by [alexyavo](https://github.com/alexyavo) starting on
+2026-10-14. Like sioyek, it is free software licensed under the GNU General Public License version 3 (see
+[LICENSE](LICENSE) and [NOTICE](NOTICE)). The git history records every change made on top of sioyek.
+
+Changes compared to sioyek include a tab bar (one tab per open document, `:q` closes the current tab, Ctrl+Tab and
+Ctrl+Shift+Tab switch tabs), vim and emacs style keys (`h`/`l` horizontal scrolling, Ctrl+D/Ctrl+U paging, Ctrl+N/Ctrl+P
+in menus), themable popup menus that follow the system light/dark appearance, Kagi as the default `ss` search
+engine and highlighting of all visible search results.
 
 # Development Branch FAQ
 
@@ -8,7 +20,7 @@ Sioyek is a PDF viewer with a focus on textbooks and research papers.
 
 A: If you are building the development branch you need to use Qt 6.7 or 6.8.
 
-## Q: On MacOS I get "sioyek is damaged and cannot be opened. It is recommended to eject the image.".
+## Q: On MacOS I get "yaview is damaged and cannot be opened. It is recommended to eject the image.".
 
 A: This is related to macOS quarantine. See https://github.com/ahrm/sioyek/discussions/1156#discussioncomment-10822738 .
 
@@ -22,40 +34,23 @@ A: This is related to macOS quarantine. See https://github.com/ahrm/sioyek/discu
 * [Buy Me a Coffee (or a Book!)](#donation)
 
 ## Install
-### Official packages
-There are installers for Windows, macOS and Linux. See [Releases page](https://github.com/ahrm/sioyek/releases).
-
-### Homebew Cask
-There is a homebrew cask available here: https://formulae.brew.sh/cask/sioyek. Install by running:
-```
-brew install --cask sioyek
-```
-### Third-party packages for Linux
-If you prefer to install sioyek with a package manager, you can look at this list. Please note that they are provided by third party packagers. USE AT YOUR OWN RISK! If you're reporting a bug for a third-party package, please mention which package you're using.
-
-Distro | Link | Maintainer
-------- | ----- | -------------
-Flathub | [sioyek](https://flathub.org/apps/details/com.github.ahrm.sioyek) | [@nbenitez](https://flathub.org/apps/details/com.github.ahrm.sioyek)
-Alpine | [sioyek](https://pkgs.alpinelinux.org/packages?name=sioyek) | [@jirutka](https://github.com/jirutka)
-Arch | [AUR sioyek](https://aur.archlinux.org/packages/sioyek) | [@goggle](https://github.com/goggle)
-Arch | [AUR Sioyek-git](https://aur.archlinux.org/packages/sioyek-git/) | [@randomn4me](https://github.com/randomn4me)
-Arch | [AUR sioyek-appimage](https://aur.archlinux.org/packages/sioyek-appimage/) | [@DhruvaSambrani](https://github.com/DhruvaSambrani)
-Debian | [sioyek](https://packages.debian.org/sioyek) | [@viccie30](https://github.com/viccie30)
-NixOS | [sioyek](https://search.nixos.org/packages?channel=unstable&show=sioyek&from=0&size=50&sort=relevance&type=packages&query=sioyek) | [@podocarp](https://github.com/podocarp)
-openSUSE | [Publishing](https://build.opensuse.org/package/show/Publishing/sioyek) | [@uncomfyhalomacro](https://github.com/uncomfyhalomacro)
-openSUSE | [Factory](https://build.opensuse.org/package/show/openSUSE:Factory/sioyek) | [@uncomfyhalomacro](https://github.com/uncomfyhalomacro)
-Ubuntu | [sioyek](https://packages.ubuntu.com/sioyek) | [@viccie30](https://github.com/viccie30)
+yaview has no prebuilt releases or packages; build it from source (see [Build Instructions](#build-instructions)).
+The installers and distribution packages listed in [sioyek's README](https://github.com/ahrm/sioyek#install) install
+the original sioyek, not yaview.
 
 
 ## Documentation
-You can view the official documentation [here](https://sioyek-documentation.readthedocs.io/en/latest/).
+yaview has no documentation of its own. [sioyek's documentation](https://sioyek-documentation.readthedocs.io/en/latest/)
+applies, with `yaview` in place of `sioyek` in file and folder names.
 ## Feature Video Overview
 
-[![Sioyek feature overview](https://img.youtube.com/vi/yTmCI0Xp5vI/0.jpg)](https://www.youtube.com/watch?v=yTmCI0Xp5vI)
+These videos were made for sioyek.
+
+[![sioyek feature overview](https://img.youtube.com/vi/yTmCI0Xp5vI/0.jpg)](https://www.youtube.com/watch?v=yTmCI0Xp5vI)
 
 For a more in-depth tutorial, see this video:
 
-[![Sioyek Tutorial](https://img.youtube.com/vi/RaHRvnb0dY8/0.jpg)](https://www.youtube.com/watch?v=RaHRvnb0dY8)
+[![sioyek tutorial](https://img.youtube.com/vi/RaHRvnb0dY8/0.jpg)](https://www.youtube.com/watch?v=RaHRvnb0dY8)
 
 ## Features
 
@@ -63,7 +58,7 @@ For a more in-depth tutorial, see this video:
 
 https://user-images.githubusercontent.com/6392321/125321111-9b29dc00-e351-11eb-873e-94ea30016a05.mp4
 
-You can quickly search and open any file you have previously interacted with using sioyek.
+You can quickly search and open any file you have previously interacted with using yaview.
 
 ### Table of Contents
 
@@ -109,7 +104,7 @@ Highlight text using different kinds of highlights. You can search among all the
 
 https://user-images.githubusercontent.com/6392321/125322657-41c2ac80-e353-11eb-985e-8f3ce9808f67.mp4
 
-Suppose you are reading a paragraph which references a figure which is not very close to the current location. Jumping back and forth between the current paragraph and the figure can be very annoying. Using portals, you can link the paragraph's location to the figure's location. Sioyek shows the closest portal destination in a separate window (which is usually placed on a second monitor). This window is automatically updated to show the closest portal destination as the user navigates the document.
+Suppose you are reading a paragraph which references a figure which is not very close to the current location. Jumping back and forth between the current paragraph and the figure can be very annoying. Using portals, you can link the paragraph's location to the figure's location. Yaview shows the closest portal destination in a separate window (which is usually placed on a second monitor). This window is automatically updated to show the closest portal destination as the user navigates the document.
 
 
 ### Configuration
@@ -127,12 +122,12 @@ You can customize all key bindings and some UI elements by editing `keys_user.co
 
 #### Fedora
 
-Run the following commands to install dependencies, clone the repository and compile sioyek on Fedora (tested on Fedora Workstation 36).
+Run the following commands to install dependencies, clone the repository and compile yaview on Fedora (tested on Fedora Workstation 36).
 
 ```
 sudo dnf install qt5-qtbase-devel qt5-qtbase-static qt5-qt3d-devel harfbuzz-devel
-git clone --recursive --branch development https://github.com/ahrm/sioyek
-cd sioyek
+git clone --recursive https://github.com/alexyavo/yaview
+cd yaview
 ./build_linux.sh
 ``` 
 
@@ -146,8 +141,8 @@ sudo apt install libharfbuzz-dev
 ```
 3. Clone the repository and build:
 ```
-git clone --recursive --branch development https://github.com/ahrm/sioyek
-cd sioyek
+git clone --recursive https://github.com/alexyavo/yaview
+cd yaview
 ./build_linux.sh
 ```
 
@@ -156,8 +151,8 @@ cd sioyek
 2. Install Qt 5 and make sure qmake is in `PATH`.
 3. Clone the repository and build using 64 bit Visual Studio Developer Command Prompt:
 ```
-git clone --recursive --branch development https://github.com/ahrm/sioyek
-cd sioyek
+git clone --recursive https://github.com/alexyavo/yaview
+cd yaview
 build_windows.bat
 ```
 
@@ -175,19 +170,20 @@ export PKG_CONFIG_PATH=/path/to/qt/6.8.2/macos/lib/pkgconfig
 export QML2_IMPORT_PATH=/path/to/qt/6.8.2/macos/qml
 export PATH="/path/to/qt/6.8.2/macos/bin:$PATH"
 ```
-4. Clone the repository, build and install:
+4. Clone the repository, build and install. (On Apple Silicon with a local Qt SDK, `scripts/build_local_macos.sh --install`
+   wraps these steps; see `AGENTS.md`.)
 ```
-git clone --recursive --branch development https://github.com/ahrm/sioyek
-cd sioyek
+git clone --recursive https://github.com/alexyavo/yaview
+cd yaview
 chmod +x build_mac.sh
 setopt PIPE_FAIL PRINT_EXIT_VALUE ERR_RETURN SOURCE_TRACE XTRACE
 MAKE_PARALLEL=8 ./build_mac.sh
 
-mv build/sioyek.app /Applications/
-sudo codesign --force --sign - --deep /Applications/sioyek.app
+mv build/yaview.app /Applications/
+sudo codesign --force --sign - --deep /Applications/yaview.app
 ```
 
 ## Donation
-If you enjoy sioyek, please consider donating to support its development.
+yaview is built on the work of sioyek's author. If you enjoy it, please consider supporting sioyek's development.
 
 <a href="https://www.buymeacoffee.com/ahrm" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>

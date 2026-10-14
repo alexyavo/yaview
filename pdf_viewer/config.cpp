@@ -5,8 +5,9 @@
 #include <qdir.h>
 //#include <ui.h>
 
-int FONT_SIZE = -1;
+int FONT_SIZE = 18;
 int STATUS_BAR_FONT_SIZE = -1;
+int TAB_BAR_FONT_SIZE = 14;
 float BACKGROUND_COLOR[3] = { 0.97f, 0.97f, 0.97f };
 float DARK_MODE_BACKGROUND_COLOR[3] = { 0.0f, 0.0f, 0.0f };
 float CUSTOM_COLOR_MODE_EMPTY_BACKGROUND_COLOR[3] = { 0.0f, 0.0f, 0.0f };
@@ -20,6 +21,19 @@ float UI_TEXT_COLOR[3] = { 1.0f, 1.0f, 1.0f };
 float UI_BACKGROUND_COLOR[3] = { 0.0f, 0.0f, 0.0f };
 float UI_SELECTED_TEXT_COLOR[3] = { 0.0f, 0.0f, 0.0f };
 float UI_SELECTED_BACKGROUND_COLOR[3] = { 1.0f, 1.0f, 1.0f };
+// Popup menu themes, selected by ui_theme. "auto" follows the system appearance, "custom" uses the ui_* colors above.
+// The dark theme follows the tmux status line colors.
+std::wstring UI_THEME = L"auto";
+float UI_DARK_BACKGROUND_COLOR[3] = { 0.102f, 0.078f, 0.063f };
+float UI_DARK_TEXT_COLOR[3] = { 0.922f, 0.859f, 0.698f };
+float UI_DARK_SELECTED_BACKGROUND_COLOR[3] = { 0.996f, 0.502f, 0.098f };
+float UI_DARK_SELECTED_TEXT_COLOR[3] = { 0.102f, 0.078f, 0.063f };
+float UI_DARK_BORDER_COLOR[3] = { 0.839f, 0.365f, 0.055f };
+float UI_LIGHT_BACKGROUND_COLOR[3] = { 0.984f, 0.945f, 0.780f };
+float UI_LIGHT_TEXT_COLOR[3] = { 0.235f, 0.220f, 0.212f };
+float UI_LIGHT_SELECTED_BACKGROUND_COLOR[3] = { 0.686f, 0.227f, 0.012f };
+float UI_LIGHT_SELECTED_TEXT_COLOR[3] = { 0.984f, 0.945f, 0.780f };
+float UI_LIGHT_BORDER_COLOR[3] = { 0.839f, 0.365f, 0.055f };
 float UNSELECTED_SEARCH_HIGHLIGHT_COLOR[3] = { 0.0f, 0.5f, 0.5f };
 float GAMMA = 1.0f;
 bool DEBUG_DISPLAY_FREEHAND_POINTS = false;
@@ -39,13 +53,13 @@ bool RESTORE_ALL_WINDOWS_ON_STARTUP = false;
 bool DISABLE_CURSOR_BLINKING = false;
 bool FREE_TOUCHPAD_MOVEMENT = false;
 
-#ifdef SIOYEK_MOBILE
+#ifdef YAVIEW_MOBILE
 bool TOUCH_MODE = true;
 #else
 bool TOUCH_MODE = false;
 #endif
 
-#ifdef SIOYEK_MOBILE
+#ifdef YAVIEW_MOBILE
 bool SLICED_RENDERING = true;
 #else
 bool SLICED_RENDERING = false;
@@ -80,7 +94,7 @@ std::wstring PERIODIC_COMMANDS = L"";
 std::wstring MIDDLE_CLICK_SEARCH_ENGINE = L"s";
 std::wstring SHIFT_MIDDLE_CLICK_SEARCH_ENGINE = L"l";
 std::wstring PAPERS_FOLDER_PATH = L"";
-#ifndef SIOYEK_MOBILE
+#ifndef YAVIEW_MOBILE
 std::wstring STATUS_BAR_FORMAT = L"[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{highlight}%{freehand_drawing}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}";
 std::wstring RIGHT_STATUS_BAR_FORMAT = L"";
 #else
@@ -142,7 +156,7 @@ std::wstring GOOGLE_SCHOLAR_ADDRESS = L"";
 std::wstring INVERSE_SEARCH_COMMAND = L"";
 std::wstring SHARED_DATABASE_PATH = L"";
 std::wstring BOOK_SCAN_PATH = L"";
-std::wstring UI_FONT_FACE_NAME = L"";
+std::wstring UI_FONT_FACE_NAME = L"Monaspace Neon";
 std::wstring STATUS_FONT_FACE_NAME = L"";
 std::wstring DEFAULT_OPEN_FILE_PATH = L"";
 std::wstring ANNOTATIONS_DIR_PATH = L"";
@@ -166,7 +180,10 @@ bool USE_HEURISTIC_IF_TEXT_SUMMARY_NOT_AVAILABLE = false;
 int TEXT_SUMMARY_CONTEXT_SIZE = 49;
 float VISUAL_MARK_NEXT_PAGE_FRACTION = 0.75;
 float VISUAL_MARK_NEXT_PAGE_THRESHOLD = 0.25f;
-float MENU_SCREEN_WDITH_RATIO = 0.9f;
+float MENU_SCREEN_WDITH_RATIO = 0.6f;
+float MENU_SCREEN_HEIGHT_RATIO = 0.6f;
+float MENU_SCREEN_CENTER_X = 0.5f;
+float MENU_SCREEN_CENTER_Y = 0.5f;
 float RULER_PADDING = 1.0f;
 float RULER_X_PADDING = 5.0f;
 std::wstring ITEM_LIST_PREFIX = L">";
@@ -178,7 +195,7 @@ bool ALLOW_HORIZONTAL_DRAG_WHEN_DOCUMENT_IS_SMALL = false;
 bool INVERT_SELECTED_TEXT = false;
 bool IGNORE_SCROLL_EVENTS = false;
 
-#ifdef SIOYEK_MOBILE
+#ifdef YAVIEW_MOBILE
 std::wstring STARTUP_COMMANDS = L"toggle_mouse_drag_mode;toggle_fullscreen";
 #else
 std::wstring STARTUP_COMMANDS = L"";
@@ -203,7 +220,7 @@ bool FORCE_CUSTOM_LINE_ALGORITHM = false;
 float OVERVIEW_SIZE[2] = { 0.8f, 0.4f };
 float OVERVIEW_OFFSET[2] = { 0.0f, 0.0f };
 bool IGNORE_WHITESPACE_IN_PRESENTATION_MODE = false;
-#ifdef SIOYEK_MOBILE
+#ifdef YAVIEW_MOBILE
 bool EXACT_HIGHLIGHT_SELECT = true;
 #else
 bool EXACT_HIGHLIGHT_SELECT = false;
@@ -239,7 +256,7 @@ std::wstring CONTEXT_MENU_ITEMS_FOR_BOOKMARKS = L"delete_visible_annotation|edit
 std::wstring CONTEXT_MENU_ITEMS_FOR_OVERVIEW = L"";
 
 bool RIGHT_CLICK_CONTEXT_MENU = false;
-#ifdef SIOYEK_MOBILE
+#ifdef YAVIEW_MOBILE
 int NUM_CACHED_PAGES = 3;
 #else
 int NUM_CACHED_PAGES = 5;
@@ -312,6 +329,8 @@ bool ADJUST_ANNOTATION_COLORS_FOR_DARK_MODE = true;
 #ifdef Q_OS_MACOS
 float MACOS_TITLEBAR_COLOR[3] = { -1.0f, -1.0f, -1.0f };
 bool MACOS_HIDE_TITLEBAR = false;
+// the tab bar takes the title bar's place next to the window buttons and is always shown, like Firefox's
+bool MACOS_TABS_IN_TITLEBAR = true;
 #endif
 
 std::wstring RULER_DISPLAY_MODE = L"underline";
@@ -372,7 +391,7 @@ std::wstring VISUAL_MARK_PREV_TAP_COMMAND = L"";
 std::wstring VISUAL_MARK_PREV_HOLD_COMMAND = L"";
 std::wstring MIDDLE_LEFT_RECT_TAP_COMMAND = L"";
 std::wstring MIDDLE_LEFT_RECT_HOLD_COMMAND = L"";
-#ifdef SIOYEK_MOBILE
+#ifdef YAVIEW_MOBILE
 std::wstring MIDDLE_RIGHT_RECT_TAP_COMMAND = L"overview_definition";
 #else
 std::wstring MIDDLE_RIGHT_RECT_TAP_COMMAND = L"";
@@ -918,6 +937,16 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_color3(L"ui_background_color", UI_BACKGROUND_COLOR);
     add_color3(L"ui_selected_text_color", UI_SELECTED_TEXT_COLOR);
     add_color3(L"ui_background_color", STATUS_BAR_COLOR);
+    add_color3(L"ui_dark_background_color", UI_DARK_BACKGROUND_COLOR);
+    add_color3(L"ui_dark_text_color", UI_DARK_TEXT_COLOR);
+    add_color3(L"ui_dark_selected_background_color", UI_DARK_SELECTED_BACKGROUND_COLOR);
+    add_color3(L"ui_dark_selected_text_color", UI_DARK_SELECTED_TEXT_COLOR);
+    add_color3(L"ui_dark_border_color", UI_DARK_BORDER_COLOR);
+    add_color3(L"ui_light_background_color", UI_LIGHT_BACKGROUND_COLOR);
+    add_color3(L"ui_light_text_color", UI_LIGHT_TEXT_COLOR);
+    add_color3(L"ui_light_selected_background_color", UI_LIGHT_SELECTED_BACKGROUND_COLOR);
+    add_color3(L"ui_light_selected_text_color", UI_LIGHT_SELECTED_TEXT_COLOR);
+    add_color3(L"ui_light_border_color", UI_LIGHT_BORDER_COLOR);
     add_color4(L"vertical_line_color",DEFAULT_VERTICAL_LINE_COLOR);
     add_color4(L"visual_mark_color",DEFAULT_VERTICAL_LINE_COLOR);
     add_color4(L"keyboard_select_background_color", KEYBOARD_SELECT_BACKGROUND_COLOR);
@@ -949,7 +978,9 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_float(L"page_space_x", &PAGE_SPACE_X, FloatExtras{0.0f, 100.0f});
     add_float(L"page_space_y", &PAGE_SPACE_Y, FloatExtras{0.0f, 100.0f});
     add_float(L"menu_screen_width_ratio", &MENU_SCREEN_WDITH_RATIO, FloatExtras{0.0f, 1.0f});
-    add_float(L"menu_screen_width_ratio", &MENU_SCREEN_WDITH_RATIO, FloatExtras{0.0f, 1.0f});
+    add_float(L"menu_screen_height_ratio", &MENU_SCREEN_HEIGHT_RATIO, FloatExtras{0.0f, 1.0f});
+    add_float(L"menu_screen_center_x", &MENU_SCREEN_CENTER_X, FloatExtras{0.0f, 1.0f});
+    add_float(L"menu_screen_center_y", &MENU_SCREEN_CENTER_Y, FloatExtras{0.0f, 1.0f});
     add_float(L"smooth_scroll_speed", &SMOOTH_SCROLL_SPEED, FloatExtras{0.0f, 20.0f});
     add_float(L"smooth_scroll_drag", &SMOOTH_SCROLL_DRAG, FloatExtras{10.0f, 10000.0f});
     add_float(L"gamma", &GAMMA, FloatExtras{0.0f, 1.0f});
@@ -1064,6 +1095,7 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_string(L"shared_database_path", &SHARED_DATABASE_PATH);
     add_string(L"ruler_display_mode", &RULER_DISPLAY_MODE);
     add_string(L"ui_font", &UI_FONT_FACE_NAME);
+    add_string(L"ui_theme", &UI_THEME);
     add_string(L"status_font", &STATUS_FONT_FACE_NAME);
     add_string(L"middle_click_search_engine", &MIDDLE_CLICK_SEARCH_ENGINE);
     add_string(L"shift_middle_click_search_engine", &SHIFT_MIDDLE_CLICK_SEARCH_ENGINE);
@@ -1128,6 +1160,7 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_int(L"keyboard_select_font_size", &KEYBOARD_SELECT_FONT_SIZE, IntExtras{1, 100});
     add_int(L"documentation_font_size", &DOCUMENTATION_FONT_SIZE, IntExtras{1, 100});
     add_int(L"status_bar_font_size", &STATUS_BAR_FONT_SIZE, IntExtras{1, 100});
+    add_int(L"tab_bar_font_size", &TAB_BAR_FONT_SIZE, IntExtras{1, 100});
     add_int(L"text_summary_context_size", &TEXT_SUMMARY_CONTEXT_SIZE, IntExtras{1, 100});
     add_int(L"max_created_toc_size", &MAX_CREATED_TABLE_OF_CONTENTS_SIZE, IntExtras{1, 100000});
     add_int(L"prerendered_page_count", &PRERENDERED_PAGE_COUNT, IntExtras{0, 10});
@@ -1156,6 +1189,7 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
 #ifdef Q_OS_MACOS
     add_color3(L"macos_titlebar_color", MACOS_TITLEBAR_COLOR);
     add_bool(L"macos_hide_titlebar", &MACOS_HIDE_TITLEBAR);
+    add_bool(L"macos_tabs_in_titlebar", &MACOS_TABS_IN_TITLEBAR);
 #endif
 
     std::wstring highlight_config_string = L"highlight_color_a";
@@ -1180,7 +1214,7 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
 }
 
 void ConfigManager::persist_config() {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     serialize(android_config_path);
 #else
     //Path path(L"test.config");
@@ -1190,7 +1224,7 @@ void ConfigManager::persist_config() {
 }
 
 void ConfigManager::restore_default() {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     clear_file(android_config_path);
 #endif
 }

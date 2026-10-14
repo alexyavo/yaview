@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Incremental native macOS build with the same Qt version as the local setup.
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
-qt_dir="${SIOYEK_QT_ROOT:-$repo_dir/.local/qt/6.8.2/macos}"
+qt_dir="${YAVIEW_QT_ROOT:-$repo_dir/.local/qt/6.8.2/macos}"
 build_dir="$repo_dir/build/local-macos"
-app_path="$build_dir/sioyek.app"
+app_path="$build_dir/yaview.app"
 jobs="${MAKE_PARALLEL:-8}"
 install_app=false
 
@@ -16,7 +16,7 @@ case "${1:-}" in
 esac
 
 if [[ ! -x "$qt_dir/bin/qmake" || ! -x "$qt_dir/bin/macdeployqt" ]]; then
-  printf 'Qt tools missing in %s; set SIOYEK_QT_ROOT to a Qt 6.8.2 macOS SDK.\n' "$qt_dir" >&2
+  printf 'Qt tools missing in %s; set YAVIEW_QT_ROOT to a Qt 6.8.2 macOS SDK.\n' "$qt_dir" >&2
   exit 1
 fi
 
@@ -52,19 +52,19 @@ cp "$repo_dir/tutorial.pdf" "$resources_dir/tutorial.pdf"
 "$qt_dir/bin/macdeployqt" "$app_path" -always-overwrite -no-strip
 codesign --force --deep --sign - "$app_path"
 codesign --verify --deep --strict "$app_path"
-"$app_path/Contents/MacOS/sioyek" --version
+"$app_path/Contents/MacOS/yaview" --version
 
 if "$install_app"; then
-  install_target="${SIOYEK_INSTALL_PATH:-/Applications/sioyek.app}"
+  install_target="${YAVIEW_INSTALL_PATH:-/Applications/yaview.app}"
   if [[ -e "$install_target" || -L "$install_target" ]]; then
-    if pgrep -x sioyek >/dev/null; then
-      printf 'Quit Sioyek before replacing the installed app.\n' >&2
+    if pgrep -x yaview >/dev/null; then
+      printf 'Quit yaview before replacing the installed app.\n' >&2
       exit 1
     fi
     backup_dir="$repo_dir/.local/install-backups/$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$backup_dir"
-    mv "$install_target" "$backup_dir/sioyek.app"
-    printf 'Previous installation saved to %s\n' "$backup_dir/sioyek.app"
+    mv "$install_target" "$backup_dir/yaview.app"
+    printf 'Previous installation saved to %s\n' "$backup_dir/yaview.app"
   fi
   ditto "$app_path" "$install_target"
   codesign --verify --deep --strict "$install_target"

@@ -5,8 +5,8 @@ import rst_to_myst
 import docutils
 import docutils.core
 
-commands_doc_path = os.getenv("SIOYEK_DOCUMENTATION_COMMANDS_PATH")
-config_doc_path = os.getenv("SIOYEK_DOCUMENTATION_CONFIGS_PATH")
+commands_doc_path = os.getenv("YAVIEW_DOCUMENTATION_COMMANDS_PATH")
+config_doc_path = os.getenv("YAVIEW_DOCUMENTATION_CONFIGS_PATH")
 
 def export_documentation(commands, documentation_for_titles, dest_file, translate=False):
     res = dict()

@@ -1,11 +1,11 @@
 // deduplicate database code
-// make sure jsons exported by previous sioyek versions can be imported
+// make sure jsons exported by previous yaview versions can be imported
 // maybe: use a better method to handle deletion of canceled download portals
 // change find_closest_*_index and argminf to use the fact that the list is sorted and speed up the search (not important if there are not a ridiculous amount of highlight/bookmarks)
 // do the todo for link clicks when the document is zoomed in (focus on x too)
 // fix the issue where executing non-existant command blocks the python api
 // handle mobile text selection case where the character is not in the current page
-// make sure database migrations goes smoothly. Test with database files from previous sioyek versions.
+// make sure database migrations goes smoothly. Test with database files from previous yaview versions.
 // portals are not correctly saved in an updated database
 // touch epub controls
 // better tablet button handling, the current method is setting dependent
@@ -26,6 +26,9 @@
 #include <cctype>
 #include <cstdlib>
 #include <qpainterpath.h>
+#include <qpainter.h>
+#include <qpixmap.h>
+#include <qicon.h>
 #include <qabstractitemmodel.h>
 #include <qapplication.h>
 #include <qboxlayout.h>
@@ -35,7 +38,7 @@
 #include <qmenu.h>
 #include <QThread>
 
-#ifndef SIOYEK_QT6
+#ifndef YAVIEW_QT6
 #include <qdesktopwidget.h>
 #endif
 
@@ -63,6 +66,8 @@
 #include <qbytearray.h>
 #include <qscrollbar.h>
 #include <qtabbar.h>
+#include <qscrollarea.h>
+#include <functional>
 #include <qshortcut.h>
 #include <qtexttospeech.h>
 #include <qwidget.h>
@@ -71,6 +76,7 @@
 #include <qtextdocumentfragment.h>
 #include <qmenubar.h>
 #include <qstylehints.h>
+#include <qtoolbutton.h>
 
 #include <mupdf/fitz.h>
 
@@ -93,7 +99,7 @@
 
 #include "main_widget.h"
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 #include <QtCore/private/qandroidextras_p.h>
 #endif
 
@@ -104,6 +110,10 @@ extern "C" {
 #ifdef Q_OS_MACOS
 extern "C" void changeTitlebarColor(WId, double, double, double, double);
 extern "C" void hideWindowTitleBar(WId);
+void install_swipe_navigation_handler(std::function<bool(bool)> navigate);
+extern "C" double setTabsInTitlebar(WId, bool, double);
+extern "C" void performTitlebarDoubleClick(WId);
+extern "C" void startWindowDrag(WId);
 #endif
 
 extern int next_window_id;
@@ -135,6 +145,7 @@ extern float SMALL_PIXMAP_SCALE;
 extern std::wstring EXECUTE_COMMANDS[26];
 extern float HIGHLIGHT_COLORS[26 * 3];
 extern int STATUS_BAR_FONT_SIZE;
+extern int TAB_BAR_FONT_SIZE;
 extern Path default_config_path;
 extern Path default_keys_path;
 extern std::vector<Path> user_config_paths;
@@ -297,6 +308,7 @@ const unsigned int INTERVAL_TIME = 200;
 #ifdef Q_OS_MACOS
 extern float MACOS_TITLEBAR_COLOR[3];
 extern bool MACOS_HIDE_TITLEBAR;
+extern bool MACOS_TABS_IN_TITLEBAR;
 #endif
 
 MainWidget* get_window_with_window_id(int window_id) {
@@ -895,6 +907,68 @@ void MainWidget::closeEvent(QCloseEvent* close_event) {
     handle_close_event();
 }
 
+const int TAB_SCROLL_BUTTON_WIDTH = 28;
+
+// Mouse handling for the tab bar that QTabBar lacks: the wheel scrolls through tabs that don't fit, a
+// middle click closes the clicked tab, like in browsers, and pressing or double clicking an empty part of
+// the bar acts like the title bar (move or zoom the window). Installed on the tab bar, on its scroll area,
+// whose scroll arrows pass their events on to it, and on the strip behind them. Wheel and middle-click
+// events are kept from reaching the document view under the bar.
+class TabBarMouseFilter : public QObject {
+public:
+    TabBarMouseFilter(QTabBar* tab_bar, QScrollArea* scroll_area, std::function<void(int)> close_tab,
+        std::function<void(bool)> on_empty_area_press)
+        : QObject(tab_bar), tab_bar(tab_bar), scroll_area(scroll_area), close_tab(close_tab),
+        on_empty_area_press(on_empty_area_press) {
+    }
+
+    bool eventFilter(QObject* obj, QEvent* event) override {
+        if (event->type() == QEvent::Wheel) {
+            QWheelEvent* wheel_event = static_cast<QWheelEvent*>(event);
+            // vertical wheels scroll the tabs horizontally too
+            QPoint pixels = wheel_event->pixelDelta();
+            QPoint angle = wheel_event->angleDelta();
+            int delta = 0;
+            if (!pixels.isNull()) {
+                delta = std::abs(pixels.x()) > std::abs(pixels.y()) ? pixels.x() : pixels.y();
+            }
+            else {
+                delta = (std::abs(angle.x()) > std::abs(angle.y()) ? angle.x() : angle.y()) / 2;
+            }
+            QScrollBar* scroll_bar = scroll_area->horizontalScrollBar();
+            scroll_bar->setValue(scroll_bar->value() - delta);
+            return true;
+        }
+
+        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease ||
+            event->type() == QEvent::MouseButtonDblClick) {
+            QMouseEvent* mouse_event = static_cast<QMouseEvent*>(event);
+            bool is_empty_area = (obj != tab_bar) || (tab_bar->tabAt(mouse_event->position().toPoint()) < 0);
+            if ((mouse_event->button() == Qt::LeftButton) && is_empty_area && (obj != scroll_area) &&
+                (event->type() != QEvent::MouseButtonRelease)) {
+                on_empty_area_press(event->type() == QEvent::MouseButtonDblClick);
+                return true;
+            }
+            if (mouse_event->button() == Qt::MiddleButton) {
+                if ((obj == tab_bar) && (event->type() == QEvent::MouseButtonRelease)) {
+                    int index = tab_bar->tabAt(mouse_event->position().toPoint());
+                    if (index >= 0) {
+                        close_tab(index);
+                    }
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    QTabBar* tab_bar;
+    QScrollArea* scroll_area;
+    std::function<void(int)> close_tab;
+    std::function<void(bool)> on_empty_area_press; // argument: whether it was a double click
+};
+
 MainWidget::MainWidget(MainWidget* other) : MainWidget(other->mupdf_context, other->db_manager, other->document_manager, other->config_manager, other->command_manager, other->input_handler, other->checksummer, other->should_quit, other->pdf_renderer) {
 
 }
@@ -909,7 +983,7 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     bool* should_quit_ptr,
     PdfRenderer* pdf_renderer,
     QWidget* parent) :
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     QQuickWidget(parent),
 #else
     QMainWindow(parent),
@@ -973,30 +1047,88 @@ MainWidget::MainWidget(fz_context* mupdf_context,
 
     opengl_widget->stackUnder(status_label);
 
-    tab_bar = new QTabBar(this);
-    tab_bar->setFont(label_font);
-    tab_bar->setFocusPolicy(Qt::NoFocus); // keep keyboard input on the main widget
+    // The tab bar sits in a scroll area that is as wide as the window, and is itself as wide as all of its
+    // tabs. The wheel scrolls through tabs that don't fit (see TabBarMouseFilter); QTabBar's own scroll
+    // arrows don't respond to the wheel on macOS.
+    tab_strip = new QWidget(this);
+    tab_strip->setAttribute(Qt::WA_StyledBackground);
+    tab_strip->setObjectName("tab_strip");
+    tab_strip->hide();
+    tab_scroll_area = new QScrollArea(this);
+    tab_scroll_area->setFrameShape(QFrame::NoFrame);
+    tab_scroll_area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tab_scroll_area->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tab_scroll_area->setFocusPolicy(Qt::NoFocus); // keep keyboard input on the main widget
+    tab_bar = new QTabBar();
+    tab_bar->setFocusPolicy(Qt::NoFocus);
     tab_bar->setDocumentMode(true);
+    tab_bar->setDrawBase(false);
     tab_bar->setExpanding(false);
-    tab_bar->setTabsClosable(true);
+    // Close buttons are added per tab in update_tab_bar: the built-in ones only appear on hover with the macOS style.
     tab_bar->setElideMode(Qt::ElideMiddle);
-    tab_bar->setUsesScrollButtons(true);
-    tab_bar->setStyleSheet(QString(
-        "QTabBar { background-color: %1; }"
-        "QTabBar::tab { background-color: %1; color: %2; padding: 3px 10px; border: 0; max-width: 260px; }"
-        "QTabBar::tab:selected { background-color: %3; color: %4; }"
-        ).arg(
-            get_color_qml_string(STATUS_BAR_COLOR[0], STATUS_BAR_COLOR[1], STATUS_BAR_COLOR[2]),
-            get_color_qml_string(STATUS_BAR_TEXT_COLOR[0], STATUS_BAR_TEXT_COLOR[1], STATUS_BAR_TEXT_COLOR[2]),
-            get_color_qml_string(UI_SELECTED_BACKGROUND_COLOR[0], UI_SELECTED_BACKGROUND_COLOR[1], UI_SELECTED_BACKGROUND_COLOR[2]),
-            get_color_qml_string(UI_SELECTED_TEXT_COLOR[0], UI_SELECTED_TEXT_COLOR[1], UI_SELECTED_TEXT_COLOR[2])
-        ));
-    tab_bar->hide();
+    tab_bar->setUsesScrollButtons(false);
+    tab_scroll_area->setWidget(tab_bar);
+    TabBarMouseFilter* tab_bar_mouse_filter = new TabBarMouseFilter(tab_bar, tab_scroll_area, [this](int index) {
+        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
+        if (index < static_cast<int>(tabs.size())) {
+            close_tab_with_path(tabs[index]);
+        }
+        }, [this](bool is_double_click) {
+#ifdef Q_OS_MACOS
+            if (is_double_click) {
+                performTitlebarDoubleClick(winId());
+            }
+            else {
+                startWindowDrag(winId());
+            }
+#endif
+        });
+    tab_bar->installEventFilter(tab_bar_mouse_filter);
+    tab_scroll_area->installEventFilter(tab_bar_mouse_filter);
+    tab_strip->installEventFilter(tab_bar_mouse_filter);
+
+    tab_scroll_left_button = new QToolButton(tab_scroll_area);
+    tab_scroll_right_button = new QToolButton(tab_scroll_area);
+    for (QToolButton* button : { tab_scroll_left_button, tab_scroll_right_button }) {
+        bool is_left = button == tab_scroll_left_button;
+        button->setToolTip(is_left ? "More tabs on the left" : "More tabs on the right");
+        button->setFocusPolicy(Qt::NoFocus);
+        button->setAutoRepeat(true);
+        button->hide();
+        QObject::connect(button, &QToolButton::clicked, [this, is_left]() {
+            QScrollBar* scroll_bar = tab_scroll_area->horizontalScrollBar();
+            int step = std::max(tab_scroll_area->width() / 3, 120);
+            scroll_bar->setValue(scroll_bar->value() + (is_left ? -step : step));
+            });
+    }
+    QScrollBar* tab_scroll_bar = tab_scroll_area->horizontalScrollBar();
+    QObject::connect(tab_scroll_bar, &QScrollBar::valueChanged, [this]() { update_tab_scroll_buttons(); });
+    QObject::connect(tab_scroll_bar, &QScrollBar::rangeChanged, [this]() { update_tab_scroll_buttons(); });
+    update_tab_bar_style();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this]() {
+        update_tab_bar_style();
+        });
+#endif
+    tab_scroll_area->hide();
     // Stacking order: document view < tab bar < popups (set_current_widget stacks them directly
     // under status_label) < status bar. Keeping the tab bar under status_label lets popups such as
     // the command palette or table of contents cover it instead of being drawn over.
-    tab_bar->stackUnder(status_label);
-    opengl_widget->stackUnder(tab_bar);
+    tab_scroll_area->stackUnder(status_label);
+    tab_strip->stackUnder(tab_scroll_area);
+    opengl_widget->stackUnder(tab_strip);
+
+#ifdef Q_OS_MACOS
+    install_swipe_navigation_handler([](bool forward) {
+        MainWidget* target = dynamic_cast<MainWidget*>(QApplication::topLevelAt(QCursor::pos()));
+        if (target == nullptr) {
+            target = dynamic_cast<MainWidget*>(QApplication::activeWindow());
+        }
+        if (target == nullptr) return false;
+        target->navigate_history(forward);
+        return true;
+        });
+#endif
 
     QObject::connect(tab_bar, &QTabBar::currentChanged, [this](int index) {
         std::vector<std::wstring> tabs = this->document_manager->get_tabs();
@@ -1025,18 +1157,6 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     QShortcut* ctrl_shift_tab_shortcut = new QShortcut(QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Tab), this);
     QObject::connect(ctrl_shift_tab_shortcut, &QShortcut::activated, [forward_ctrl_tab]() { forward_ctrl_tab(true); });
 #endif
-
-    QObject::connect(tab_bar, &QTabBar::tabCloseRequested, [this](int index) {
-        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
-        if (index < 0 || index >= static_cast<int>(tabs.size())) return;
-        if (index == get_current_tab_index()) {
-            close_current_tab();
-        }
-        else {
-            this->document_manager->remove_tab(tabs[index]);
-            update_all_tab_bars();
-        }
-        });
 
     // automatically open the helper window in second monitor
     int num_screens = QGuiApplication::screens().size();
@@ -1117,11 +1237,11 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     QObject::connect(&network_manager, &QNetworkAccessManager::finished, [this](QNetworkReply* reply) {
         reply->deleteLater();
 
-        if (!reply->property("sioyek_network_request_type").isNull()) {
+        if (!reply->property("yaview_network_request_type").isNull()) {
             // handled in a different place
             return;
         }
-        if (!reply->property("sioyek_js_extension").isNull()) {
+        if (!reply->property("yaview_js_extension").isNull()) {
             return;
         }
 
@@ -1143,11 +1263,11 @@ MainWidget::MainWidget(fz_context* mupdf_context,
                 // the archived link instead
                 if (reply_url.find(L"web.archive.org") == -1) {
                     PaperDownloadFinishedAction finish_action = get_paper_download_action_from_string(
-                        reply->property("sioyek_finish_action").toString());
+                        reply->property("yaview_finish_action").toString());
 
-                    download_paper_with_url(reply->property("sioyek_archive_url").toString().toStdWString(), true, finish_action)->setProperty(
-                        "sioyek_paper_name",
-                        reply->property("sioyek_paper_name")
+                    download_paper_with_url(reply->property("yaview_archive_url").toString().toStdWString(), true, finish_action)->setProperty(
+                        "yaview_paper_name",
+                        reply->property("yaview_paper_name")
                     );
                     return;
                 }
@@ -1155,17 +1275,17 @@ MainWidget::MainWidget(fz_context* mupdf_context,
 
             QString file_name = reply->url().fileName();
 
-            if (AUTO_RENAME_DOWNLOADED_PAPERS && (!reply->property("sioyek_actual_paper_name").isNull())) {
-                QString detected_file_name = get_file_name_from_paper_name(reply->property("sioyek_actual_paper_name").toString());
+            if (AUTO_RENAME_DOWNLOADED_PAPERS && (!reply->property("yaview_actual_paper_name").isNull())) {
+                QString detected_file_name = get_file_name_from_paper_name(reply->property("yaview_actual_paper_name").toString());
 
                 if (detected_file_name.size() > 0) {
                     QString extension = file_name.split(".").back();
                     file_name = detected_file_name + "." + extension;
                 }
             }
-            //reply->property("sioyek_paper_name").toString().replace("/", "_")
+            //reply->property("yaview_paper_name").toString().replace("/", "_")
 
-            PaperDownloadFinishedAction finish_action = get_paper_download_action_from_string(reply->property("sioyek_finish_action").toString());
+            PaperDownloadFinishedAction finish_action = get_paper_download_action_from_string(reply->property("yaview_finish_action").toString());
             QString path = QString::fromStdWString(downloaded_papers_path.slash(file_name.toStdWString()).get_path());
             QDir dir;
             dir.mkpath(QString::fromStdWString(downloaded_papers_path.get_path()));
@@ -1179,13 +1299,13 @@ MainWidget::MainWidget(fz_context* mupdf_context,
                     //std::string checksum = this->checksummer->get_checksum(path.toStdWString());
 
                     this->finish_pending_download_portal(
-                        reply->property("sioyek_paper_name").toString().toStdWString(),
+                        reply->property("yaview_paper_name").toString().toStdWString(),
                         path.toStdWString()
                     );
 
                 }
                 else {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
                     // todo: maybe show a dialog asking the user if they want to open the downloaded document
                     push_state();
                     open_document(path.toStdWString());
@@ -1202,9 +1322,9 @@ MainWidget::MainWidget(fz_context* mupdf_context,
             std::string answer = reply->readAll().toStdString();
             QByteArray json_data = QByteArray::fromStdString(answer);
             QJsonDocument json_doc = QJsonDocument::fromJson(json_data);
-            std::wstring paper_name = reply->property("sioyek_paper_name").toString().toStdWString();
+            std::wstring paper_name = reply->property("yaview_paper_name").toString().toStdWString();
             PaperDownloadFinishedAction download_finish_action = get_paper_download_action_from_string(
-                reply->property("sioyek_finish_action").toString());
+                reply->property("yaview_finish_action").toString());
 
             auto get_url_file_size = [&](QString url) {
                 QNetworkRequest req;
@@ -1216,7 +1336,7 @@ MainWidget::MainWidget(fz_context* mupdf_context,
                 req.setUrl(url_);
                 auto reply = network_manager.head(req);
 
-                reply->setProperty("sioyek_network_request_type", QString("paper_size"));
+                reply->setProperty("yaview_network_request_type", QString("paper_size"));
 
                 connect(reply, &QNetworkReply::finished, [reply, url, this]() {
                     reply->deleteLater();
@@ -1276,8 +1396,8 @@ MainWidget::MainWidget(fz_context* mupdf_context,
 
             if (matching_index > -1) {
                 auto download_reply = download_paper_with_url(hit_urls[matching_index], false, download_finish_action);
-                download_reply->setProperty("sioyek_paper_name", QString::fromStdWString(paper_name));
-                download_reply->setProperty("sioyek_actual_paper_name", QString::fromStdWString(hit_raw_names[matching_index]));
+                download_reply->setProperty("yaview_paper_name", QString::fromStdWString(paper_name));
+                download_reply->setProperty("yaview_actual_paper_name", QString::fromStdWString(hit_raw_names[matching_index]));
             }
             else {
                 show_download_paper_menu(hit_names, hit_urls, paper_name, download_finish_action);
@@ -1382,7 +1502,7 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     opengl_widget->setAttribute(Qt::WA_TransparentForMouseEvents);
     layout->addLayout(hlayout);
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
      setLayout(layout);
 #else
     central_widget->setLayout(layout);
@@ -1413,11 +1533,11 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     grabGesture(Qt::PinchGesture, Qt::DontStartGestureOnChildren | Qt::ReceivePartialGestures);
     QObject::connect((QGuiApplication*)QGuiApplication::instance(), &QGuiApplication::applicationStateChanged, [&](Qt::ApplicationState state) {
         if ((state == Qt::ApplicationState::ApplicationSuspended) || (state == Qt::ApplicationState::ApplicationInactive)) {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
             persist(true);
 #endif
         }
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
         if (state == Qt::ApplicationState::ApplicationActive) {
             if (!pending_intents_checked) {
                 pending_intents_checked = true;
@@ -1993,6 +2113,8 @@ void MainWidget::on_config_file_changed(ConfigManager* new_config) {
     status_label->move(0, main_window_height - status_bar_height);
     status_label->resize(size().width(), status_bar_height);
     update_command_hints_position();
+    update_tab_bar_style();
+    update_tab_bar(); // the font size may have changed the bar's height
 
     //text_command_line_edit_container->setStyleSheet("background-color: black; color: white; border: none;");
 }
@@ -2002,7 +2124,7 @@ void MainWidget::toggle_mouse_drag_mode() {
 }
 
 void MainWidget::do_synctex_forward_search(const Path& pdf_file_path, const Path& latex_file_path, int line, int column) {
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
 
     std::wstring latex_file_path_with_redundant_dot = add_redundant_dot_to_path(latex_file_path.get_path());
 
@@ -2163,6 +2285,11 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
     }
 
     main_document_view->on_view_size_change(main_window_width, main_window_height);
+    // a newly opened document's tab goes right after the current one, like in browsers
+    std::optional<std::wstring> previous_path;
+    if (doc()) {
+        previous_path = doc()->get_path();
+    }
     main_document_view->open_document(path, &this->is_render_invalidated);
     if (!doc()){
         // failed to open document
@@ -2171,7 +2298,7 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
     adjust_two_page_mode_document_zoom_and_offset(doc()->get_path());
 
     if (doc()) {
-        document_manager->add_tab(doc()->get_path());
+        document_manager->add_tab_after(doc()->get_path(), previous_path);
         //doc()->set_only_for_portal(false);
     }
     update_all_tab_bars();
@@ -2357,7 +2484,7 @@ void MainWidget::key_event(bool released, QKeyEvent* kevent, bool is_auto_repeat
 
     if (released == false) {
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
         if (kevent->key() == Qt::Key::Key_VolumeDown) {
             execute_macro_if_enabled(VOLUME_DOWN_COMMAND);
         }
@@ -3410,13 +3537,11 @@ void MainWidget::mousePressEvent(QMouseEvent* mevent) {
     }
 
     if (mevent->button() == Qt::MouseButton::XButton1) {
-        handle_command_types(command_manager->get_command_with_name(this, "prev_state"), 0);
-        invalidate_render();
+        navigate_history(false);
     }
 
     if (mevent->button() == Qt::MouseButton::XButton2) {
-        handle_command_types(command_manager->get_command_with_name(this, "next_state"), 0);
-        invalidate_render();
+        navigate_history(true);
     }
 }
 
@@ -3442,7 +3567,7 @@ void MainWidget::wheelEvent(QWheelEvent* wevent) {
     bool scroll_horizontally_p = is_shift_pressed;
 
 
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
     int x = wevent->position().x();
     int y = wevent->position().y();
 #else
@@ -3453,7 +3578,7 @@ void MainWidget::wheelEvent(QWheelEvent* wevent) {
     WindowPos mouse_window_pos = { x, y };
     auto [normal_x, normal_y] = main_document_view->window_to_normalized_window_pos(mouse_window_pos);
 
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
     int num_repeats = abs(wevent->angleDelta().y() / 120);
     float num_repeats_f_y = abs(wevent->angleDelta().y() / 120.0);
     float num_repeats_f_x = abs(wevent->angleDelta().x() / 120.0);
@@ -4237,7 +4362,7 @@ void MainWidget::execute_command(std::wstring command, std::wstring text, bool w
 
     QString qtext = QString::fromStdWString(command);
 
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
     QStringList command_parts_ = qtext.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
 #else
     QStringList command_parts_ = qtext.split(QRegExp("\\s+"), QString::SkipEmptyParts);
@@ -4304,7 +4429,7 @@ void MainWidget::execute_command(std::wstring command, std::wstring text, bool w
                 }
             }
 
-            command_parts[i].replace("%{sioyek_path}", QCoreApplication::applicationFilePath());
+            command_parts[i].replace("%{yaview_path}", QCoreApplication::applicationFilePath());
             command_parts[i].replace("%{local_database}", QString::fromStdWString(local_database_file_path.get_path()));
             command_parts[i].replace("%{shared_database}", QString::fromStdWString(global_database_file_path.get_path()));
 
@@ -4439,7 +4564,7 @@ void MainWidget::get_window_params_for_one_window_mode(int* main_window_size, in
         main_window_move[1] = SINGLE_MAIN_WINDOW_MOVE[1];
     }
     else {
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
         int window_width = QGuiApplication::primaryScreen()->geometry().width();
         int window_height = QGuiApplication::primaryScreen()->geometry().height();
 #else
@@ -4465,7 +4590,7 @@ void MainWidget::get_window_params_for_two_window_mode(int* main_window_size, in
         helper_window_move[1] = HELPER_WINDOW_MOVE[1];
     }
     else {
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
         int num_screens = QGuiApplication::screens().size();
 #else
         int num_screens = QApplication::desktop()->numScreens();
@@ -4473,7 +4598,7 @@ void MainWidget::get_window_params_for_two_window_mode(int* main_window_size, in
         int main_window_width = get_current_monitor_width();
         int main_window_height = get_current_monitor_height();
         if (num_screens > 1) {
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
             int second_window_width = QGuiApplication::screens().at(1)->geometry().width();
             int second_window_height = QGuiApplication::screens().at(1)->geometry().height();
 #else
@@ -4623,10 +4748,15 @@ void MainWidget::open_document(const std::wstring& doc_path,
         main_document_view->persist();
     }
 
+    // a newly opened document's tab goes right after the current one, like in browsers
+    std::optional<std::wstring> previous_path;
+    if (doc()) {
+        previous_path = doc()->get_path();
+    }
     main_document_view->open_document(doc_path, invalid_flag, load_prev_state, prev_state, force_load_dimensions);
 
     if (doc()) {
-        document_manager->add_tab(doc()->get_path());
+        document_manager->add_tab_after(doc()->get_path(), previous_path);
         //doc()->set_only_for_portal(false);
     }
     update_all_tab_bars();
@@ -4875,7 +5005,7 @@ void MainWidget::handle_link_click(const PdfLink& link) {
 void MainWidget::save_auto_config() {
     std::wofstream outfile(auto_config_path.get_path_utf8());
     outfile << get_serialized_configuration_string();
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
     outfile << L"\n";
     config_manager->serialize_auto_configs(outfile);
 #endif
@@ -4933,7 +5063,7 @@ std::wstring MainWidget::get_window_configuration_string() {
 
 void MainWidget::handle_close_event() {
     save_auto_config();
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
     persist(true);
 #endif
 
@@ -5305,7 +5435,7 @@ int MainWidget::get_current_monitor_width() {
         return this->window()->windowHandle()->screen()->geometry().width();
     }
     else {
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
         return QGuiApplication::primaryScreen()->geometry().width();
 #else
         return QApplication::desktop()->screenGeometry(0).width();
@@ -5318,7 +5448,7 @@ int MainWidget::get_current_monitor_height() {
         return this->window()->windowHandle()->screen()->geometry().height();
     }
     else {
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
         return QGuiApplication::primaryScreen()->geometry().height();
 #else
         return QApplication::desktop()->screenGeometry(0).height();
@@ -5336,7 +5466,7 @@ void MainWidget::reload(bool flush) {
 
 std::wstring MainWidget::synctex_under_pos(WindowPos position) {
     std::wstring res = L"";
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
     auto [page, doc_x, doc_y] = main_document_view->window_to_document_pos(position);
     std::wstring docpath = main_document_view->get_document()->get_path();
     std::string docpath_utf8 = utf8_encode(docpath);
@@ -5869,13 +5999,13 @@ void MainWidget::advance_command(std::unique_ptr<Command> new_command, std::wstr
                 else{
                     file_name = select_command_folder_name(root_dir);
                 }
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 
                 if (file_name.size() > 0 && QString::fromStdWString(file_name).startsWith("content://")) {
                     if (!QString::fromStdWString(file_name).startsWith("content://com.android.providers.media.documents")){
-                        qDebug() << "sioyek: trying to convert " << file_name;
+                        qDebug() << "yaview: trying to convert " << file_name;
                         file_name = android_file_uri_from_content_uri(QString::fromStdWString(file_name)).toStdWString();
-                        qDebug() << "sioyek: result was " << file_name;
+                        qDebug() << "yaview: result was " << file_name;
                     }
                 }
 #endif
@@ -6494,7 +6624,7 @@ void MainWidget::handle_open_prev_doc() {
                 opened_docs_names.push_back(path.value_or(L"<ERROR>"));
             }
             else {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
                 std::wstring path_value = path.value();
                 if (path_value.substr(0, 10) == L"content://") {
                     path_value = android_file_name_from_uri(QString::fromStdWString(path_value)).toStdWString();
@@ -7815,8 +7945,8 @@ QNetworkReply* MainWidget::download_paper_with_name(const std::wstring& name, Pa
     req.setRawHeader("User-Agent", user_agent_string.c_str());
     req.setUrl(get_url);
     auto reply = network_manager.get(req);
-    reply->setProperty("sioyek_paper_name", QString::fromStdWString(name));
-    reply->setProperty("sioyek_finish_action", get_paper_download_finish_action_string(action));
+    reply->setProperty("yaview_paper_name", QString::fromStdWString(name));
+    reply->setProperty("yaview_finish_action", get_paper_download_finish_action_string(action));
     return reply;
 }
 
@@ -8242,7 +8372,7 @@ void MainWidget::handle_export_marked_data() {
     fz_stext_page* stext_page = doc()->get_stext_with_page_number(get_current_page_number());
     std::vector<fz_stext_char*> flat_chars;
     get_flat_chars_from_stext_page(stext_page, flat_chars);
-    auto export_path = qgetenv("SIOYEK_DATA_EXPORT").toStdString();
+    auto export_path = qgetenv("YAVIEW_DATA_EXPORT").toStdString();
     QDir export_dir = QDir(QString::fromStdString(export_path));
     std::string checksum = checksummer->get_checksum_fast(doc()->get_path()).value();
     QString file_name = QString("%1_%2.json").arg(QString::fromStdString(checksum), QString::number(get_current_page_number()));
@@ -8330,9 +8460,9 @@ void MainWidget::show_download_paper_menu(
             std::wstring paper_url = values->second;
 
             auto download_reply = download_paper_with_url(paper_url, false, action);
-            download_reply->setProperty("sioyek_paper_name", QString::fromStdWString(paper_name));
-            download_reply->setProperty("sioyek_actual_paper_name", QString::fromStdWString(actual_paper_name));
-            download_reply->setProperty("sioyek_finish_action", get_paper_download_finish_action_string(action));
+            download_reply->setProperty("yaview_paper_name", QString::fromStdWString(paper_name));
+            download_reply->setProperty("yaview_actual_paper_name", QString::fromStdWString(actual_paper_name));
+            download_reply->setProperty("yaview_finish_action", get_paper_download_finish_action_string(action));
         },
         nullptr);
 
@@ -8360,8 +8490,8 @@ QNetworkReply* MainWidget::download_paper_with_url(std::wstring paper_url_, bool
     }
 
     auto res = network_manager.get(req);
-    res->setProperty("sioyek_archive_url", QString::fromStdWString(paper_url_));
-    res->setProperty("sioyek_finish_action", get_paper_download_finish_action_string(action));
+    res->setProperty("yaview_archive_url", QString::fromStdWString(paper_url_));
+    res->setProperty("yaview_finish_action", get_paper_download_finish_action_string(action));
     return res;
 }
 
@@ -8782,6 +8912,16 @@ void MainWidget::update_tab_bar() {
         QString title = file_name ? QString::fromStdWString(file_name.value()) : full_path;
         int index = tab_bar->addTab(title);
         tab_bar->setTabToolTip(index, full_path);
+
+        QToolButton* close_button = new QToolButton();
+        close_button->setObjectName("tab_close_button");
+        close_button->setText(QString::fromUtf8("\u00d7"));
+        close_button->setToolTip("Close tab");
+        close_button->setFocusPolicy(Qt::NoFocus);
+        QObject::connect(close_button, &QToolButton::clicked, [this, path]() {
+            close_tab_with_path(path);
+            });
+        tab_bar->setTabButton(index, QTabBar::RightSide, close_button);
     }
     int current_index = get_current_tab_index();
     if (current_index >= 0) {
@@ -8789,15 +8929,158 @@ void MainWidget::update_tab_bar() {
     }
     tab_bar->blockSignals(false);
 
-    if (tabs.size() > 0) {
-        tab_bar->move(0, 0);
-        tab_bar->resize(width(), tab_bar->sizeHint().height());
-        tab_bar->show();
+    bool in_titlebar = false;
+#ifdef Q_OS_MACOS
+    in_titlebar = MACOS_TABS_IN_TITLEBAR && !MACOS_HIDE_TITLEBAR;
+#endif
+    // In the title bar the tab bar is always shown, like Firefox's; otherwise only with two or more tabs.
+    if (in_titlebar || (tabs.size() > 1)) {
+        QSize tabs_size = tab_bar->sizeHint();
+        if (tabs.empty()) {
+            // keep the bar's height with no tabs to measure
+            tabs_size.setHeight(TAB_BAR_FONT_SIZE * 2 + 15);
+        }
+        int left_inset = 0;
+#ifdef Q_OS_MACOS
+        if (in_titlebar || tabs_in_titlebar) {
+            // may resize this window (the content grows into the title bar), which calls update_tab_bar again
+            tabs_in_titlebar = in_titlebar;
+            // 0 in full screen, where the window buttons are in the menu bar instead
+            double buttons_right = setTabsInTitlebar(winId(), in_titlebar, tabs_size.height());
+            if (buttons_right > 0) {
+                left_inset = static_cast<int>(buttons_right) + 12;
+            }
+        }
+#endif
+        int bar_width = width() - left_inset;
+        tab_strip->setGeometry(0, 0, width(), tabs_size.height());
+        tab_strip->show();
+        tab_scroll_area->setGeometry(left_inset, 0, bar_width, tabs_size.height());
+        tab_bar->resize(std::max(tabs_size.width(), bar_width), tabs_size.height());
+        // The size hint comes out a few pixels short of the last tab's stylesheet margin, which clipped
+        // the last tab's right edge once the bar overflowed.
+        int tabs_right = tab_bar->count() > 0 ? tab_bar->tabRect(tab_bar->count() - 1).right() + 1 + 4 : 0;
+        if (tabs_right > tab_bar->width()) {
+            tab_bar->resize(tabs_right, tabs_size.height());
+        }
+        tab_scroll_area->show();
         // Not raised: open popups and the command line must stay above it (see constructor).
+        tab_scroll_left_button->setGeometry(0, 0, TAB_SCROLL_BUTTON_WIDTH, tabs_size.height());
+        tab_scroll_right_button->setGeometry(bar_width - TAB_SCROLL_BUTTON_WIDTH, 0, TAB_SCROLL_BUTTON_WIDTH, tabs_size.height());
+        if (current_index >= 0) {
+            // keep the current tab in view, clear of the scroll arrows, e.g. after Ctrl+Tab
+            QRect current_rect = tab_bar->tabRect(current_index);
+            tab_scroll_area->ensureVisible(current_rect.center().x(), current_rect.center().y(),
+                current_rect.width() / 2 + TAB_SCROLL_BUTTON_WIDTH + 4, 0);
+        }
+        update_tab_scroll_buttons();
     }
     else {
-        tab_bar->hide();
+        tab_scroll_area->hide();
+        tab_strip->hide();
+#ifdef Q_OS_MACOS
+        if (tabs_in_titlebar) {
+            // back to the normal title bar
+            tabs_in_titlebar = false;
+            setTabsInTitlebar(winId(), false, 0);
+        }
+#endif
     }
+}
+
+void MainWidget::update_tab_bar_style() {
+    if (tab_bar == nullptr) return;
+
+    UiColors colors = get_ui_colors();
+    auto shade = [&](float t) {
+        return get_mixed_color_qml_string(colors.background, colors.text, t);
+        };
+    QString font_family_stylesheet = "";
+    QString font_face = get_ui_font_face_name();
+    if (font_face.size() > 0) {
+        font_family_stylesheet = QString("font-family: \"%1\";").arg(font_face);
+    }
+
+    tab_strip->setStyleSheet(QString("#tab_strip { background-color: %1; }").arg(
+        get_color_qml_string(colors.background[0], colors.background[1], colors.background[2])));
+    tab_bar->setStyleSheet(QString(
+        "QTabBar { background-color: %1; %2 font-size: %3px; }"
+        "QTabBar::tab { background-color: transparent; color: %4; border: 1px solid transparent; border-radius: 6px;"
+        " padding: 4px 6px 4px 12px; margin: 4px 2px; min-width: 120px; max-width: 260px; }"
+        "QTabBar::tab:hover { background-color: %5; }"
+        "QTabBar::tab:selected { background-color: %6; color: %7; border: 1px solid %8; }"
+        "QToolButton#tab_close_button { background-color: transparent; color: %4; border: 0; border-radius: 4px;"
+        " padding: 0px 4px; font-size: %9px; }"
+        ).arg(
+            get_color_qml_string(colors.background[0], colors.background[1], colors.background[2]),
+            font_family_stylesheet,
+            QString::number(TAB_BAR_FONT_SIZE),
+            shade(0.7f),
+            shade(0.08f),
+            shade(0.16f),
+            get_color_qml_string(colors.text[0], colors.text[1], colors.text[2]),
+            get_color_qml_string(colors.border[0], colors.border[1], colors.border[2]),
+            QString::number(TAB_BAR_FONT_SIZE + 4)
+        ) + QString(
+        "QToolButton#tab_close_button:hover { background-color: %1; color: %2; }"
+        ).arg(
+            shade(0.3f),
+            get_color_qml_string(colors.text[0], colors.text[1], colors.text[2])
+        ));
+
+    // opaque, so the tabs scrolled under the arrows don't show through
+    QString scroll_button_stylesheet = QString(
+        "QToolButton { background-color: %1; border: 0; }"
+        "QToolButton:hover { background-color: %2; }"
+        ).arg(
+            get_color_qml_string(colors.background[0], colors.background[1], colors.background[2]),
+            shade(0.16f));
+    // Chevrons spanning most of the bar's height; the "<" ">" style characters were too small to notice.
+    QColor arrow_color(get_color_qml_string(colors.text[0], colors.text[1], colors.text[2]));
+    QSize arrow_size(TAB_SCROLL_BUTTON_WIDTH / 2, TAB_BAR_FONT_SIZE * 2);
+    qreal pixel_ratio = devicePixelRatioF();
+    for (QToolButton* button : { tab_scroll_left_button, tab_scroll_right_button }) {
+        QPixmap pixmap(arrow_size * pixel_ratio);
+        pixmap.setDevicePixelRatio(pixel_ratio);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(arrow_color, 2.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        qreal w = arrow_size.width(), h = arrow_size.height();
+        QPolygonF chevron;
+        if (button == tab_scroll_left_button) {
+            chevron << QPointF(w - 2, 2) << QPointF(2, h / 2) << QPointF(w - 2, h - 2);
+        }
+        else {
+            chevron << QPointF(2, 2) << QPointF(w - 2, h / 2) << QPointF(2, h - 2);
+        }
+        painter.drawPolyline(chevron);
+        painter.end();
+        button->setIcon(QIcon(pixmap));
+        button->setIconSize(arrow_size);
+        button->setStyleSheet(scroll_button_stylesheet);
+    }
+}
+
+void MainWidget::update_tab_scroll_buttons() {
+    if (tab_scroll_area == nullptr) return;
+    QScrollBar* scroll_bar = tab_scroll_area->horizontalScrollBar();
+    tab_scroll_left_button->setVisible(scroll_bar->value() > scroll_bar->minimum());
+    tab_scroll_right_button->setVisible(scroll_bar->value() < scroll_bar->maximum());
+}
+
+void MainWidget::navigate_history(bool forward) {
+    handle_command_types(command_manager->get_command_with_name(this, forward ? "next_state" : "prev_state"), 0);
+    invalidate_render();
+}
+
+void MainWidget::close_tab_with_path(const std::wstring& path) {
+    if (doc() && (doc()->get_path() == path)) {
+        close_current_tab();
+        return;
+    }
+    document_manager->remove_tab(path);
+    update_all_tab_bars();
 }
 
 void MainWidget::update_all_tab_bars() {
@@ -8825,7 +9108,7 @@ void MainWidget::close_current_tab() {
     else {
         main_document_view->persist();
         main_document_view->set_null_document();
-        setWindowTitle("sioyek");
+        setWindowTitle("yaview");
     }
     // The Document stays cached in document_manager so reopening it is fast; it is not freed here
     // because history entries and other views may still refer to it.
@@ -8834,7 +9117,7 @@ void MainWidget::close_current_tab() {
 }
 
 void MainWidget::handle_goto_loaded_document() {
-    // opens a list of currently loaded documents. This is basically sioyek's "tab" feature
+    // opens a list of currently loaded documents. This is basically yaview's "tab" feature
     // the user can "unload" a document by pressing the delete key while it is highlighted in the list
 
     std::vector<std::wstring> loaded_document_paths_ = document_manager->get_tabs();
@@ -8910,7 +9193,7 @@ bool MainWidget::execute_macro_if_enabled(std::wstring macro_command_string, QLo
 
 bool MainWidget::ensure_internet_permission() {
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     //    qDebug() << "entered";
     auto internet_permission_status = QtAndroidPrivate::checkPermission("android.permission.INTERNET").result();
     //    qDebug() << "checked";
@@ -9002,7 +9285,7 @@ void MainWidget::update_selected_bookmark_font_size() {
 TextToSpeechHandler* MainWidget::get_tts() {
     if (tts) return tts;
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     tts = new AndroidTextToSpeechHandler();
 #else
     tts = new QtTextToSpeechHandler();
@@ -9132,7 +9415,7 @@ TextToSpeechHandler* MainWidget::get_tts() {
         });
 #endif
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
         // wait for the tts engine to be initialized
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 #endif
@@ -9539,7 +9822,7 @@ void MainWidget::cleanup_expired_pending_portals() {
             bool still_pending = false;
             //network_manager.
             for (int i = 0; i < children.size(); i++) {
-                if (children[i]->property("sioyek_paper_name").toString().toStdWString() == paper_name) {
+                if (children[i]->property("yaview_paper_name").toString().toStdWString() == paper_name) {
                     still_pending = true;
                 }
             }
@@ -9830,11 +10113,11 @@ QJSEngine* MainWidget::take_js_engine(bool async) {
         auto js_engine = new QJSEngine();
         js_engine->installExtensions(QJSEngine::ConsoleExtension);
 
-        QJSValue sioyek_object = js_engine->newQObject(this);
+        QJSValue yaview_object = js_engine->newQObject(this);
         js_engine->setObjectOwnership(this, QJSEngine::CppOwnership);
 
-        js_engine->globalObject().setProperty("sioyek_api", sioyek_object);
-        js_engine->globalObject().setProperty("sioyek", export_javascript_api(*js_engine, false));
+        js_engine->globalObject().setProperty("yaview_api", yaview_object);
+        js_engine->globalObject().setProperty("yaview", export_javascript_api(*js_engine, false));
         sync_js_engine = js_engine;
         return sync_js_engine;
 
@@ -9860,11 +10143,11 @@ QJSEngine* MainWidget::take_js_engine(bool async) {
 
     available_engine_mutex.unlock();
 
-    QJSValue sioyek_object = js_engine->newQObject(this);
+    QJSValue yaview_object = js_engine->newQObject(this);
     js_engine->setObjectOwnership(this, QJSEngine::CppOwnership);
 
-    js_engine->globalObject().setProperty("sioyek_api", sioyek_object);
-    js_engine->globalObject().setProperty("sioyek", export_javascript_api(*js_engine, true));
+    js_engine->globalObject().setProperty("yaview_api", yaview_object);
+    js_engine->globalObject().setProperty("yaview", export_javascript_api(*js_engine, true));
     return js_engine;
 }
 
@@ -9888,16 +10171,16 @@ QJSValue MainWidget::export_javascript_api(QJSEngine& engine, bool is_async){
                 let command_name ='" + command_name_ + "';\
                 let args_strings = args.map((arg)=>{return '' + arg;});\
                 let args_string = args_strings.join(',');\
-                if (args_string.length > 0){return sioyek_api.run_macro_on_main_thread(command_name + '(' + args_string + ')');}\
-                else {return sioyek_api.run_macro_on_main_thread(command_name);}\
+                if (args_string.length > 0){return yaview_api.run_macro_on_main_thread(command_name + '(' + args_string + ')');}\
+                else {return yaview_api.run_macro_on_main_thread(command_name);}\
                 }"));
 
             res.setProperty('$' + command_name_, engine.evaluate("(...args)=>{\
                 let command_name ='" + command_name_ + "';\
                 let args_strings = args.map((arg)=>{return '' + arg;});\
                 let args_string = args_strings.join(',');\
-                if (args_string.length > 0){return sioyek_api.run_macro_on_main_thread(command_name + '(' + args_string + ')');}\
-                else {return sioyek_api.run_macro_on_main_thread(command_name, false);}\
+                if (args_string.length > 0){return yaview_api.run_macro_on_main_thread(command_name + '(' + args_string + ')');}\
+                else {return yaview_api.run_macro_on_main_thread(command_name, false);}\
                 }"));
         }
         else {
@@ -9905,16 +10188,16 @@ QJSValue MainWidget::export_javascript_api(QJSEngine& engine, bool is_async){
                 let command_name ='" + command_name_ + "';\
                 let args_strings = args.map((arg)=>{return '' + arg;});\
                 let args_string = args_strings.join(',');\
-                if (args_string.length > 0){return sioyek_api.execute_macro_sync(command_name + '(' + args_string + ')');}\
-                else {return sioyek_api.execute_macro_sync(command_name);}\
+                if (args_string.length > 0){return yaview_api.execute_macro_sync(command_name + '(' + args_string + ')');}\
+                else {return yaview_api.execute_macro_sync(command_name);}\
                 }"));
 
             res.setProperty('$' + command_name_, engine.evaluate("(...args)=>{\
                 let command_name ='" + command_name_ + "';\
                 let args_strings = args.map((arg)=>{return '' + arg;});\
                 let args_string = args_strings.join(',');\
-                if (args_string.length > 0){return sioyek_api.execute_macro_sync(command_name + '(' + args_string + ')');}\
-                else {return sioyek_api.execute_macro_sync(command_name);}\
+                if (args_string.length > 0){return yaview_api.execute_macro_sync(command_name + '(' + args_string + ')');}\
+                else {return yaview_api.execute_macro_sync(command_name);}\
                 }"));
         }
     }
@@ -9926,7 +10209,7 @@ void MainWidget::export_python_api() {
     QString res;
     QString INDENT = "    ";
 
-    res += "class SioyekBase:\n\n";
+    res += "class YaviewBase:\n\n";
 
     QStringList command_names = command_manager->get_all_command_names();
     for (auto command_name : command_names) {
@@ -9955,20 +10238,20 @@ void MainWidget::export_python_api() {
     }
 
 
-    char* sioyek_python_base_path = std::getenv("SIOYEK_PYTHON_BASE_PATH");
-    char* sioyek_python_path = std::getenv("SIOYEK_PYTHON_PATH");
-    if ((sioyek_python_base_path == nullptr) || (sioyek_python_path == nullptr)){
-        show_error_message(L"You should set SIOYEK_PYTHON_BASE_PATH and SIOYEK_PYTHON_PATH environment variables for export to work");
+    char* yaview_python_base_path = std::getenv("YAVIEW_PYTHON_BASE_PATH");
+    char* yaview_python_path = std::getenv("YAVIEW_PYTHON_PATH");
+    if ((yaview_python_base_path == nullptr) || (yaview_python_path == nullptr)){
+        show_error_message(L"You should set YAVIEW_PYTHON_BASE_PATH and YAVIEW_PYTHON_PATH environment variables for export to work");
         return;
     }
-    QFile output(sioyek_python_base_path);
+    QFile output(yaview_python_base_path);
 
     if (output.open(QIODevice::WriteOnly)) {
         output.write(res.toUtf8());
     }
     output.close();
 
-    std::string command = "python -m pip install " + std::string(sioyek_python_path);
+    std::string command = "python -m pip install " + std::string(yaview_python_path);
     std::system(command.c_str());
 }
 
@@ -10163,7 +10446,7 @@ void MainWidget::advance_waiting_command(std::string waiting_command_name) {
 }
 
 std::string MainWidget::get_user_agent_string() {
-    return "Sioyek/3.0";
+    return "Yaview/3.0";
 }
 
 void MainWidget::handle_select_current_search_match() {
@@ -10796,7 +11079,7 @@ QString MainWidget::perform_network_request(QString url) {
             QNetworkRequest req;
             req.setUrl(url);
             auto reply = network_manager.get(req);
-            reply->setProperty("sioyek_js_extension", "true");
+            reply->setProperty("yaview_js_extension", "true");
             QObject::connect(reply, &QNetworkReply::finished, [&, reply]() {
                 res = QString::fromUtf8(reply->readAll());
                 is_done = true;
@@ -11257,33 +11540,33 @@ void MainWidget::set_selected_bookmark_index(int index) {
 }
 
 void MainWidget::handle_highlight_tags_pre_perform(const std::vector<int>& visible_highlight_indices) {
-    std::vector<SioyekVisibleObjectIndex> visible_object_indices;
+    std::vector<YaviewVisibleObjectIndex> visible_object_indices;
     for (auto ind : visible_highlight_indices) {
-        visible_object_indices.push_back(SioyekVisibleObjectIndex{ SioyekVisibleObjectType::Highlight, ind });
+        visible_object_indices.push_back(YaviewVisibleObjectIndex{ YaviewVisibleObjectType::Highlight, ind });
     }
     return handle_visible_objects_tags_pre_perform(visible_object_indices);
 
 }
 
 void MainWidget::handle_visible_bookmark_tags_pre_perform(const std::vector<int>& visible_bookmark_indices){
-    std::vector<SioyekVisibleObjectIndex> visible_object_indices;
+    std::vector<YaviewVisibleObjectIndex> visible_object_indices;
     for (auto ind : visible_bookmark_indices) {
-        visible_object_indices.push_back(SioyekVisibleObjectIndex{ SioyekVisibleObjectType::Bookmark, ind });
+        visible_object_indices.push_back(YaviewVisibleObjectIndex{ YaviewVisibleObjectType::Bookmark, ind });
     }
     return handle_visible_objects_tags_pre_perform(visible_object_indices);
 }
 
-void MainWidget::handle_visible_objects_tags_pre_perform(const std::vector<SioyekVisibleObjectIndex>& visible_object_indices) {
+void MainWidget::handle_visible_objects_tags_pre_perform(const std::vector<YaviewVisibleObjectIndex>& visible_object_indices) {
     const std::vector<BookMark>& bookmarks = doc()->get_bookmarks();
 
     std::vector<DocumentRect> annotation_rects;
     for (auto obj_index : visible_object_indices) {
-        if (obj_index.type == SioyekVisibleObjectType::Bookmark) {
+        if (obj_index.type == YaviewVisibleObjectType::Bookmark) {
             const BookMark& bookmark = bookmarks[obj_index.index];
             AbsoluteRect bookmark_rect = bookmark.get_rectangle();
             annotation_rects.push_back(bookmark_rect.to_document(doc()));
         }
-        else if (obj_index.type == SioyekVisibleObjectType::Highlight) {
+        else if (obj_index.type == YaviewVisibleObjectType::Highlight) {
             const Highlight& highlight = doc()->get_highlights()[obj_index.index];
             if (highlight.highlight_rects.size() > 0) {
                 annotation_rects.push_back(highlight.highlight_rects[0].to_document(doc()));
@@ -11470,7 +11753,7 @@ void MainWidget::focus_on_character_offset_into_document(int character_offset_in
         line_index++;
     }
 
-    //qDebug() << "SIOYEK FOCUS: page " << current_page << " line: " << line_index << " offset was: " << offset;
+    //qDebug() << "YAVIEW FOCUS: page " << current_page << " line: " << line_index << " offset was: " << offset;
     focus_on_line_with_index(page, line_index);
     invalidate_render();
 }

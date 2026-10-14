@@ -29,10 +29,10 @@ def merge_rects(rects):
             resulting_rects.append(rect)
     return resulting_rects
 
-class Sioyek:
+class Yaview:
 
-    def __init__(self, sioyek_path, local_database_path=None, shared_database_path=None):
-        self.path = sioyek_path
+    def __init__(self, yaview_path, local_database_path=None, shared_database_path=None):
+        self.path = yaview_path
         self.is_dummy_mode = False
 
         self.local_database = None
@@ -664,11 +664,11 @@ class Bookmark:
 
 class Document:
 
-    def __init__(self, path, sioyek):
+    def __init__(self, path, yaview):
         self.path = path
         self.doc = fitz.open(self.path)
         self.set_page_dimensions()
-        self.sioyek = sioyek
+        self.yaview = yaview
         self.cached_hash = None
 
     def to_absolute(self, document_pos):
@@ -880,7 +880,7 @@ class Document:
             page_number,
             selection_end[0], selection_end[1])
 
-        self.sioyek.keyboard_select(highlight_string, focus=focus)
+        self.yaview.keyboard_select(highlight_string, focus=focus)
 
     def highlight_page_text(self, page_number, text, focus=False):
         (begin_x, begin_y), (end_x, end_y) = self.get_text_selection_begin_and_end(page_number, text)
@@ -901,7 +901,7 @@ class Document:
         return res
     
     def get_hash(self):
-        path_hash_map = self.sioyek.get_path_hash_map()
+        path_hash_map = self.yaview.get_path_hash_map()
 
         for path, hash_ in path_hash_map.items():
             if os.path.normpath(self.path) == os.path.normpath(path):
@@ -911,7 +911,7 @@ class Document:
     def get_bookmarks(self):
         doc_hash = self.get_hash()
         BOOKMARK_SELECT_QUERY = "select * from bookmarks where document_path='{}'".format(doc_hash)
-        shared_database = self.sioyek.get_shared_database()
+        shared_database = self.yaview.get_shared_database()
         cursor = shared_database.execute(BOOKMARK_SELECT_QUERY)
         bookmarks = [Bookmark(self, desc, y_offset) for _, _, desc, y_offset in cursor.fetchall()]
         return bookmarks
@@ -920,7 +920,7 @@ class Document:
         doc_hash = self.get_hash()
         HIGHLIGHT_SELECT_QUERY = "select * from highlights where document_path='{}'".format(doc_hash)
 
-        shared_database = self.sioyek.get_shared_database()
+        shared_database = self.yaview.get_shared_database()
         cursor = shared_database.execute(HIGHLIGHT_SELECT_QUERY)
         highlights = [Highlight(self, text, highlight_type, (begin_x, begin_y), (end_x, end_y)) for _, _, text, highlight_type, begin_x, begin_y, end_x, end_y in cursor.fetchall()]
         return highlights

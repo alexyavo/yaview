@@ -584,7 +584,7 @@ void DocumentView::goto_right() {
 }
 
 float DocumentView::set_zoom_level(float zl, bool should_exit_auto_resize_mode, bool readjust) {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     const float max_zoom_level = 6.0f;
 #else
     const float max_zoom_level = 10.0f;
@@ -614,7 +614,7 @@ float DocumentView::set_zoom_level(float zl, bool should_exit_auto_resize_mode, 
 }
 
 float DocumentView::zoom_in(float zoom_factor, bool readjust) {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     const float max_zoom_level = 6.0f;
 #else
     const float max_zoom_level = 10.0f;

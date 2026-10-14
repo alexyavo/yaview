@@ -190,6 +190,19 @@ void flat_char_prism2(const std::vector<fz_stext_char*>& chars, int page, std::w
 void flat_char_prism(const std::vector<fz_stext_char*>& chars, int page, std::wstring& output_text, std::vector<int>& pages, std::vector<PagelessDocumentRect>& rects);
 QString get_status_stylesheet(bool nofont = false, int font_size=-1);
 QString get_ui_stylesheet(bool nofont, int font_size=-1);
+
+// Colors of popup menus for the active ui_theme
+struct UiColors {
+    float* background;
+    float* text;
+    float* selected_background;
+    float* selected_text;
+    float* border;
+};
+UiColors get_ui_colors();
+// a color between `from` (t = 0) and `to` (t = 1)
+QString get_mixed_color_qml_string(const float* from, const float* to, float t);
+bool is_system_dark_mode();
 QString get_selected_stylesheet(bool nofont = false);
 
 template<int d1, int d2, int d3>
@@ -213,7 +226,7 @@ fz_document* open_document_with_file_name(fz_context* context, std::wstring file
 
 QString get_list_item_stylesheet();
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 QString android_file_name_from_uri(QString uri);
 void android_tts_say(QString text);
 void check_pending_intents(const QString workingDirPath);
@@ -242,7 +255,7 @@ fz_rect get_index_rect(fz_rect original, int index, int num_h_slices, int num_v_
 QStandardItemModel* create_table_model(std::vector<std::wstring> lefts, std::vector<std::wstring> rights);
 QStandardItemModel* create_table_model(const std::vector<std::vector<std::wstring>> column_texts);
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 QString android_file_uri_from_content_uri(QString uri);
 #endif
 
@@ -493,7 +506,7 @@ public:
 };
 
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
 class AndroidTextToSpeechHandler : public TextToSpeechHandler {
 public:
     // std::optional<std::function<void(int, int)>> word_callback = {};

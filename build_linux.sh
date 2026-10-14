@@ -26,7 +26,7 @@ make -j$(nproc)
 # Copy files in build/ subdirectory
 rm -rf build 2> /dev/null
 mkdir build
-mv sioyek build/sioyek
+mv yaview build/yaview
 cp pdf_viewer/prefs.config build/prefs.config
 cp pdf_viewer/prefs_user.config build/prefs_user.config
 cp pdf_viewer/keys.config build/keys.config

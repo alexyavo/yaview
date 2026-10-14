@@ -236,7 +236,7 @@ bool num_slices_for_page_rect(PagelessDocumentRect page_rect, int* h_slices, int
 }
 
 std::string read_file_contents(const Path& path) {
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     std::wstring actual_path = path.get_path();
     QFile qfile(QString::fromStdWString(path.get_path()));
     qfile.open(QIODeviceBase::Text | QIODeviceBase::ReadOnly);
@@ -268,7 +268,7 @@ GLuint PdfViewOpenGLWidget::LoadShaders(Path vertex_file_path, Path fragment_fil
     GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
 
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     std::string header = "#version 310 es\n";
 #else
     std::string header = "#version 330 core\n";
@@ -358,7 +358,7 @@ void PdfViewOpenGLWidget::initializeGL() {
         //shared_gl_objects.vertical_line_program = LoadShaders(concatenate_path(shader_path , L"simple.vertex"),  concatenate_path(shader_path , L"vertical_bar.fragment"));
         //shared_gl_objects.vertical_line_dark_program = LoadShaders(concatenate_path(shader_path , L"simple.vertex"),  concatenate_path(shader_path , L"vertical_bar_dark.fragment"));
 
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
         shared_gl_objects.rendered_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/simple.fragment"));
         shared_gl_objects.rendered_dark_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/dark_mode.fragment"));
         shared_gl_objects.unrendered_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/unrendered_page.fragment"));
@@ -766,7 +766,7 @@ PdfViewOpenGLWidget::PdfViewOpenGLWidget(DocumentView* document_view, PdfRendere
     creation_time = QDateTime::currentDateTime();
 
     QSurfaceFormat format;
-#ifdef SIOYEK_ANDROID
+#ifdef YAVIEW_ANDROID
     format.setVersion(3, 1);
 #else
     format.setVersion(3, 3);
@@ -1172,7 +1172,7 @@ void PdfViewOpenGLWidget::render_page(int page_number, bool in_overview, ColorPa
         }
 
 
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
         float device_pixel_ratio = static_cast<float>(devicePixelRatio());
 #else
         float device_pixel_ratio = QApplication::desktop()->devicePixelRatioF();
@@ -2172,7 +2172,7 @@ void PdfViewOpenGLWidget::draw_empty_helper_message(QPainter* painter, QString m
     // should be called with native painting disabled
 
     QFontMetrics fm(QApplication::font());
-#ifdef SIOYEK_QT6
+#ifdef YAVIEW_QT6
     int message_width = fm.boundingRect(message).width();
 #else
     int message_width = fm.width(message);

@@ -1,0 +1,29 @@
+yaview
+======
+
+yaview is a modified version of sioyek (https://github.com/ahrm/sioyek), a PDF viewer
+written by ahrm (https://github.com/ahrm) and the sioyek contributors.
+
+sioyek is Copyright (C) ahrm and the sioyek contributors.
+The modifications in yaview are Copyright (C) 2026 alexyavo (https://github.com/alexyavo).
+
+Both sioyek and yaview are free software: you can redistribute them and/or modify them
+under the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 (see LICENSE). They are distributed WITHOUT ANY WARRANTY; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+Modification notice (GNU GPL v3, section 5a): this work was forked from sioyek's
+development branch at commit 78b94e2115f60eb124df266d13eb2838da42c5b5. It was changed and
+renamed from "sioyek" to "yaview" by alexyavo starting on 2026-10-14. The git history of
+https://github.com/alexyavo/yaview lists every change.
+
+The application icon (resources/yaview-icon.png and the icons derived from it) is new in yaview.
+The bundled tutorial.pdf comes from sioyek unchanged.
+
+Third-party components keep their own licenses:
+- MuPDF (mupdf/): GNU Affero General Public License v3, see mupdf/COPYING
+- zlib (zlib/): zlib license, see zlib/README
+- SQLite (pdf_viewer/sqlite3.c, pdf_viewer/shell.c): public domain
+- fzf matcher (fzf/): from telescope-fzf-native.nvim (https://github.com/nvim-telescope/telescope-fzf-native.nvim), MIT license
+- JetBrains Mono font (resources/fonts/JetBrainsMono.ttf): SIL Open Font License 1.1, see resources/fonts/OFL.txt
+- Qt, which yaview links against: GNU Lesser General Public License v3

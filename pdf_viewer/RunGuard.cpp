@@ -1,4 +1,4 @@
-#ifndef SIOYEK_ANDROID
+#ifndef YAVIEW_ANDROID
 
 #include "RunGuard.h"
 
@@ -145,4 +145,4 @@ std::string RunGuard::sendMessage(const QByteArray& message, bool wait)
     return "";
 }
 
-#endif // SIOYEK_ANDROID
+#endif // YAVIEW_ANDROID
