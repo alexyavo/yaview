@@ -669,7 +669,8 @@ void focus_on_widget(QWidget* widget) {
 
 int main(int argc, char* args[]) {
 
-    SEARCH_URLS['s' - 'a'] = L"https://scholar.google.com/scholar?q=";
+    SEARCH_URLS['s' - 'a'] = L"https://kagi.com/search?q=";
+    SEARCH_URLS['c' - 'a'] = L"https://scholar.google.com/scholar?q=";
     SEARCH_URLS['g' - 'a'] = L"https://www.google.com/search?q=";
 #ifdef SIOYEK_ANDROID
 

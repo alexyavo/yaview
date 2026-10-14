@@ -1340,6 +1340,22 @@ public:
 
 };
 
+class CloseTabCommand : public Command {
+public:
+    static inline const std::string cname = "close_tab";
+    static inline const std::string hname = "Close the current tab (document) and switch to a neighbouring tab.";
+    CloseTabCommand(MainWidget* w) : Command(cname, w) {}
+
+    void perform() {
+        widget->close_current_tab();
+    }
+
+    std::string get_name() {
+        return cname;
+    }
+
+};
+
 class NextItemCommand : public Command {
 public:
     static inline const std::string cname = "next_item";
@@ -7204,6 +7220,7 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<PortalToDefinitionCommand>();
     register_command<GotoLoadedDocumentCommand>();
     register_command<GotoNextTabCommand>();
+    register_command<CloseTabCommand>();
     register_command<GotoPrevTabCommand>();
     register_command<NextItemCommand>();
     register_command<PrevItemCommand>();
@@ -7492,7 +7509,7 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<SetWindowRectCommand>();
     register_command<MoveSelectedBookmarkCommand>();
     register_command<RepeatLastCommandCommnad>();
-    register_command<CloseWindowCommand>("q");
+    register_command<CloseTabCommand>("q"); // vim-style `:q` closes the current tab (upstream: close_window)
 
 
     for (auto [command_name_, command_value] : ADDITIONAL_COMMANDS) {
@@ -8047,7 +8064,9 @@ std::unique_ptr<Command> InputHandler::get_menu_command(MainWidget* w, QKeyEvent
 int InputHandler::get_event_key(QKeyEvent* key_event, bool* shift_pressed, bool* control_pressed, bool* command_pressed, bool* alt_pressed) {
     int key = 0;
     if (!USE_LEGACY_KEYBINDS) {
-        std::vector<QString> special_texts = { "\b", "\u007F", "\t", " ", "\r", "\n" };
+        // "\u0019" is the text macOS attaches to Shift+Tab (Qt::Key_Backtab); without it here the event
+        // would be treated as a typed character and <S-<tab>> bindings would never match.
+        std::vector<QString> special_texts = { "\b", "\u007F", "\t", "\u0019", " ", "\r", "\n" };
         if (((key_event->key() >= 'A') && (key_event->key() <= 'Z')) || ((key_event->text().size() > 0) &&
             (std::find(special_texts.begin(), special_texts.end(), key_event->text()) == special_texts.end()))) {
             if (!(*control_pressed) && !(*alt_pressed) && !(*command_pressed)) {

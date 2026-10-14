@@ -30,6 +30,7 @@ class QTimer;
 class QDragEvent;
 class QDropEvent;
 class QScrollBar;
+class QTabBar;
 class QTextToSpeech;
 class QStringListModel;
 class QLabel;
@@ -357,6 +358,9 @@ public:
     QLabel* status_label_left = nullptr;
     QLabel* status_label_right = nullptr;
     QWidget* status_label = nullptr;
+    // Tab bar listing the open documents (document_manager tabs). It floats over the top edge of
+    // the document view, like status_label at the bottom, so mouse coordinates are unaffected.
+    QTabBar* tab_bar = nullptr;
     int text_suggestion_index = 0;
 
     int last_pause_rest_of_document_page = -1;
@@ -649,6 +653,9 @@ public:
     void handle_goto_loaded_document();
     int get_current_tab_index();
     void goto_ith_next_tab(int i);
+    void update_tab_bar();
+    static void update_all_tab_bars();
+    void close_current_tab();
 
     void handle_vertical_move(int amount);
     void handle_horizontal_move(int amount);

@@ -638,6 +638,11 @@ public:
             split_root_file(last_path, root_path, file_name);
             root_path += QDir::separator();
         }
+        else {
+            // Without a start path QDir("") is the process working directory, which is "/" for an
+            // app launched from Finder. Start in the home directory instead.
+            root_path = QDir::homePath() + QDir::separator();
+        }
 
         QStringList dir_contents = get_dir_contents(root_path, "");
         int current_index = -1;

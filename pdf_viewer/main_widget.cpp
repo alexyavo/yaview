@@ -62,6 +62,8 @@
 #include <qlocalsocket.h>
 #include <qbytearray.h>
 #include <qscrollbar.h>
+#include <qtabbar.h>
+#include <qshortcut.h>
 #include <qtexttospeech.h>
 #include <qwidget.h>
 #include <qjsengine.h>
@@ -148,6 +150,8 @@ extern std::wstring SHIFT_MIDDLE_CLICK_SEARCH_ENGINE;
 extern float DISPLAY_RESOLUTION_SCALE;
 extern float STATUS_BAR_COLOR[3];
 extern float STATUS_BAR_TEXT_COLOR[3];
+extern float UI_SELECTED_BACKGROUND_COLOR[3];
+extern float UI_SELECTED_TEXT_COLOR[3];
 extern int MAIN_WINDOW_SIZE[2];
 extern int HELPER_WINDOW_SIZE[2];
 extern int MAIN_WINDOW_MOVE[2];
@@ -501,6 +505,8 @@ void MainWidget::resizeEvent(QResizeEvent* resize_event) {
         text_command_line_edit_container->move(0, 0);
         text_command_line_edit_container->resize(main_window_width, status_bar_height);
     }
+
+    update_tab_bar();
 
     if (status_label != nullptr) {
         status_label->move(0, main_window_height - status_bar_height);
@@ -966,6 +972,71 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     status_label->setLayout(status_label_layout);
 
     opengl_widget->stackUnder(status_label);
+
+    tab_bar = new QTabBar(this);
+    tab_bar->setFont(label_font);
+    tab_bar->setFocusPolicy(Qt::NoFocus); // keep keyboard input on the main widget
+    tab_bar->setDocumentMode(true);
+    tab_bar->setExpanding(false);
+    tab_bar->setTabsClosable(true);
+    tab_bar->setElideMode(Qt::ElideMiddle);
+    tab_bar->setUsesScrollButtons(true);
+    tab_bar->setStyleSheet(QString(
+        "QTabBar { background-color: %1; }"
+        "QTabBar::tab { background-color: %1; color: %2; padding: 3px 10px; border: 0; max-width: 260px; }"
+        "QTabBar::tab:selected { background-color: %3; color: %4; }"
+        ).arg(
+            get_color_qml_string(STATUS_BAR_COLOR[0], STATUS_BAR_COLOR[1], STATUS_BAR_COLOR[2]),
+            get_color_qml_string(STATUS_BAR_TEXT_COLOR[0], STATUS_BAR_TEXT_COLOR[1], STATUS_BAR_TEXT_COLOR[2]),
+            get_color_qml_string(UI_SELECTED_BACKGROUND_COLOR[0], UI_SELECTED_BACKGROUND_COLOR[1], UI_SELECTED_BACKGROUND_COLOR[2]),
+            get_color_qml_string(UI_SELECTED_TEXT_COLOR[0], UI_SELECTED_TEXT_COLOR[1], UI_SELECTED_TEXT_COLOR[2])
+        ));
+    tab_bar->hide();
+    // Stacking order: document view < tab bar < popups (set_current_widget stacks them directly
+    // under status_label) < status bar. Keeping the tab bar under status_label lets popups such as
+    // the command palette or table of contents cover it instead of being drawn over.
+    tab_bar->stackUnder(status_label);
+    opengl_widget->stackUnder(tab_bar);
+
+    QObject::connect(tab_bar, &QTabBar::currentChanged, [this](int index) {
+        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
+        if (index < 0 || index >= static_cast<int>(tabs.size())) return;
+        if (index == get_current_tab_index()) return;
+        push_state();
+        open_document(tabs[index]);
+        invalidate_render();
+        });
+
+#ifdef Q_OS_MACOS
+    // On macOS the Ctrl+Tab / Ctrl+Shift+Tab key presses never reach keyPressEvent: AppKit uses them
+    // for its key-view loop. Qt shortcuts are matched before that happens, so register them and feed
+    // the key into the normal key handling; the actual bindings still come from keys.config
+    // (goto_next_tab <C-<tab>>, goto_prev_tab <C-S-<tab>>). Qt::META is the physical Ctrl key.
+    auto forward_ctrl_tab = [this](bool shift) {
+        if (current_widget_stack.size() > 0) return; // popups handle their own keys
+        QKeyEvent press(QEvent::KeyPress,
+            shift ? Qt::Key_Backtab : Qt::Key_Tab,
+            shift ? (Qt::MetaModifier | Qt::ShiftModifier) : Qt::MetaModifier,
+            shift ? QString(QChar(0x19)) : QString("\t"));
+        key_event(false, &press, false);
+        };
+    QShortcut* ctrl_tab_shortcut = new QShortcut(QKeySequence(Qt::META | Qt::Key_Tab), this);
+    QObject::connect(ctrl_tab_shortcut, &QShortcut::activated, [forward_ctrl_tab]() { forward_ctrl_tab(false); });
+    QShortcut* ctrl_shift_tab_shortcut = new QShortcut(QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Tab), this);
+    QObject::connect(ctrl_shift_tab_shortcut, &QShortcut::activated, [forward_ctrl_tab]() { forward_ctrl_tab(true); });
+#endif
+
+    QObject::connect(tab_bar, &QTabBar::tabCloseRequested, [this](int index) {
+        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
+        if (index < 0 || index >= static_cast<int>(tabs.size())) return;
+        if (index == get_current_tab_index()) {
+            close_current_tab();
+        }
+        else {
+            this->document_manager->remove_tab(tabs[index]);
+            update_all_tab_bars();
+        }
+        });
 
     // automatically open the helper window in second monitor
     int num_screens = QGuiApplication::screens().size();
@@ -2103,6 +2174,7 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
         document_manager->add_tab(doc()->get_path());
         //doc()->set_only_for_portal(false);
     }
+    update_all_tab_bars();
 
     bool has_document = main_document_view_has_document();
 
@@ -4557,6 +4629,7 @@ void MainWidget::open_document(const std::wstring& doc_path,
         document_manager->add_tab(doc()->get_path());
         //doc()->set_only_for_portal(false);
     }
+    update_all_tab_bars();
 
     std::optional<std::wstring> filename = Path(doc_path).filename();
     if (filename) {
@@ -8694,6 +8767,72 @@ void MainWidget::goto_ith_next_tab(int i){
     }
 }
 
+void MainWidget::update_tab_bar() {
+    if (tab_bar == nullptr) return;
+
+    std::vector<std::wstring> tabs = document_manager->get_tabs();
+
+    tab_bar->blockSignals(true);
+    while (tab_bar->count() > 0) {
+        tab_bar->removeTab(tab_bar->count() - 1);
+    }
+    for (const auto& path : tabs) {
+        QString full_path = QString::fromStdWString(path);
+        std::optional<std::wstring> file_name = Path(path).filename();
+        QString title = file_name ? QString::fromStdWString(file_name.value()) : full_path;
+        int index = tab_bar->addTab(title);
+        tab_bar->setTabToolTip(index, full_path);
+    }
+    int current_index = get_current_tab_index();
+    if (current_index >= 0) {
+        tab_bar->setCurrentIndex(current_index);
+    }
+    tab_bar->blockSignals(false);
+
+    if (tabs.size() > 0) {
+        tab_bar->move(0, 0);
+        tab_bar->resize(width(), tab_bar->sizeHint().height());
+        tab_bar->show();
+        // Not raised: open popups and the command line must stay above it (see constructor).
+    }
+    else {
+        tab_bar->hide();
+    }
+}
+
+void MainWidget::update_all_tab_bars() {
+    for (auto window : windows) {
+        window->update_tab_bar();
+    }
+}
+
+void MainWidget::close_current_tab() {
+    if (!doc()) return;
+
+    std::wstring path = doc()->get_path();
+    std::vector<std::wstring> tabs = document_manager->get_tabs();
+    int index = get_current_tab_index();
+
+    document_manager->remove_tab(path);
+    tabs = document_manager->get_tabs();
+
+    if (tabs.size() > 0) {
+        // like closing a browser tab: show the tab that took its place, or the new last tab
+        int next_index = std::min(std::max(index, 0), static_cast<int>(tabs.size()) - 1);
+        push_state();
+        open_document(tabs[next_index]);
+    }
+    else {
+        main_document_view->persist();
+        main_document_view->set_null_document();
+        setWindowTitle("sioyek");
+    }
+    // The Document stays cached in document_manager so reopening it is fast; it is not freed here
+    // because history entries and other views may still refer to it.
+    update_all_tab_bars();
+    invalidate_render();
+}
+
 void MainWidget::handle_goto_loaded_document() {
     // opens a list of currently loaded documents. This is basically sioyek's "tab" feature
     // the user can "unload" a document by pressing the delete key while it is highlighted in the list
@@ -8747,6 +8886,7 @@ void MainWidget::handle_goto_loaded_document() {
                 document_manager->remove_tab(*path);
                 free_document(doc_to_delete.value());
             }
+            update_all_tab_bars();
         }
         );
     make_current_menu_columns_equal();
@@ -10301,6 +10441,7 @@ void MainWidget::open_tabs(const std::vector<std::wstring>& tabs) {
     for (auto tab : tabs) {
         document_manager->add_tab(tab);
     }
+    update_all_tab_bars();
 }
 
 void MainWidget::handle_goto_tab(const std::wstring& path) {

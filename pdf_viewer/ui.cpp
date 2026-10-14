@@ -1421,8 +1421,13 @@ bool CommandSelector::on_text_change(const QString& text) {
         return lhs.second > rhs.second;
         });
 
+    // An exact command name comes first so that short aliases like `q` are not shadowed by longer
+    // commands that merely start with the same text (e.g. `quit`).
+    if (elements_matching_prefix.contains(actual_text)) {
+        matching_element_names.push_back(actual_text.toStdString());
+    }
     for (int i = 0; i < elements_matching_prefix.size(); i++) {
-        if (elements_matching_prefix.at(i).startsWith(actual_text)) {
+        if (elements_matching_prefix.at(i).startsWith(actual_text) && elements_matching_prefix.at(i) != actual_text) {
             matching_element_names.push_back(elements_matching_prefix.at(i).toStdString());
         }
     }
@@ -1502,6 +1507,7 @@ BaseSelectorWidget::BaseSelectorWidget(QAbstractItemView* item_view, bool fuzzy,
     layout->addWidget(abstract_item_view);
 
     line_edit->installEventFilter(this);
+    abstract_item_view->installEventFilter(this); // for Ctrl+N / Ctrl+P, see eventFilter
     line_edit->setFocus();
 
     if (!TOUCH_MODE) {
@@ -1584,6 +1590,19 @@ std::wstring BaseSelectorWidget::get_selected_text() {
 }
 
 bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
+    // emacs-style Ctrl+N / Ctrl+P move one line down / up (physical Ctrl key, also on macOS).
+    // Handled for both the search box and the list, because focus moves to the list once it is
+    // navigated; the list ignores Ctrl+N/P and would pass them on to the main window.
+    if ((obj == line_edit || obj == get_view()) && event->type() == QEvent::KeyPress) {
+        QKeyEvent* key_event = static_cast<QKeyEvent*>(event);
+        if (is_platform_control_pressed(key_event) && !key_event->modifiers().testFlag(Qt::ShiftModifier) &&
+            (key_event->key() == Qt::Key_N || key_event->key() == Qt::Key_P)) {
+            Qt::Key arrow = key_event->key() == Qt::Key_N ? Qt::Key_Down : Qt::Key_Up;
+            // Forwarded without modifiers: Ctrl+arrow in an item view moves focus without selecting.
+            QCoreApplication::postEvent(get_view(), new QKeyEvent(QEvent::KeyPress, arrow, Qt::NoModifier));
+            return true;
+        }
+    }
     if (obj == line_edit) {
 #ifdef SIOYEK_QT6
         if (event->type() == QEvent::KeyRelease) {
