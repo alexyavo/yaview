@@ -84,18 +84,23 @@ static void set_titlebar_blur_hidden(NSView* container, BOOL hidden) {
         for (NSButton* button in buttons) [origins addObject:[NSValue valueWithPoint:button.frame.origin]];
         self.originalButtonOrigins = origins;
     }
+    CGFloat right = 0;
+    for (NSButton* button in buttons) right = MAX(right, NSMaxX(button.frame));
+
     NSRect container_frame = container.frame;
     container_frame.size.height = self.barHeight;
     container_frame.origin.y = window.frame.size.height - self.barHeight;
+    // Only as wide as the window buttons (the tabs start 12 points after them): the title bar container
+    // sits above the content and takes every click in its area for AppKit's window dragging, so the tabs
+    // would never get one. TabBarMouseFilter moves and zooms the window from empty parts of the bar instead.
+    container_frame.size.width = right + 6;
     container.frame = container_frame;
     set_titlebar_blur_hidden(container, YES);
 
-    CGFloat right = 0;
     for (NSButton* button in buttons) {
         NSPoint origin = button.frame.origin;
         origin.y = round((self.barHeight - button.frame.size.height) / 2);
         [button setFrameOrigin:origin];
-        right = MAX(right, NSMaxX(button.frame));
     }
     self.applying = NO;
     return right;
@@ -123,6 +128,7 @@ static void set_titlebar_blur_hidden(NSView* container, BOOL hidden) {
     NSRect container_frame = container.frame;
     container_frame.size.height = self.originalContainerHeight;
     container_frame.origin.y = window.frame.size.height - self.originalContainerHeight;
+    container_frame.size.width = window.frame.size.width;
     container.frame = container_frame;
     for (NSUInteger i = 0; i < buttons.count; i++) {
         [buttons[i] setFrameOrigin:[self.originalButtonOrigins[i] pointValue]];

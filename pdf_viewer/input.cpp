@@ -1318,6 +1318,11 @@ public:
         widget->goto_ith_next_tab(1);
     }
 
+    // also when the current tab's file failed to open, so its tab can be left or closed
+    bool requires_document() {
+        return false;
+    }
+
     std::string get_name() {
         return cname;
     }
@@ -1334,6 +1339,11 @@ public:
         widget->goto_ith_next_tab(-1);
     }
 
+    // also when the current tab's file failed to open, so its tab can be left or closed
+    bool requires_document() {
+        return false;
+    }
+
     std::string get_name() {
         return cname;
     }
@@ -1348,6 +1358,11 @@ public:
 
     void perform() {
         widget->close_current_tab();
+    }
+
+    // also when the current tab's file failed to open, so its tab can be left or closed
+    bool requires_document() {
+        return false;
     }
 
     std::string get_name() {

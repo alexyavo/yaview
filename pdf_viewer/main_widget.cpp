@@ -1011,6 +1011,15 @@ MainWidget::MainWidget(fz_context* mupdf_context,
 
     central_widget = new QWidget(this);
     central_widget->setMouseTracking(true);
+#ifdef Q_OS_MACOS
+    // With tabs in the title bar the content extends under the title bar, and Qt then insets the window's
+    // contents by the title bar's height (its safe area). That moved the document view 32 points down
+    // while mouse handling uses window coordinates (the view ignores mouse events), so clicks and text
+    // selections landed lower on the page than the pointer. The view stays at the window's origin and
+    // the tab bar floats over it. Both widgets apply the inset to their own contents.
+    setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
+    central_widget->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
+#endif
 
     inverse_search_command = INVERSE_SEARCH_COMMAND;
     this->pdf_renderer = pdf_renderer;
@@ -1134,6 +1143,18 @@ MainWidget::MainWidget(fz_context* mupdf_context,
         std::vector<std::wstring> tabs = this->document_manager->get_tabs();
         if (index < 0 || index >= static_cast<int>(tabs.size())) return;
         if (index == get_current_tab_index()) return;
+        push_state();
+        open_document(tabs[index]);
+        invalidate_render();
+        });
+    // After a failed open the bar can highlight a tab whose document is not shown (Qt always keeps a
+    // current tab). Clicking the highlighted tab doesn't emit currentChanged, so open it here.
+    // tabBarClicked comes before the bar changes its current index on clicks on other tabs.
+    QObject::connect(tab_bar, &QTabBar::tabBarClicked, [this](int index) {
+        if (!(QGuiApplication::mouseButtons() & Qt::LeftButton)) return;
+        if (index < 0 || index != tab_bar->currentIndex()) return;
+        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
+        if (index >= static_cast<int>(tabs.size()) || index == get_current_tab_index()) return;
         push_state();
         open_document(tabs[index]);
         invalidate_render();
@@ -2292,7 +2313,8 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
     }
     main_document_view->open_document(path, &this->is_render_invalidated);
     if (!doc()){
-        // failed to open document
+        // failed to open document; highlight its tab (if it has one) next to the error message
+        update_all_tab_bars();
         return;
     }
     adjust_two_page_mode_document_zoom_and_offset(doc()->get_path());
@@ -8874,6 +8896,12 @@ int MainWidget::get_current_tab_index(){
     if (doc()) {
         current_document_path = doc()->get_path();
     }
+    else if (main_document_view && !main_document_view->was_set_to_null) {
+        // The current tab's file failed to open (moved or deleted). It stays the current tab: it is
+        // highlighted next to the error message, clicking another tab switches away (a click on the
+        // already highlighted tab does nothing) and close_tab closes it.
+        current_document_path = main_document_view->last_opened_file_path;
+    }
 
     std::vector<std::wstring> loaded_document_paths_ = document_manager->get_tabs();
     auto loc = std::find(loaded_document_paths_.begin(), loaded_document_paths_.end(), current_document_path);
@@ -9075,7 +9103,8 @@ void MainWidget::navigate_history(bool forward) {
 }
 
 void MainWidget::close_tab_with_path(const std::wstring& path) {
-    if (doc() && (doc()->get_path() == path)) {
+    int current_index = get_current_tab_index();
+    if ((current_index >= 0) && (document_manager->get_tabs()[current_index] == path)) {
         close_current_tab();
         return;
     }
@@ -9090,14 +9119,13 @@ void MainWidget::update_all_tab_bars() {
 }
 
 void MainWidget::close_current_tab() {
-    if (!doc()) return;
-
-    std::wstring path = doc()->get_path();
-    std::vector<std::wstring> tabs = document_manager->get_tabs();
     int index = get_current_tab_index();
+    if (index < 0) return;
 
+    // the path from the tab list, because the current tab's file may have failed to open (no doc())
+    std::wstring path = document_manager->get_tabs()[index];
     document_manager->remove_tab(path);
-    tabs = document_manager->get_tabs();
+    std::vector<std::wstring> tabs = document_manager->get_tabs();
 
     if (tabs.size() > 0) {
         // like closing a browser tab: show the tab that took its place, or the new last tab
