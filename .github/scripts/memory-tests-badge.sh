@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Publishes the README's memory leak test badge: memory-tests.json, a shields.io endpoint file on the
-# orphan `badges` branch, showing the result and date of the latest test run and how many commits
-# main has gained since the tested commit. The branch also keeps that run's data for later updates:
-# memory-tests-result, memory-tests-date and memory-tests-commit (which memory-tests.yml's `changes`
-# job reads too).
+# orphan `badges` branch, showing the result of the latest test run, how many days ago it ran and how
+# many commits main has gained since the tested commit. The branch also keeps that run's data for
+# later updates: memory-tests-result, memory-tests-date and memory-tests-commit (which
+# memory-tests.yml's `changes` job reads too).
 #
 # Runs in a checkout with main's full history and needs GH_TOKEN with contents: write. With RESULT
 # (passing or failing) and TESTED_COMMIT set it records a new run dated today; without them it only
-# recounts the commits behind for the recorded run.
+# recounts the days and commits since the recorded run.
 set -euo pipefail
 
 files=(memory-tests.json memory-tests-result memory-tests-date memory-tests-commit)
@@ -30,7 +30,12 @@ if [ -z "$result" ] || [ -z "$date" ]; then
   exit 0
 fi
 
-message="$result · $date"
+days=$(( ($(date -u +%s) - $(date -u -d "$date" +%s)) / 86400 ))
+case $days in
+  0) message="$result · today" ;;
+  1) message="$result · 1 day ago" ;;
+  *) message="$result · $days days ago" ;;
+esac
 # the count is left out when the tested commit is no longer in the history
 if [ -n "$tested" ] && git cat-file -e "$tested^{commit}" 2>/dev/null; then
   behind=$(git rev-list --count "$tested..origin/main")

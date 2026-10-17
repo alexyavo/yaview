@@ -1,11 +1,15 @@
 name: Memory leak test badge
 
-# Keeps the README's memory leak test badge current: on every push to main it recounts how many
-# commits main is ahead of the commit the last memory test run tested. It never runs the tests
-# (memory-tests.yml does, never on pushes) and leaves the recorded result and date alone.
+# Keeps the README's memory leak test badge current: on every push to main and once a day it
+# recounts how many days ago the last memory test run ran and how many commits main is ahead of the
+# commit it tested. It never runs the tests (memory-tests.yml does, never on pushes) and leaves the
+# recorded result and date alone.
 on:
   push:
     branches: [main]
+  schedule:
+    # daily, just after midnight UTC, when the day count changes
+    - cron: "5 0 * * *"
 
 permissions:
   contents: write

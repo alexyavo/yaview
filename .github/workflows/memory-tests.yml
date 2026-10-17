@@ -108,11 +108,11 @@ jobs:
           path: ${{ runner.temp }}/memory-results
           if-no-files-found: ignore
 
-  # GitHub's own workflow badge can't show a date, so this job publishes the result and date of
-  # the run as a shields.io endpoint badge (memory-tests.json on the orphan `badges` branch, which
-  # the README's badge reads), plus the tested commit for the `changes` job. The badge also counts
-  # the commits main gained since the tested one; memory-tests-badge.yml keeps that count current on
-  # pushes. It's a separate job so the build and tests never get a token that can write to the
+  # GitHub's own workflow badge can't show when a run was, so this job publishes the result of the
+  # run, how many days ago it ran and how many commits main gained since the tested commit as a
+  # shields.io endpoint badge (memory-tests.json on the orphan `badges` branch, which the README's
+  # badge reads), plus the tested commit for the `changes` job. memory-tests-badge.yml keeps both
+  # counts current, on pushes and daily. It's a separate job so the build and tests never get a token that can write to the
   # repository. Cancelled and skipped runs leave the badge alone.
   badge:
     needs: memory-tests
