@@ -11671,21 +11671,24 @@ void MainWidget::edit_bookmark_text(const std::wstring& path, int pdf_object, co
 void MainWidget::handle_goto_bookmark_global() {
     std::vector<std::wstring> descs;
     std::vector<std::wstring> file_names;
+    std::vector<std::wstring> pages;
     std::vector<BookState> book_states;
 
     for (const std::wstring& path : get_open_and_recent_document_paths()) {
         std::vector<BookMark> bookmarks;
         std::vector<Highlight> highlights;
-        if (!document_manager->get_document(path)->read_annotations_from_file(bookmarks, highlights)) continue;
+        std::vector<int> bookmark_pages;
+        if (!document_manager->get_document(path)->read_annotations_from_file(bookmarks, highlights, &bookmark_pages)) continue;
         std::wstring file_name = Path(path).filename().value_or(L"");
-        for (const BookMark& bm : bookmarks) {
-            descs.push_back(ITEM_LIST_PREFIX + L" " + bm.description);
+        for (int i = 0; i < bookmarks.size(); i++) {
+            descs.push_back(ITEM_LIST_PREFIX + L" " + bookmarks[i].description);
             file_names.push_back(file_name);
-            book_states.push_back({ path, bm.get_y_offset(), bm.pdf_object });
+            pages.push_back(get_page_formatted_string(bookmark_pages[i] + 1));
+            book_states.push_back({ path, bookmarks[i].get_y_offset(), bookmarks[i].pdf_object });
         }
     }
 
-    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names }, book_states, -1,
+    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names, pages }, book_states, -1,
         [&](BookState* book_state) {
             if (pending_command_instance) {
                 pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
@@ -11703,6 +11706,12 @@ void MainWidget::handle_goto_bookmark_global() {
             pop_current_widget();
             handle_command_types(std::move(edit_command), 0);
         });
+    // the text takes the remaining width; the file name column is as wide as the names
+    if (!TOUCH_MODE && current_widget_stack.size() > 0) {
+        if (auto* table = dynamic_cast<FilteredSelectTableWindowClass<BookState>*>(current_widget_stack.back())) {
+            table->fit_column_to_contents(1);
+        }
+    }
 
     show_current_widget();
 }
@@ -11718,7 +11727,7 @@ void MainWidget::handle_goto_highlight_global() {
         std::vector<Highlight> highlights;
         std::vector<int> highlight_pages;
         Document* document = document_manager->get_document(path);
-        if (!document->read_annotations_from_file(bookmarks, highlights, &highlight_pages)) continue;
+        if (!document->read_annotations_from_file(bookmarks, highlights, nullptr, &highlight_pages)) continue;
         std::wstring file_name = Path(path).filename().value_or(L"");
         for (int i = 0; i < highlights.size(); i++) {
             descs.push_back(highlight_list_text(highlights[i]));

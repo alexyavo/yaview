@@ -729,11 +729,16 @@ std::string Document::portal_destination_file_spec(const std::wstring& document_
 
 // Reads a document's bookmarks and highlights without keeping it open (for the lists across all
 // documents). An open document's annotations are already in memory.
-bool Document::read_annotations_from_file(std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights, std::vector<int>* out_highlight_pages) {
+bool Document::read_annotations_from_file(std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights, std::vector<int>* out_bookmark_pages, std::vector<int>* out_highlight_pages) {
     if (doc && are_highlights_loaded) {
         load_highlight_texts();
         out_bookmarks = bookmarks;
         out_highlights = highlights;
+        if (out_bookmark_pages) {
+            for (const BookMark& bookmark : bookmarks) {
+                out_bookmark_pages->push_back(absolute_to_page_pos({ 0, bookmark.get_y_offset() }).page);
+            }
+        }
         if (out_highlight_pages) {
             for (const Highlight& highlight : highlights) {
                 out_highlight_pages->push_back(absolute_to_page_pos(highlight.selection_begin).page);
@@ -760,6 +765,9 @@ bool Document::read_annotations_from_file(std::vector<BookMark>& out_bookmarks, 
             fz_rect bounds = fz_bound_page(context, page);
             size_t num_highlights = out_highlights.size();
             read_page_annotations(context, page, i, bounds.x1 - bounds.x0, y_offset, out_bookmarks, out_highlights, ignored_portals);
+            if (out_bookmark_pages) {
+                out_bookmark_pages->resize(out_bookmarks.size(), i);
+            }
             if (out_highlight_pages) {
                 out_highlight_pages->resize(out_highlights.size(), i);
             }

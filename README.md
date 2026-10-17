@@ -77,8 +77,8 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 - <kbd>gb</kbd> search the bookmarks of the current document (in the list, <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the
   highlighted bookmark's text).
 - <kbd>gB</kbd> search the bookmarks of the open documents and the recently opened ones (how many:
-  `recent_documents_in_annotation_lists`, default 20). <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the highlighted bookmark's
-  text here too.
+  `recent_documents_in_annotation_lists`, default 20), with their file names and pages.
+  <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the highlighted bookmark's text here too.
 - <kbd>db</kbd> delete the closest bookmark.
 
 ### Highlights

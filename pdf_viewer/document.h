@@ -207,7 +207,7 @@ public:
     PortalViewState portal_destination(AbsoluteDocumentPos pos, float zoom_level);
     // the bookmarks and highlights of a document that is not open, read from its file (or copied when it is open)
     // out_highlight_pages, when given, gets the page of each highlight
-    bool read_annotations_from_file(std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights, std::vector<int>* out_highlight_pages = nullptr);
+    bool read_annotations_from_file(std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights, std::vector<int>* out_bookmark_pages = nullptr, std::vector<int>* out_highlight_pages = nullptr);
     const std::wstring& get_highlight_text_of(Highlight& highlight);
     int add_bookmark(const std::wstring& desc, float y_offset);
     int add_marked_bookmark(const std::wstring& desc, AbsoluteDocumentPos pos);
