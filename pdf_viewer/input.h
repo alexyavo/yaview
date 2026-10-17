@@ -50,6 +50,9 @@ public:
     QPointer<QLocalSocket> result_socket = nullptr;
     std::wstring* result_holder = nullptr;
     bool* is_done = nullptr;
+    // set for commands started from the command line (`:`), which show a prompt when they wait for a
+    // letter; a key binding's user knows to press one, so key chords like `ma` show none
+    bool prompt_for_symbol = false;
 
     Command(std::string name, MainWidget* widget);
     virtual std::optional<Requirement> next_requirement(MainWidget* widget);

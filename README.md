@@ -26,6 +26,8 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 - `:clear_document_history` clear the list of previously opened documents, except the ones open in tabs. yaview also
   forgets where you were in the removed documents.
 - <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> navigation.
+- <kbd>←</kbd> / <kbd>→</kbd> go to the previous/next page (also: <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> /
+  <kbd>Ctrl</kbd>+<kbd>PageDown</kbd>).
 - <kbd>Ctrl</kbd>+<kbd>d</kbd> page down by half a screen (also: <kbd>Space</kbd>, <kbd>PageDown</kbd>)
 - <kbd>Ctrl</kbd>+<kbd>u</kbd> page up by half a screen (also: <kbd>Shift</kbd>+<kbd>Space</kbd>, <kbd>PageUp</kbd>)
 - <kbd>F10</kbd> fit the document to screen ignoring white page margins.
@@ -58,6 +60,8 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
   saved in it; <kbd>a</kbd> and <kbd>A</kbd> are two different marks. Setting a mark again moves it.
 - <kbd>&#96;</kbd> + letter go to a mark (e.g. <kbd>&#96;</kbd><kbd>a</kbd>).
 - `:edit_mark` + letter edit the mark's description (its name).
+- `:mark_to_bookmark` + letter turn the mark into a bookmark at its location; the bookmark text starts as the mark's
+  description.
 - `:show_marks` list the marks of the current document with their descriptions (in the list,
   <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the highlighted mark's description).
 - `:clear_document_marks` delete the marks of the current document.
@@ -72,6 +76,9 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
   filled in as the bookmark text.
 - <kbd>gb</kbd> search the bookmarks of the current document (in the list, <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the
   highlighted bookmark's text).
+- <kbd>gB</kbd> search the bookmarks of the open documents and the recently opened ones (how many:
+  `recent_documents_in_annotation_lists`, default 20). <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the highlighted bookmark's
+  text here too.
 - <kbd>db</kbd> delete the closest bookmark.
 
 ### Highlights
@@ -79,7 +86,7 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 - <kbd>h</kbd> + lowercase letter highlight the selected text (e.g. <kbd>ha</kbd>). The letter is the highlight's type;
   each type has its own color (`highlight_color_<letter>` in `yaview.config`).
 - <kbd>gh</kbd> search the highlights of the current document.
-- <kbd>gH</kbd> search the highlights of all previously opened documents (read from their files).
+- <kbd>gH</kbd> search the highlights of the open documents and the recently opened ones (like <kbd>gB</kbd>).
 - <kbd>gnh</kbd> / <kbd>gNh</kbd> go to the next/previous highlight.
 - <kbd>dh</kbd> delete the clicked highlight.
 
@@ -327,6 +334,7 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 | `exact_highlight_select` | `0` | Highlight exactly the selected characters instead of expanding to whole words. |
 | `sort_highlights_by_location` | `1` | Sort the highlight list by position in the document instead of creation time. |
 | `sort_bookmarks_by_location` | `1` | Sort the bookmark and portal lists by position in the document instead of creation time. |
+| `recent_documents_in_annotation_lists` | `20` | How many of the most recently opened documents `gB` and `gH` include, besides the open ones (range 0–1000). |
 | `freetext_bookmark_color` | `0 0 0` | Text color of new freetext bookmarks. |
 | `freetext_bookmark_font_size` | `8` | Default font size of freetext bookmarks; `increase_freetext_font_size`/`decrease_freetext_font_size` change it (range 0–100). |
 | `render_freetext_borders` | `0` | Draw a border around freetext bookmarks. |

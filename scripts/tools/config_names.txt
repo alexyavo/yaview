@@ -200,6 +200,7 @@ prerender_next_page_presentation
 prerendered_page_count
 preserve_image_colors_in_dark_mode
 real_page_separation
+recent_documents_in_annotation_lists
 recto_verso_adjustment
 reload_interval_miliseconds
 render_freetext_borders
@@ -208,7 +209,6 @@ rerender_overview
 resize_command
 restore_all_windows_on_startup
 right_click_command
-right_click_context_menu
 right_click_context_menu
 right_click_scroll_down_command
 right_click_scroll_up_command
@@ -302,7 +302,6 @@ top_center_tap_command
 touch_mode
 touchpad_sensitivity
 tts_rate
-ui_background_color
 ui_background_color
 ui_dark_background_color
 ui_dark_border_color

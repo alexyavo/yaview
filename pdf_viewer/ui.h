@@ -338,6 +338,24 @@ public:
         }
     }
 
+    // Draws `column` in bold, as wide as its contents plus `padding` pixels, to set it apart from the next one.
+    void emphasize_column(int column, int padding) {
+        QTableView* table_view = dynamic_cast<QTableView*>(get_view());
+        QStandardItemModel* model = dynamic_cast<QStandardItemModel*>(proxy_model->sourceModel());
+        if (!table_view || !model || column >= n_cols) return;
+        // only the weight is set: the item delegate takes the family and size from the view's font
+        QFont bold;
+        bold.setBold(true);
+        for (int row = 0; row < model->rowCount(); row++) {
+            if (QStandardItem* item = model->item(row, column)) {
+                item->setFont(bold);
+            }
+        }
+        table_view->resizeColumnToContents(column);
+        table_view->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Fixed);
+        table_view->setColumnWidth(column, table_view->columnWidth(column) + padding);
+    }
+
     void set_on_edit_function(std::function<void(T*)> edit_func) {
         on_edit_function = edit_func;
     }

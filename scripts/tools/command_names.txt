@@ -378,6 +378,7 @@ download_overview_paper
 download_paper_under_cursor
 download_paper_with_name
 download_paper_with_url
+edit_bookmark_text
 edit_mark
 edit_portal
 edit_selected_annotation
@@ -414,6 +415,7 @@ get_paper_name
 get_state_json
 goto_beginning
 goto_bookmark
+goto_bookmark_g
 goto_bottom_of_page
 goto_definition
 goto_end
@@ -448,6 +450,7 @@ keyboard_select
 keyboard_smart_jump
 keys
 macos_lookup
+mark_to_bookmark
 maximize
 move_down
 move_down_smooth

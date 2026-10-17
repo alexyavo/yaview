@@ -228,6 +228,7 @@ std::wstring CONTEXT_MENU_ITEMS_FOR_OVERVIEW = L"";
 
 bool RIGHT_CLICK_CONTEXT_MENU = false;
 int NUM_CACHED_PAGES = 5;
+int RECENT_DOCUMENTS_IN_ANNOTATION_LISTS = 20;
 
 float PAGE_SEPARATOR_WIDTH = 0.0f;
 float PAGE_SEPARATOR_COLOR[3] = { 0.9f, 0.9f, 0.9f };
@@ -978,6 +979,7 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_bool(L"align_link_dest_to_top", &ALIGN_LINK_DEST_TO_TOP);
     add_bool(L"check_for_updates_on_startup", &SHOULD_CHECK_FOR_LATEST_VERSION_ON_STARTUP);
     add_bool(L"sort_bookmarks_by_location", &SORT_BOOKMARKS_BY_LOCATION);
+    add_int(L"recent_documents_in_annotation_lists", &RECENT_DOCUMENTS_IN_ANNOTATION_LISTS, IntExtras{0, 1000});
     add_bool(L"sort_highlights_by_location", &SORT_HIGHLIGHTS_BY_LOCATION);
     add_bool(L"hover_overview", &HOVER_OVERVIEW);
     add_bool(L"rerender_overview", &RERENDER_OVERVIEW);

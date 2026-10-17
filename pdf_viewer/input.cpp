@@ -1269,20 +1269,27 @@ public:
     }
 };
 
-class EditMarkCommand : public Command {
+// Base of the commands that take a mark's letter and then a text, prefilled with the mark's description.
+// A letter without a mark ends the command before the text prompt.
+class MarkTextCommand : public Command {
+protected:
     char symbol = 0;
     std::optional<std::wstring> text = {};
 public:
-    static inline const std::string cname = "edit_mark";
-    static inline const std::string hname = "Edit the description of a mark";
-    EditMarkCommand(MainWidget* w) : Command(cname, w) {}
+    MarkTextCommand(std::string name, MainWidget* w) : Command(name, w) {}
+
+    virtual std::string text_requirement_name() = 0;
+    virtual void perform_with_text(const std::wstring& text) = 0;
 
     std::optional<Requirement> next_requirement(MainWidget* widget) {
         if (symbol == 0) {
-            return Requirement{ RequirementType::Symbol, "symbol" };
+            return Requirement{ RequirementType::Symbol, "Mark" };
+        }
+        if (!widget->doc()->get_mark_if_exists(symbol)) {
+            return {};
         }
         if (!text.has_value()) {
-            return Requirement{ RequirementType::Text, "Mark Description" };
+            return Requirement{ RequirementType::Text, text_requirement_name() };
         }
         return {};
     }
@@ -1301,7 +1308,41 @@ public:
     }
 
     void perform() {
-        widget->edit_mark_description(symbol, text.value());
+        if (!text.has_value()) {
+            widget->set_status_message(std::wstring(L"No mark named ") + static_cast<wchar_t>(symbol));
+            return;
+        }
+        perform_with_text(text.value());
+    }
+};
+
+class EditMarkCommand : public MarkTextCommand {
+public:
+    static inline const std::string cname = "edit_mark";
+    static inline const std::string hname = "Edit the description of a mark";
+    EditMarkCommand(MainWidget* w) : MarkTextCommand(cname, w) {}
+
+    std::string text_requirement_name() {
+        return std::string("Description of mark ") + symbol;
+    }
+
+    void perform_with_text(const std::wstring& text) {
+        widget->doc()->set_mark_description(symbol, text);
+    }
+};
+
+class MarkToBookmarkCommand : public MarkTextCommand {
+public:
+    static inline const std::string cname = "mark_to_bookmark";
+    static inline const std::string hname = "Turn a mark into a bookmark at its location";
+    MarkToBookmarkCommand(MainWidget* w) : MarkTextCommand(cname, w) {}
+
+    std::string text_requirement_name() {
+        return std::string("Bookmark text for mark ") + symbol;
+    }
+
+    void perform_with_text(const std::wstring& text) {
+        widget->convert_mark_to_bookmark(symbol, text);
     }
 };
 
@@ -2442,6 +2483,58 @@ public:
 };
 
 
+class GotoBookmarkGlobalCommand : public GenericPathAndLocationCommand {
+public:
+    static inline const std::string cname = "goto_bookmark_g";
+    static inline const std::string hname = "Open the bookmark list of the open and recently opened documents";
+
+    GotoBookmarkGlobalCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w) {};
+
+    void handle_generic_requirement() {
+        widget->handle_goto_bookmark_global();
+    }
+    bool requires_document() { return false; }
+};
+
+// Edits the text of a bookmark in any document, which the bookmark list of several documents sets
+// (document path, PDF object number) before running it.
+class EditBookmarkTextCommand : public TextCommand {
+    std::optional<std::pair<std::wstring, int>> target = {};
+public:
+    static inline const std::string cname = "edit_bookmark_text";
+    static inline const std::string hname = "";
+    EditBookmarkTextCommand(MainWidget* w) : TextCommand(cname, w) {};
+
+    void set_generic_requirement(QVariant value) {
+        QList<QVariant> values = value.toList();
+        target = std::make_pair(values[0].toString().toStdWString(), values[1].toInt());
+    }
+
+    std::optional<Requirement> next_requirement(MainWidget* widget) {
+        if (!target) return {};
+        return TextCommand::next_requirement(widget);
+    }
+
+    std::string text_requirement_name() {
+        return "Bookmark Text";
+    }
+
+    std::wstring get_text_default_value() {
+        if (!target) return L"";
+        Document* document = widget->document_manager->get_document(target->first);
+        int index = document->get_bookmark_index_with_object(target->second);
+        return index == -1 ? L"" : document->get_bookmarks()[index].description;
+    }
+
+    void perform() {
+        if (target && text) {
+            widget->edit_bookmark_text(target->first, target->second, text.value());
+        }
+    }
+
+    bool requires_document() { return false; }
+};
+
 class GotoHighlightGlobalCommand : public GenericPathAndLocationCommand {
 public:
     static inline const std::string cname = "goto_highlight_g";
@@ -3364,7 +3457,7 @@ public:
     static inline const std::string hname = "Go to next page";
     NextPageCommand(MainWidget* w) : Command(cname, w) {};
     void perform() {
-        widget->main_document_view->move_pages(std::max(1, num_repeats));
+        widget->turn_pages(std::max(1, num_repeats));
     }
 };
 
@@ -3374,7 +3467,7 @@ public:
     static inline const std::string hname = "Go to previous page";
     PreviousPageCommand(MainWidget* w) : Command(cname, w) {};
     void perform() {
-        widget->main_document_view->move_pages(std::min(-1, -num_repeats));
+        widget->turn_pages(std::min(-1, -num_repeats));
     }
 };
 
@@ -6715,6 +6808,7 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<MoveTextMarkUpCommand>();
     register_command<SetMark>();
     register_command<EditMarkCommand>();
+    register_command<MarkToBookmarkCommand>();
     register_command<ClearDocumentMarksCommand>();
     register_command<GotoMark>();
     register_command<GotoPageWithPageNumberCommand>();
@@ -6788,6 +6882,8 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<GotoPortalListCommand>();
     register_command<ShowMarks>();
     register_command<GotoBookmarkCommand>();
+    register_command<GotoBookmarkGlobalCommand>();
+    register_command<EditBookmarkTextCommand>();
     register_command<GotoHighlightGlobalCommand>();
     register_command<PortalCommand>();
     register_command<PortalCommand>();

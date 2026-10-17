@@ -117,6 +117,7 @@ extern bool SHOULD_USE_MULTIPLE_MONITORS;
 extern bool FAIL_SAFE_AUTO_SAVE_SESSION;
 extern bool MULTILINE_MENUS;
 extern bool SORT_BOOKMARKS_BY_LOCATION;
+extern int RECENT_DOCUMENTS_IN_ANNOTATION_LISTS;
 extern bool SORT_HIGHLIGHTS_BY_LOCATION;
 extern bool FLAT_TABLE_OF_CONTENTS;
 extern bool HOVER_OVERVIEW;
@@ -1178,6 +1179,9 @@ MainWidget::MainWidget(fz_context* mupdf_context,
             }
             else {
                 std::unique_ptr<Command> command = this->command_manager->get_command_with_name(this, command_name);
+                if (command) {
+                    command->prompt_for_symbol = true;
+                }
                 this->command_manager->update_command_last_use(command_name);
                 handle_command_types(std::move(command), 0);
             }
@@ -2417,6 +2421,7 @@ void MainWidget::key_event(bool released, QKeyEvent* kevent, bool is_auto_repeat
 
             char symb = get_symbol(kevent->key(), kevent->modifiers() & Qt::ShiftModifier, pending_command_instance->special_symbols());
             if (symb) {
+                hide_symbol_prompt();
                 pending_command_instance->set_symbol_requirement(symb);
                 advance_command(std::move(pending_command_instance));
             }
@@ -3677,6 +3682,7 @@ void MainWidget::show_textbar(const std::wstring& command_name, const std::wstri
         show_current_widget();
     }
     else {
+        text_command_line_edit->show();
         text_command_line_edit->clear();
         if (init.size() > 0) {
             text_command_line_edit->setText(init);
@@ -5724,6 +5730,9 @@ void MainWidget::advance_command(std::unique_ptr<Command> new_command, std::wstr
             else if (next_requirement.type == RequirementType::Symbol) {
                 if (TOUCH_MODE) {
                     show_mark_selector();
+                }
+                else if (pending_command_instance->prompt_for_symbol) {
+                    show_symbol_prompt(utf8_decode(next_requirement.name));
                 }
             }
             else if (next_requirement.type == RequirementType::File || next_requirement.type == RequirementType::Folder) {
@@ -9963,6 +9972,20 @@ void MainWidget::goto_page_with_page_number(int page_number) {
     main_document_view->goto_page(page_number);
 }
 
+// Shows the page num_pages after (negative: before) the page at the top of the window, from its top.
+// Presentation and two page modes keep moving by whole pages from the current position.
+void MainWidget::turn_pages(int num_pages) {
+    if (!doc()) return;
+    if (main_document_view->is_presentation_mode() || main_document_view->is_two_page_mode()) {
+        main_document_view->move_pages(num_pages);
+        return;
+    }
+    float view_top = main_document_view->get_offset_y() - main_document_view->view_height_in_document_space() / 2;
+    // a page's top edge belongs to the page before it in get_offset_page_number
+    int page = std::max(0, doc()->get_offset_page_number(view_top + 1));
+    main_document_view->goto_page(std::clamp(page + num_pages, 0, doc()->num_pages() - 1));
+}
+
 void MainWidget::goto_search_result(int nth_next_result, bool overview) {
     opengl_widget->goto_search_result(nth_next_result, overview);
 }
@@ -10117,9 +10140,26 @@ DocumentView* MainWidget::helper_document_view(){
     return helper_document_view_;
 }
 
+// The prompt bar of text input, without the text field, while a command waits for a letter. The key
+// goes to the window (key_event), which keeps the focus.
+void MainWidget::show_symbol_prompt(const std::wstring& requirement_name) {
+    text_command_line_edit_label->setText(QString::fromStdWString(requirement_name) + " (press a letter)");
+    text_command_line_edit->hide();
+    text_command_line_edit_container->show();
+    setFocus();
+}
+
+void MainWidget::hide_symbol_prompt() {
+    if (!text_command_line_edit->isVisible()) {
+        text_command_line_edit_container->hide();
+        text_command_line_edit->show();
+    }
+}
+
 void MainWidget::hide_command_line_edit(){
     text_command_line_edit->setText("");
     text_command_line_edit_container->hide();
+    text_command_line_edit->show();
     hide_command_hints();
     text_suggestion_index = 0;
     pending_command_instance = {};
@@ -10283,7 +10323,7 @@ QString MainWidget::get_command_documentation(QString command_name){
     load_command_docs();
     auto command_parts= command_name.split("_");
     if (command_parts.at(command_parts.size()-1).size() == 1){
-        if (command_name != "goto_highlight_g") {
+        if (command_name != "goto_bookmark_g" && command_name != "goto_highlight_g") {
             command_name = command_name.left(command_name.size()-1) + "*";
         }
     }
@@ -11034,6 +11074,7 @@ QMenuBar* MainWidget::create_main_menu_bar(){
         "",
         {
             new MenuNode{ "goto_bookmark", "", {} },
+            new MenuNode{ "goto_bookmark_g", "", {} },
             new MenuNode{ "add_bookmark", "", {} },
             new MenuNode{ "add_marked_bookmark", "", {} },
             new MenuNode{ "add_freetext_bookmark", "", {} },
@@ -11485,16 +11526,20 @@ void MainWidget::goto_mark(char symbol) {
     }
 }
 
-void MainWidget::edit_mark_description(char symbol, const std::wstring& description) {
-    if (!doc()->set_mark_description(symbol, description)) {
-        set_status_message(std::wstring(L"No mark named ") + static_cast<wchar_t>(symbol));
+void MainWidget::convert_mark_to_bookmark(char symbol, const std::wstring& text) {
+    std::optional<Mark> mark = doc()->get_mark_if_exists(symbol);
+    if (!mark) return;
+    if (doc()->add_marked_bookmark(text, doc()->margin_pos(mark->y_offset, false)) != -1) {
+        doc()->remove_mark(symbol);
     }
+    invalidate_render();
 }
 
 void MainWidget::handle_show_marks() {
     std::vector<Mark> marks;
-    std::vector<std::wstring> option_names;
-    std::vector<std::wstring> option_location_strings;
+    std::vector<std::wstring> letters;
+    std::vector<std::wstring> descriptions;
+    std::vector<std::wstring> pages;
 
     for (const Mark& mark : doc()->get_marks()) {
         // the '/' mark, which a search sets, is not one of the user's marks
@@ -11505,12 +11550,13 @@ void MainWidget::handle_show_marks() {
     std::sort(marks.begin(), marks.end(), [](const Mark& lhs, const Mark& rhs) { return lhs.symbol < rhs.symbol; });
 
     for (const Mark& mark : marks) {
-        option_names.push_back(ITEM_LIST_PREFIX + L" " + static_cast<wchar_t>(mark.symbol) + L" " + mark.description);
+        letters.push_back(ITEM_LIST_PREFIX + L" [" + static_cast<wchar_t>(mark.symbol) + L"]");
+        descriptions.push_back(mark.description);
         auto [page, _, __] = doc()->absolute_to_page_pos({ 0, mark.y_offset });
-        option_location_strings.push_back(get_page_formatted_string(page + 1));
+        pages.push_back(get_page_formatted_string(page + 1));
     }
 
-    set_filtered_select_menu<Mark>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { option_names, option_location_strings }, marks, -1,
+    set_filtered_select_menu<Mark>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { letters, descriptions, pages }, marks, -1,
         [&](Mark* mark) {
             main_document_view->goto_mark(mark->symbol);
         },
@@ -11524,6 +11570,86 @@ void MainWidget::handle_show_marks() {
             handle_command_types(std::move(edit_command), 0);
         }
     );
+    // the letters in their own bold column, set apart from the descriptions
+    if (!TOUCH_MODE && current_widget_stack.size() > 0) {
+        if (auto* table = dynamic_cast<FilteredSelectTableWindowClass<Mark>*>(current_widget_stack.back())) {
+            table->emphasize_column(0, 16);
+        }
+    }
+    show_current_widget();
+}
+
+// The documents the bookmark and highlight lists of several documents show: the open ones (the tabs)
+// and the recent_documents_in_annotation_lists most recently opened ones, from the database.
+std::vector<std::wstring> MainWidget::get_open_and_recent_document_paths() {
+    std::vector<std::wstring> paths = document_manager->get_tabs();
+    std::vector<std::pair<std::wstring, std::wstring>> documents;
+    db_manager->select_documents(documents);
+    int num_recent = 0;
+    for (const auto& [path, name] : documents) {
+        if (num_recent >= RECENT_DOCUMENTS_IN_ANNOTATION_LISTS) break;
+        num_recent++;
+        if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+            paths.push_back(path);
+        }
+    }
+    return paths;
+}
+
+// Bookmark lists for a document that may not be open: the changes need it loaded with its annotations.
+Document* MainWidget::get_loaded_document(const std::wstring& path) {
+    Document* document = document_manager->get_document(path);
+    if (document->doc == nullptr) {
+        document->open(nullptr, true);
+    }
+    return document;
+}
+
+void MainWidget::edit_bookmark_text(const std::wstring& path, int pdf_object, const std::wstring& text) {
+    Document* document = get_loaded_document(path);
+    int index = document->get_bookmark_index_with_object(pdf_object);
+    if (index != -1) {
+        document->update_bookmark_text(index, text, document->get_bookmarks()[index].font_size);
+        invalidate_render();
+    }
+}
+
+void MainWidget::handle_goto_bookmark_global() {
+    std::vector<std::wstring> descs;
+    std::vector<std::wstring> file_names;
+    std::vector<BookState> book_states;
+
+    for (const std::wstring& path : get_open_and_recent_document_paths()) {
+        std::vector<BookMark> bookmarks;
+        std::vector<Highlight> highlights;
+        if (!document_manager->get_document(path)->read_annotations_from_file(bookmarks, highlights)) continue;
+        std::wstring file_name = Path(path).filename().value_or(L"");
+        for (const BookMark& bm : bookmarks) {
+            descs.push_back(ITEM_LIST_PREFIX + L" " + bm.description);
+            file_names.push_back(file_name);
+            book_states.push_back({ path, bm.get_y_offset(), bm.pdf_object });
+        }
+    }
+
+    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names }, book_states, -1,
+        [&](BookState* book_state) {
+            if (pending_command_instance) {
+                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
+            }
+            advance_command(std::move(pending_command_instance));
+        },
+        [&](BookState* book_state) {
+            Document* document = get_loaded_document(book_state->document_path);
+            document->delete_bookmark(document->get_bookmark_index_with_object(book_state->pdf_object));
+            invalidate_render();
+        },
+        [&](BookState* book_state) {
+            std::unique_ptr<Command> edit_command = command_manager->get_command_with_name(this, "edit_bookmark_text");
+            edit_command->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->pdf_object);
+            pop_current_widget();
+            handle_command_types(std::move(edit_command), 0);
+        });
+
     show_current_widget();
 }
 
@@ -11532,9 +11658,7 @@ void MainWidget::handle_goto_highlight_global() {
     std::vector<std::wstring> file_names;
     std::vector<BookState> book_states;
 
-    std::vector<std::pair<std::wstring, std::wstring>> documents;
-    db_manager->select_documents(documents);
-    for (const auto& [path, name] : documents) {
+    for (const std::wstring& path : get_open_and_recent_document_paths()) {
         std::vector<BookMark> bookmarks;
         std::vector<Highlight> highlights;
         Document* document = document_manager->get_document(path);
@@ -11557,9 +11681,9 @@ void MainWidget::handle_goto_highlight_global() {
             advance_command(std::move(pending_command_instance));
         },
         [&](BookState* book_state) {
-            Document* document = document_manager->get_document(book_state->document_path);
-            document->open(nullptr, true);
+            Document* document = get_loaded_document(book_state->document_path);
             document->delete_highlight_with_index(document->get_highlight_index_with_object(book_state->pdf_object));
+            invalidate_render();
         });
 
     show_current_widget();

@@ -581,6 +581,7 @@ public:
     int get_current_page_number() const;
     std::wstring get_current_page_label();
     void goto_page_with_page_number(int page_number);
+    void turn_pages(int num_pages);
     void goto_page_with_label(std::wstring label);
     void set_inverse_search_command(const std::wstring& new_command);
     int get_current_monitor_width(); int get_current_monitor_height();
@@ -601,7 +602,9 @@ public:
     bool is_rect_visible(DocumentRect rect);
     void set_mark_in_current_location(char symbol);
     void goto_mark(char symbol);
-    void edit_mark_description(char symbol, const std::wstring& description);
+    void convert_mark_to_bookmark(char symbol, const std::wstring& text);
+    void show_symbol_prompt(const std::wstring& requirement_name);
+    void hide_symbol_prompt();
     void advance_command(std::unique_ptr<Command> command, std::wstring* result = nullptr);
     void add_search_term(const std::wstring& term);
     void perform_search(std::wstring text, bool is_regex = false, bool is_incremental = false);
@@ -625,6 +628,10 @@ public:
     void handle_goto_portal_list();
     void handle_goto_bookmark();
     void handle_show_marks();
+    void handle_goto_bookmark_global();
+    std::vector<std::wstring> get_open_and_recent_document_paths();
+    Document* get_loaded_document(const std::wstring& path);
+    void edit_bookmark_text(const std::wstring& path, int pdf_object, const std::wstring& text);
     std::wstring handle_add_highlight(char symbol);
     // the result of a command that adds a bookmark: the bookmark's object number in the PDF, empty when none was added
     std::wstring bookmark_result_string(int bookmark_index);
