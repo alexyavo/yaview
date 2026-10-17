@@ -1,10 +1,6 @@
 //#include <Windows.h>
 #include <cwctype>
 
-#ifdef YAVIEW_ANDROID
-#include <unistd.h>
-#endif
-
 #include <cmath>
 #include <cassert>
 #include "utils.h"
@@ -37,11 +33,6 @@
 #include <quuid.h>
 #include <qjsondocument.h>
 #include "path.h"
-
-#ifdef YAVIEW_ANDROID
-#include <QtCore/private/qandroidextras_p.h>
-#include <qjniobject.h>
-#endif
 
 #include <mupdf/pdf.h>
 
@@ -2027,23 +2018,6 @@ std::wstring concatenate_path(const std::wstring& prefix, const std::wstring& su
 }
 
 std::wstring get_canonical_path(const std::wstring& path) {
-#ifdef YAVIEW_ANDROID
-    if (path.size() > 0) {
-        if (path[0] == ':') { // it is a resouce file
-            return path;
-        }
-        if (path.substr(0, 9) == L"content:/") {
-            return path;
-        }
-        else {
-            QDir dir(QString::fromStdWString(path));
-            return std::move(dir.absolutePath().toStdWString());
-        }
-    }
-    else {
-        return L"";
-    }
-#else
     std::wstring expanded_path = path;
 
     if (path.size() > 0 && path[0] == '~'){
@@ -2053,7 +2027,6 @@ std::wstring get_canonical_path(const std::wstring& path) {
     QDir dir(QString::fromStdWString(expanded_path));
     //return std::move(dir.canonicalPath().toStdWString());
     return std::move(dir.absolutePath().toStdWString());
-#endif
 
 }
 
@@ -2754,96 +2727,8 @@ void convert_color3(const float* in_color, int* out_color) {
     out_color[2] = (int)(in_color[2] * 255);
 }
 
-#ifdef YAVIEW_ANDROID
-
-std::optional<std::function<void(int, int)>> android_global_word_callback = {};
-std::optional<std::function<void(QString)>> android_global_state_change_callback = {};
-std::optional<std::function<void(QString)>> android_global_external_state_change_callback = {};
-std::optional<std::function<QString()>> android_global_on_android_app_pause_callback = {};
-std::optional<std::function<void(bool, bool, int)>> android_global_resume_state_callback = {};
-
-QJniObject parseUriString(const QString& uriString) {
-    return QJniObject::callStaticObjectMethod
-    ("android/net/Uri", "parse",
-        "(Ljava/lang/String;)Landroid/net/Uri;",
-        QJniObject::fromString(uriString).object());
-}
-
-QString android_file_uri_from_content_uri(QString uri) {
-
-    //    mainActivityObj = QtAndroid::androidActivity();
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    QJniObject uri_object = parseUriString(uri);
-
-    QJniObject file_uri_object = QJniObject::callStaticObjectMethod("info/yaview/yaview/YaviewActivity",
-        "getPathFromUri",
-        "(Landroid/content/Context;Landroid/net/Uri;)Ljava/lang/String;", activity.object(), uri_object.object());
-    return file_uri_object.toString();
-}
-
-void android_tts_say(QString text) {
-
-    QJniObject text_jni = QJniObject::fromString(text);
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    //QJniObject contentResolverObj = activity.callObjectMethod("saySomethingElse", "(Ljava/lang/String;)V", text_jni.object<jstring>());
-    activity.callMethod<void>("ttsSay", "(Ljava/lang/String;)V", text_jni.object<jstring>());
-}
-
-void android_tts_pause(){
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    activity.callMethod<void>("ttsPause");
-}
-
-void android_tts_stop(){
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    activity.callMethod<void>("ttsStop");
-}
-
-void android_tts_set_rate(float rate){
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    activity.callMethod<void>("ttsSetRate", "(F)V", rate);
-}
-
-// void android_tts_stop_service(){
-//     QJniObject activity = QNativeInterface::QAndroidApplication::context();
-//     activity.callMethod<void>("stopTtsService", "()V");
-// }
-
-void android_tts_set_rest_of_document(QString rest){
-    QJniObject rest_jni = QJniObject::fromString(rest);
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    activity.callMethod<void>("ttsSetRestOfDocument", "(Ljava/lang/String;)V", rest_jni.object<jstring>());
-}
-
-#endif
-
 fz_document* open_document_with_file_name(fz_context* context, std::wstring file_name) {
 
-#ifdef YAVIEW_ANDROID
-
-    QFile pdf_qfile(QString::fromStdWString(file_name));
-
-    pdf_qfile.open(QIODeviceBase::ReadOnly);
-    int qfile_handle = pdf_qfile.handle();
-    fz_stream* stream = nullptr;
-
-
-    if (qfile_handle != -1) {
-        FILE* file_ptr = fdopen(dup(qfile_handle), "rb");
-        stream = fz_open_file_ptr_no_close(context, file_ptr);
-    }
-    else {
-        QByteArray bytes = pdf_qfile.readAll();
-        int size = bytes.size();
-        unsigned char* new_buffer = new unsigned char[size];
-        memcpy(new_buffer, bytes.data(), bytes.size());
-        stream = fz_open_memory(context, new_buffer, bytes.size());
-    }
-
-    //return fz_open_document_with_stream(context, "application/pdf", stream);
-    std::string file_name_str = utf8_encode(file_name);
-    return fz_open_document_with_stream(context, file_name_str.c_str(), stream);
-#else
     float epub_width, epub_height;
     get_path_epub_size(file_name, &epub_width, &epub_height);
 
@@ -2860,7 +2745,6 @@ fz_document* open_document_with_file_name(fz_context* context, std::wstring file
         //int a = 2;
     }
     return doc;
-#endif
 }
 
 void convert_qcolor_to_float3(const QColor& color, float* out_floats) {
@@ -2891,187 +2775,6 @@ void convert_qcolor_to_float4(const QColor& color, float* out_floats) {
     *(out_floats + 2) = static_cast<float>(color.blue()) / 255.0f;
     *(out_floats + 3) = static_cast<float>(color.alpha()) / 255.0f;
 }
-
-#ifdef YAVIEW_ANDROID
-
-#include "main_widget.h"
-extern std::vector<MainWidget*> windows;
-
-// modified from https://github.com/mahdize/CrossQFile/blob/main/CrossQFile.cpp
-
-
-QString android_file_name_from_uri(QString uri) {
-
-    //    mainActivityObj = QtAndroid::androidActivity();
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-
-    QJniObject contentResolverObj = activity.callObjectMethod
-    ("getContentResolver", "()Landroid/content/ContentResolver;");
-
-
-    //	QAndroidJniObject cursorObj {contentResolverObj.callObjectMethod
-    //		("query",
-    //		 "(Landroid/net/Uri;[Ljava/lang/String;Landroid/os/Bundle;Landroid/os/CancellationSignal;)Landroid/database/Cursor;",
-    //		 parseUriString(fileName()).object(), QAndroidJniObject().object(), QAndroidJniObject().object(),
-    //		 QAndroidJniObject().object(), QAndroidJniObject().object())};
-
-    QJniObject cursorObj{ contentResolverObj.callObjectMethod
-        ("query",
-         "(Landroid/net/Uri;[Ljava/lang/String;Landroid/os/Bundle;Landroid/os/CancellationSignal;)Landroid/database/Cursor;",
-         parseUriString(uri).object(), QJniObject().object(), QJniObject().object(),
-         QJniObject().object(), QJniObject().object()) };
-
-    cursorObj.callMethod<jboolean>("moveToFirst");
-
-    QJniObject retObj{ cursorObj.callObjectMethod
-        ("getString","(I)Ljava/lang/String;", cursorObj.callMethod<jint>
-         ("getColumnIndex","(Ljava/lang/String;)I",
-          QJniObject::getStaticObjectField<jstring>
-          ("android/provider/OpenableColumns","DISPLAY_NAME").object())) };
-
-    QString ret{ retObj.toString() };
-    return ret;
-}
-
-void check_pending_intents(const QString workingDirPath)
-{
-    //    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    QJniObject activity = QNativeInterface::QAndroidApplication::context();
-    if (activity.isValid()) {
-        // create a Java String for the Working Dir Path
-        QJniObject jniWorkingDir = QJniObject::fromString(workingDirPath);
-        if (!jniWorkingDir.isValid()) {
-            //            emit shareError(0, tr("Share: an Error occured\nWorkingDir not valid"));
-            return;
-        }
-        activity.callMethod<void>("checkPendingIntents", "(Ljava/lang/String;)V", jniWorkingDir.object<jstring>());
-        return;
-    }
-}
-
-
-void setFileUrlReceived(const QString& url)
-{
-    if (windows.size() > 0) {
-        windows[0]->open_document(url.toStdWString());
-    }
-}
-
-void on_android_tts(int begin, int end){
-    if (android_global_word_callback){
-        android_global_word_callback.value()(begin, end - begin);
-    }
-    // qDebug() << "ttsed from " << begin << " to " << end;
-}
-
-void on_android_state_change(QString new_state){
-    if (android_global_state_change_callback){
-        android_global_state_change_callback.value()(new_state);
-    }
-}
-
-void on_android_external_state_change(QString new_state){
-    if (android_global_external_state_change_callback){
-        android_global_external_state_change_callback.value()(new_state);
-    }
-}
-
-void on_android_resume_state(bool is_playing, bool is_on_rest, int offset){
-    if (android_global_resume_state_callback){
-        android_global_resume_state_callback.value()(is_playing, is_on_rest, offset);
-    }
-}
-
-QString on_android_get_rest_on_pause(){
-    if (android_global_on_android_app_pause_callback){
-        QString res = android_global_on_android_app_pause_callback.value()();
-        return res;
-    }
-    return "";
-}
-
-extern "C" {
-    JNIEXPORT void JNICALL
-        Java_info_yaview_yaview_YaviewActivity_setFileUrlReceived(JNIEnv* env,
-            jobject obj,
-            jstring url)
-    {
-        const char* urlStr = env->GetStringUTFChars(url, NULL);
-        Q_UNUSED(obj)
-            setFileUrlReceived(urlStr);
-        env->ReleaseStringUTFChars(url, urlStr);
-        return;
-    }
-
-    JNIEXPORT void JNICALL
-        Java_info_yaview_yaview_YaviewActivity_qDebug(JNIEnv* env,
-            jobject obj,
-            jstring url)
-    {
-        const char* urlStr = env->GetStringUTFChars(url, NULL);
-        qDebug() << urlStr;
-        Q_UNUSED(obj)
-            env->ReleaseStringUTFChars(url, urlStr);
-        return;
-    }
-
-    JNIEXPORT void JNICALL
-        Java_info_yaview_yaview_YaviewActivity_onTts(JNIEnv* env,
-            jobject obj,
-            jint begin, jint end)
-    {
-        on_android_tts((int)begin, (int)end);
-    }
-
-    JNIEXPORT void JNICALL
-        Java_info_yaview_yaview_YaviewActivity_onTtsStateChange(JNIEnv* env,
-            jobject obj,
-            jstring new_state)
-    {
-
-        const char* state_str = env->GetStringUTFChars(new_state, NULL);
-        Q_UNUSED(obj)
-            env->ReleaseStringUTFChars(new_state, state_str);
-        on_android_state_change(state_str);
-    }
-
-    JNIEXPORT void JNICALL
-        Java_info_yaview_yaview_YaviewActivity_onExternalTtsStateChange(JNIEnv* env,
-            jobject obj,
-            jstring new_state)
-    {
-
-        const char* state_str = env->GetStringUTFChars(new_state, NULL);
-        Q_UNUSED(obj)
-            env->ReleaseStringUTFChars(new_state, state_str);
-        on_android_external_state_change(state_str);
-    }
-
-    JNIEXPORT void JNICALL
-        Java_info_yaview_yaview_YaviewActivity_onResumeState(JNIEnv* env,
-            jobject obj,
-            jboolean is_playing,
-            jboolean reading_rest,
-            jint offset)
-    {
-
-        Q_UNUSED(obj)
-        on_android_resume_state(is_playing, reading_rest, offset);
-    }
-
-    JNIEXPORT jstring JNICALL
-        Java_info_yaview_yaview_YaviewActivity_getRestOnPause(JNIEnv* env,
-              jobject obj)
-    {
-
-        Q_UNUSED(obj)
-        QString res = on_android_get_rest_on_pause();
-        std::string res_std = res.toStdString();
-        return env->NewStringUTF(res_std.c_str());
-    }
-
-}
-#endif
 
 float dampen_velocity(float v, float dt) {
     if (v == 0) return 0;
@@ -4000,13 +3703,7 @@ std::vector<SearchResult> search_text_with_index(const std::wstring& super_fast_
 
     auto pred = get_pred(case_sensitive, query);
     auto hash = get_hash(case_sensitive, query);
-#ifdef YAVIEW_ANDROID
-    // for some reason at the time of this commit std::boyer_moore_searcher doesn't
-    // compile on android even though we are using c++17
-    auto searcher = std::default_searcher(query.begin(), query.end(), pred);
-#else
     auto searcher = std::boyer_moore_searcher(query.begin(), query.end(), hash, pred);
-#endif
     auto it = std::search(
         super_fast_search_index.begin() + begin_index,
         super_fast_search_index.begin() + end_index,
@@ -4438,56 +4135,6 @@ QString translate_key_mapping_to_macos(QString mapping){
 
     return mapping;
 }
-
-#ifdef YAVIEW_ANDROID
-
-AndroidTextToSpeechHandler::AndroidTextToSpeechHandler() {
-}
-
-void AndroidTextToSpeechHandler::say(QString text) {
-    android_tts_say(text);
-}
-
-void AndroidTextToSpeechHandler::stop() {
-    android_tts_stop();
-}
-
-void AndroidTextToSpeechHandler::pause() {
-    android_tts_pause();
-}
-
-void AndroidTextToSpeechHandler::set_rate(float rate) {
-    android_tts_set_rate(std::pow(4.0f, rate));
-}
-
-bool AndroidTextToSpeechHandler::is_pausable() {
-    return true;
-}
-
-bool AndroidTextToSpeechHandler::is_word_by_word() {
-    return true;
-}
-
-void AndroidTextToSpeechHandler::set_word_callback(std::function<void(int, int)> callback) {
-    android_global_word_callback = callback;
-}
-
-void AndroidTextToSpeechHandler::set_state_change_callback(std::function<void(QString)> callback) {
-    android_global_state_change_callback = callback;
-}
-
-void AndroidTextToSpeechHandler::set_external_state_change_callback(std::function<void(QString)> callback) {
-    android_global_external_state_change_callback = callback;
-}
-
-void AndroidTextToSpeechHandler::set_on_app_pause_callback(std::function<QString()> callback){
-    android_global_on_android_app_pause_callback = callback;
-}
-
-void AndroidTextToSpeechHandler::set_on_app_resume_callback(std::function<void(bool, bool, int)> callback){
-    android_global_resume_state_callback = callback;
-}
-#endif
 
 
 bool is_platform_meta_pressed(QKeyEvent* kevent){

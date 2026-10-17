@@ -1,5 +1,5 @@
 '''
-Creates a dual panel version of current PDF file. Here is example configuration in `prefs_user.config`:
+Creates a dual panel version of current PDF file. Here is example configuration in `yaview.config`:
 
 new_command _dual_panelify python /path/to/dual_panelify.py "%{yaview_path}" "%{file_path}"
 

@@ -132,16 +132,10 @@ target_link_libraries(yaview PRIVATE
     Qt::Widgets
 )
 
-if(NOT ANDROID)
-  target_sources(yaview PUBLIC
-        pdf_viewer/synctex/synctex_parser.c pdf_viewer/synctex/synctex_parser.h
-        pdf_viewer/synctex/synctex_parser_utils.c pdf_viewer/synctex/synctex_parser_utils.h
-  )
-else()
-  target_compile_definitions(yaview PRIVATE
-        YAVIEW_ANDROID
-  )
-endif()
+target_sources(yaview PUBLIC
+      pdf_viewer/synctex/synctex_parser.c pdf_viewer/synctex/synctex_parser.h
+      pdf_viewer/synctex/synctex_parser_utils.c pdf_viewer/synctex/synctex_parser_utils.h
+)
 
 if(WIN32)
   target_compile_definitions(yaview PRIVATE
@@ -213,7 +207,7 @@ install(TARGETS yaview
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-if(UNIX AND NOT APPLE AND NOT ANDROID)
+if(UNIX AND NOT APPLE)
   install(DIRECTORY pdf_viewer/shaders/
           DESTINATION ${CMAKE_INSTALL_DATADIR}/yaview/shaders)
   install(FILES tutorial.pdf

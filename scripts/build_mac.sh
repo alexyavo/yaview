@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -e
+# the paths below are relative to the repository root
+cd "$(dirname "$0")/.."
 # prerequisite: brew install qt@5 freeglut mesa harfbuzz
 
 #sys_glut_clfags=`pkg-config --cflags glut gl`
@@ -31,9 +33,7 @@ mv yaview.app build/
 cp -r pdf_viewer/shaders build/yaview.app/Contents/Resources/shaders
 
 cp pdf_viewer/prefs.config build/yaview.app/Contents/Resources/prefs.config
-cp pdf_viewer/prefs_user.config build/yaview.app/Contents/Resources/prefs_user.config
 cp pdf_viewer/keys.config build/yaview.app/Contents/Resources/keys.config
-cp pdf_viewer/keys_user.config build/yaview.app/Contents/Resources/keys_user.config
 cp tutorial.pdf build/yaview.app/Contents/Resources/tutorial.pdf
 
 # Capture the current PATH

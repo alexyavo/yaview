@@ -236,14 +236,6 @@ bool num_slices_for_page_rect(PagelessDocumentRect page_rect, int* h_slices, int
 }
 
 std::string read_file_contents(const Path& path) {
-#ifdef YAVIEW_ANDROID
-    std::wstring actual_path = path.get_path();
-    QFile qfile(QString::fromStdWString(path.get_path()));
-    qfile.open(QIODeviceBase::Text | QIODeviceBase::ReadOnly);
-    std::string content = qfile.readAll().toStdString();
-    qfile.close();
-    return content;
-#else
     std::wifstream stream = open_wifstream(path.get_path());
     std::wstring content;
 
@@ -257,7 +249,6 @@ std::string read_file_contents(const Path& path) {
     else {
         return "";
     }
-#endif
 }
 
 GLuint PdfViewOpenGLWidget::LoadShaders(Path vertex_file_path, Path fragment_file_path) {
@@ -268,11 +259,7 @@ GLuint PdfViewOpenGLWidget::LoadShaders(Path vertex_file_path, Path fragment_fil
     GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
 
 
-#ifdef YAVIEW_ANDROID
-    std::string header = "#version 310 es\n";
-#else
     std::string header = "#version 330 core\n";
-#endif
 
     std::string vertex_shader_code_utf8 = read_file_contents(vertex_file_path);
     if (vertex_shader_code_utf8.size() == 0) {
@@ -358,20 +345,6 @@ void PdfViewOpenGLWidget::initializeGL() {
         //shared_gl_objects.vertical_line_program = LoadShaders(concatenate_path(shader_path , L"simple.vertex"),  concatenate_path(shader_path , L"vertical_bar.fragment"));
         //shared_gl_objects.vertical_line_dark_program = LoadShaders(concatenate_path(shader_path , L"simple.vertex"),  concatenate_path(shader_path , L"vertical_bar_dark.fragment"));
 
-#ifdef YAVIEW_ANDROID
-        shared_gl_objects.rendered_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/simple.fragment"));
-        shared_gl_objects.rendered_dark_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/dark_mode.fragment"));
-        shared_gl_objects.unrendered_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/unrendered_page.fragment"));
-        shared_gl_objects.highlight_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/highlight.fragment"));
-        shared_gl_objects.vertical_line_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/vertical_bar.fragment"));
-        shared_gl_objects.vertical_line_dark_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/vertical_bar_dark.fragment"));
-        shared_gl_objects.custom_color_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/custom_colors.fragment"));
-        shared_gl_objects.separator_program = LoadShaders(Path(L":/pdf_viewer/shaders/simple.vertex"), Path(L":/pdf_viewer/shaders/separator.fragment"));
-        shared_gl_objects.stencil_program = LoadShaders(Path(L":/pdf_viewer/shaders/stencil.vertex"), Path(L":/pdf_viewer/shaders/stencil.fragment"));
-        shared_gl_objects.line_program = LoadShaders(Path(L":/pdf_viewer/shaders/line.vertex"), Path(L":/pdf_viewer/shaders/line.fragment"));
-        shared_gl_objects.compiled_drawing_program = LoadShaders(Path(L":/pdf_viewer/shaders/compiled_drawing.vertex"), Path(L":/pdf_viewer/shaders/compiled_line.fragment"));
-        shared_gl_objects.compiled_dots_program = LoadShaders(Path(L":/pdf_viewer/shaders/dot.vertex"), Path(L":/pdf_viewer/shaders/dot.fragment"));
-#else
         shared_gl_objects.rendered_program = LoadShaders(shader_path.slash(L"simple.vertex"), shader_path.slash(L"simple.fragment"));
         shared_gl_objects.rendered_dark_program = LoadShaders(shader_path.slash(L"simple.vertex"), shader_path.slash(L"dark_mode.fragment"));
         shared_gl_objects.unrendered_program = LoadShaders(shader_path.slash(L"simple.vertex"), shader_path.slash(L"unrendered_page.fragment"));
@@ -384,7 +357,6 @@ void PdfViewOpenGLWidget::initializeGL() {
         shared_gl_objects.line_program = LoadShaders(shader_path.slash(L"line.vertex"), shader_path.slash(L"line.fragment"));
         shared_gl_objects.compiled_drawing_program = LoadShaders(shader_path.slash(L"compiled_drawing.vertex"), shader_path.slash(L"compiled_line.fragment"));
         shared_gl_objects.compiled_dots_program = LoadShaders(shader_path.slash(L"dot.vertex"), shader_path.slash(L"dot.fragment"));
-#endif
 
         shared_gl_objects.dark_mode_contrast_uniform_location = glGetUniformLocation(shared_gl_objects.rendered_dark_program, "contrast");
         //shared_gl_objects.gamma_uniform_location = glGetUniformLocation(shared_gl_objects.rendered_program, "gamma");
@@ -766,11 +738,7 @@ PdfViewOpenGLWidget::PdfViewOpenGLWidget(DocumentView* document_view, PdfRendere
     creation_time = QDateTime::currentDateTime();
 
     QSurfaceFormat format;
-#ifdef YAVIEW_ANDROID
-    format.setVersion(3, 1);
-#else
     format.setVersion(3, 3);
-#endif
     //    format.setSwapBehavior(QSurfaceFormat::SwapBehavior::SingleBuffer);
     //    format.setSwapInterval(0);
     format.setSamples(4);
@@ -787,7 +755,6 @@ PdfViewOpenGLWidget::PdfViewOpenGLWidget(DocumentView* document_view, PdfRendere
     }
 
     //bookmark_pixmap = QPixmap(":/icons/B.svg");
-    //portal_pixmap = QPixmap(":/end.png");
     bookmark_icon = QIcon(":/icons/B.svg");
     portal_icon = QIcon(":/icons/P.svg");
     bookmark_icon_white = QIcon(":/icons/B_white.svg");

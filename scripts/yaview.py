@@ -379,17 +379,13 @@ class Yaview:
         data = None
         self.run_command("keys", data, focus=focus)
 
-    def keys_user(self, focus=False):
-        data = None
-        self.run_command("keys_user", data, focus=focus)
-
     def prefs(self, focus=False):
         data = None
         self.run_command("prefs", data, focus=focus)
 
-    def prefs_user(self, focus=False):
+    def config(self, focus=False):
         data = None
-        self.run_command("prefs_user", data, focus=focus)
+        self.run_command("config", data, focus=focus)
 
     def import_(self, focus=False):
         data = None
@@ -458,14 +454,6 @@ class Yaview:
     def toggle_window_configuration(self, focus=False):
         data = None
         self.run_command("toggle_window_configuration", data, focus=focus)
-
-    def prefs_user_all(self, focus=False):
-        data = None
-        self.run_command("prefs_user_all", data, focus=focus)
-
-    def keys_user_all(self, focus=False):
-        data = None
-        self.run_command("keys_user_all", data, focus=focus)
 
     def fit_to_page_width_ratio(self, focus=False):
         data = None

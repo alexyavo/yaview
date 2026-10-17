@@ -151,11 +151,7 @@ enum class PaperDownloadFinishedAction {
 // if we inherit from QWidget there are problems on high refresh rate smartphone displays
 struct WindowState;
 
-#ifdef YAVIEW_ANDROID
-class MainWidget : public QQuickWidget {
-#else
 class MainWidget : public QMainWindow {
-#endif
     Q_OBJECT
 public:
     static MainWidget* create_restored_window(MainWidget* sibling, const WindowState& state);
@@ -474,6 +470,9 @@ public:
     void update_selected_bookmark_font_size();
     //bool eventFilter(QObject* obj, QEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;
+    void close_helper_window();
+    // text typed after `:` in the portal helper window (see eventFilter)
+    std::optional<QString> helper_command_text;
     void set_command_textbox_text(const std::wstring& txt);
     void change_selected_highlight_type(char new_type);
     void change_selected_bookmark_text(const std::wstring& new_text);
@@ -694,8 +693,6 @@ public:
     void handle_open_link(const std::wstring& text, bool copy = false);
     void handle_overview_link(const std::wstring& text);
     void handle_portal_to_link(const std::wstring& text);
-    void handle_keys_user_all();
-    void handle_prefs_user_all();
     void handle_portal_to_overview();
     void handle_focus_text(const std::wstring& text);
     void handle_goto_window();
@@ -826,10 +823,6 @@ public:
     std::optional<PdfLink> get_selected_link(const std::wstring& text);
 
     int num_visible_links();
-#ifdef YAVIEW_ANDROID
-    //    void onApplicationStateChanged(Qt::ApplicationState applicationState);
-    bool pending_intents_checked = false;
-#endif
 
 protected:
     TouchTextSelectionButtons* text_selection_buttons_ = nullptr;

@@ -159,7 +159,6 @@ private:
     InputParseTreeNode* current_node = nullptr;
     CommandManager* command_manager;
     std::string number_stack;
-    std::vector<Path> user_key_paths;
 
     std::string get_key_string_from_tree_node_sequence(const std::vector<InputParseTreeNode*> seq) const;
     std::string get_key_name_from_key_code(int key_code) const;
@@ -179,8 +178,6 @@ public:
     std::unique_ptr<Command> get_menu_command(MainWidget* w, QKeyEvent* key_event, bool shift_pressed, bool control_pressed, bool command_pressed, bool alt_pressed);
     void delete_current_parse_tree(InputParseTreeNode* node_to_delete);
 
-    std::optional<Path> get_or_create_user_keys_path();
-    std::vector<Path> get_all_user_keys_paths();
     std::unordered_map<std::string, std::vector<std::string>> get_command_key_mappings() const;
     std::unordered_map<std::string, std::vector<std::string>> get_commands_with_current_prefix() const;
     bool is_on_final_or_root_node() const;

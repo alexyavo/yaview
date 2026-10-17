@@ -1,3 +1,5 @@
+REM the paths below are relative to the repository root
+cd /d "%~dp0.."
 cd mupdf\platform\win32\
 msbuild -maxcpucount mupdf.sln /m /property:Configuration=Debug /property:MultiProcessorCompilation=true
 msbuild -maxcpucount mupdf.sln /m /property:Configuration=Release /property:MultiProcessorCompilation=true
@@ -24,8 +26,6 @@ cp windows_runtime\libssl-1_1-x64.dll yaview-release-windows\libssl-1_1-x64.dll
 cp windows_runtime\libcrypto-1_1-x64.dll yaview-release-windows\libcrypto-1_1-x64.dll
 
 if %1 == portable (
-    cp pdf_viewer\keys_user.config yaview-release-windows\keys_user.config
-    cp pdf_viewer\prefs_user.config yaview-release-windows\prefs_user.config
     7z a yaview-release-windows-portable.zip yaview-release-windows
 
 ) else (

@@ -46,7 +46,6 @@ extern float EPUB_HEIGHT;
 extern Path default_config_path;
 extern Path default_keys_path;
 extern std::vector<Path> user_config_paths;
-extern std::vector<Path> user_keys_paths;
 extern bool TOUCH_MODE;
 extern bool VERBOSE;
 extern float FREETEXT_BOOKMARK_COLOR[3];
@@ -5259,7 +5258,7 @@ public:
 class KeysCommand : public Command {
 public:
     static inline const std::string cname = "keys";
-    static inline const std::string hname = "Open the default keys config file";
+    static inline const std::string hname = "Show the default key bindings (keys.config, read-only)";
     KeysCommand(MainWidget* w) : Command(cname, w) {};
 
     void perform() {
@@ -5269,39 +5268,10 @@ public:
     bool requires_document() { return false; }
 };
 
-class KeysUserCommand : public Command {
-public:
-    static inline const std::string cname = "keys_user";
-    static inline const std::string hname = "Open the default keys_user config file";
-    KeysUserCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        std::optional<Path> key_file_path = widget->input_handler->get_or_create_user_keys_path();
-        if (key_file_path) {
-            open_file(key_file_path.value().get_path(), true);
-        }
-    }
-
-    bool requires_document() { return false; }
-};
-
-class KeysUserAllCommand : public Command {
-public:
-    static inline const std::string cname = "keys_user_all";
-    static inline const std::string hname = "List all user keys config files";
-    KeysUserAllCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->handle_keys_user_all();
-    }
-
-    bool requires_document() { return false; }
-};
-
 class PrefsCommand : public Command {
 public:
     static inline const std::string cname = "prefs";
-    static inline const std::string hname = "Open the default prefs config file";
+    static inline const std::string hname = "Show the default settings (prefs.config, read-only)";
     PrefsCommand(MainWidget* w) : Command(cname, w) {};
 
     void perform() {
@@ -5311,30 +5281,17 @@ public:
     bool requires_document() { return false; }
 };
 
-class PrefsUserCommand : public Command {
+class ConfigFileCommand : public Command {
 public:
-    static inline const std::string cname = "prefs_user";
-    static inline const std::string hname = "Open the default prefs_user config file";
-    PrefsUserCommand(MainWidget* w) : Command(cname, w) {};
+    static inline const std::string cname = "config";
+    static inline const std::string hname = "Open the configuration file (yaview.config)";
+    ConfigFileCommand(MainWidget* w) : Command(cname, w) {};
 
     void perform() {
         std::optional<Path> pref_file_path = widget->config_manager->get_or_create_user_config_file();
         if (pref_file_path) {
             open_file(pref_file_path.value().get_path(), true);
         }
-    }
-
-    bool requires_document() { return false; }
-};
-
-class PrefsUserAllCommand : public Command {
-public:
-    static inline const std::string cname = "prefs_user_all";
-    static inline const std::string hname = "List all user keys config files";
-    PrefsUserAllCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->handle_prefs_user_all();
     }
 
     bool requires_document() { return false; }
@@ -7437,9 +7394,8 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<KeyboardSmartjumpCommand>();
     register_command<KeyboardOverviewCommand>();
     register_command<KeysCommand>();
-    register_command<KeysUserCommand>();
     register_command<PrefsCommand>();
-    register_command<PrefsUserCommand>();
+    register_command<ConfigFileCommand>();
     register_command<MoveVisualMarkDownCommand>();
     register_command<MoveVisualMarkUpCommand>();
     register_command<MoveVisualMarkNextCommand>();
@@ -7454,8 +7410,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<SetFreehandAlphaCommand>();
     register_command<ToggleWindowConfigurationCommand>();
     register_command<ShowPortalWindowCommand>();
-    register_command<PrefsUserAllCommand>();
-    register_command<KeysUserAllCommand>();
     register_command<FitToPageWidthRatioCommand>();
     register_command<SmartJumpUnderCursorCommand>();
     register_command<DownloadPaperUnderCursorCommand>();
@@ -8084,7 +8038,6 @@ InputParseTreeNode* parse_key_config_files(CommandManager* command_manager, cons
 
 InputHandler::InputHandler(const Path& default_path, const std::vector<Path>& user_paths, CommandManager* cm) {
     command_manager = cm;
-    user_key_paths = user_paths;
     reload_config_files(default_path, user_paths);
 }
 
@@ -8252,21 +8205,6 @@ bool InputParseTreeNode::matches(int key, bool shift, bool ctrl, bool cmd, bool 
     return (key == this->command) && (shift == this->shift_modifier) && (ctrl == this->control_modifier) && (cmd == this->command_modifier) && (alt == this->alt_modifier);
 }
 
-std::optional<Path> InputHandler::get_or_create_user_keys_path() {
-    if (user_key_paths.size() == 0) {
-        return {};
-    }
-
-    for (int i = user_key_paths.size() - 1; i >= 0; i--) {
-        if (user_key_paths[i].file_exists()) {
-            return user_key_paths[i];
-        }
-    }
-    user_key_paths.back().file_parent().create_directories();
-    create_file_if_not_exists(user_key_paths.back().get_path());
-    return user_key_paths.back();
-}
-
 std::unordered_map<std::string, std::vector<std::string>> InputHandler::get_command_key_mappings() const {
     std::unordered_map<std::string, std::vector<std::string>> res;
     std::vector<InputParseTreeNode*> prefix;
@@ -8398,18 +8336,6 @@ std::string InputHandler::get_key_string_from_tree_node_sequence(const std::vect
     }
     return res;
 }
-std::vector<Path> InputHandler::get_all_user_keys_paths() {
-    std::vector<Path> res;
-
-    for (int i = user_key_paths.size() - 1; i >= 0; i--) {
-        if (user_key_paths[i].file_exists()) {
-            res.push_back(user_key_paths[i]);
-        }
-    }
-
-    return res;
-}
-
 std::optional<Requirement> Command::next_requirement(MainWidget* widget) {
     return {};
 }

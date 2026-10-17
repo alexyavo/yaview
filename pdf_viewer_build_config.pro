@@ -3,12 +3,8 @@ TARGET = yaview
 VERSION = 2.0.0
 
 INCLUDEPATH += ./pdf_viewer \
-               mupdf/include
-
-!android{
-    INCLUDEPATH += zlib
-}
-          
+               mupdf/include \
+               zlib
 
 QT += core opengl gui widgets network quickwidgets svg texttospeech
 
@@ -68,11 +64,6 @@ HEADERS += \
     pdf_viewer/touchui/TouchGenericButtons.h \
     pdf_viewer/touchui/TouchMainMenu.h
 
-android{
-    DEFINES += YAVIEW_ANDROID
-    QT += core-private
-}
-
 CONFIG(non_portable){
     DEFINES += NON_PORTABLE
 }
@@ -129,13 +120,11 @@ SOURCES += pdf_viewer/book.cpp \
            pdf_viewer/OpenWithApplication.cpp \
            fzf/fzf.c
 
-!android{
-           HEADERS += pdf_viewer/synctex/synctex_parser.h \
+HEADERS += pdf_viewer/synctex/synctex_parser.h \
            pdf_viewer/synctex/synctex_parser_utils.h
-           
-           SOURCES += pdf_viewer/synctex/synctex_parser.c \
+
+SOURCES += pdf_viewer/synctex/synctex_parser.c \
            pdf_viewer/synctex/synctex_parser_utils.c
-}
 
 
 win32{
@@ -170,7 +159,7 @@ win32{
     LIBS += opengl32.lib
 }
 
-unix:!mac:!android {
+unix:!mac {
 
     QMAKE_CXXFLAGS += -std=c++20
 
@@ -218,28 +207,4 @@ mac {
     QMAKE_INFO_PLIST = resources/Info.plist
     LIBS += -framework AppKit
     OBJECTIVE_SOURCES += pdf_viewer/macos_specific.mm
-}
-
-android{
-    !isEmpty(target.path): INSTALLS += target
-    LIBS += -L$$PWD/libs/ -lmupdf_java -lcrypto_3 -lssl_3
-    # ssl libraries downloaded from https://github.com/KDAB/android_openssl/tree/master/ssl_3/arm64-v8a
-    ANDROID_EXTRA_LIBS += $$PWD/libs/libmupdf_java.so $$PWD/libs/libcrypto_3.so $$PWD/libs/libssl_3.so
-
-    DISTFILES += \
-        android/build.gradle \
-        android/gradle.properties \
-        android/gradle/wrapper/gradle-wrapper.jar \
-        android/gradle/wrapper/gradle-wrapper.properties \
-        android/gradlew \
-        android/gradlew.bat \
-        android/res/values/libs.xml\
-        android/AndroidManifest.xml
-
-}
-
-
-contains(ANDROID_TARGET_ARCH,arm64-v8a) {
-    ANDROID_PACKAGE_SOURCE_DIR = \
-        $$PWD/android
 }

@@ -108,8 +108,6 @@ keyboard_overview
 keyboard_select
 keyboard_smart_jump
 keys
-keys_user
-keys_user_all
 link
 load_annotations_file
 load_annotations_file_sync_deleted
@@ -161,8 +159,7 @@ portal_to_definition
 portal_to_link
 portal_to_overview
 prefs
-prefs_user
-prefs_user_all
+config
 prev_chapter
 prev_state
 previous_item

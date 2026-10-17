@@ -99,10 +99,6 @@
 
 #include "main_widget.h"
 
-#ifdef YAVIEW_ANDROID
-#include <QtCore/private/qandroidextras_p.h>
-#endif
-
 extern "C" {
     #include <fzf/fzf.h>
 }
@@ -149,7 +145,6 @@ extern int TAB_BAR_FONT_SIZE;
 extern Path default_config_path;
 extern Path default_keys_path;
 extern std::vector<Path> user_config_paths;
-extern std::vector<Path> user_keys_paths;
 extern Path database_file_path;
 extern Path tutorial_path;
 extern Path last_opened_file_address_path;
@@ -220,8 +215,6 @@ extern std::wstring LEFT_CLICK_SCROLL_DOWN_COMMAND;
 extern float FREETEXT_BOOKMARK_FONT_SIZE;
 extern std::wstring BOOK_SCAN_PATH;
 extern bool USE_RULER_TO_HIGHLIGHT_SYNCTEX_LINE;
-extern std::wstring VOLUME_DOWN_COMMAND;
-extern std::wstring VOLUME_UP_COMMAND;
 extern int DOCUMENTATION_FONT_SIZE;
 extern ScratchPad global_scratchpad;
 extern int NUM_CACHED_PAGES;
@@ -264,8 +257,6 @@ extern std::wstring VISUAL_MARK_NEXT_HOLD_COMMAND;
 extern std::wstring VISUAL_MARK_PREV_TAP_COMMAND;
 extern std::wstring VISUAL_MARK_PREV_HOLD_COMMAND;
 extern bool AUTOMATICALLY_DOWNLOAD_MATCHING_PAPER_NAME;
-extern std::wstring TABLET_PEN_CLICK_COMMAND;
-extern std::wstring TABLET_PEN_DOUBLE_CLICK_COMMAND;
 extern bool ALLOW_HORIZONTAL_DRAG_WHEN_DOCUMENT_IS_SMALL;
 extern float PAGE_SPACE_X;
 extern float PAGE_SPACE_Y;
@@ -983,11 +974,7 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     bool* should_quit_ptr,
     PdfRenderer* pdf_renderer,
     QWidget* parent) :
-#ifdef YAVIEW_ANDROID
-    QQuickWidget(parent),
-#else
     QMainWindow(parent),
-#endif
     mupdf_context(mupdf_context),
     db_manager(db_manager),
     document_manager(document_manager),
@@ -1326,14 +1313,8 @@ MainWidget::MainWidget(fz_context* mupdf_context,
 
                 }
                 else {
-#ifdef YAVIEW_ANDROID
-                    // todo: maybe show a dialog asking the user if they want to open the downloaded document
-                    push_state();
-                    open_document(path.toStdWString());
-#else
                     MainWidget* new_window = handle_new_window();
                     new_window->open_document(path.toStdWString());
-#endif
                 }
             }
 
@@ -1523,13 +1504,9 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     opengl_widget->setAttribute(Qt::WA_TransparentForMouseEvents);
     layout->addLayout(hlayout);
 
-#ifdef YAVIEW_ANDROID
-     setLayout(layout);
-#else
     central_widget->setLayout(layout);
     opengl_widget->stackUnder(status_label);
     setCentralWidget(central_widget);
-#endif
 
     scroll_bar->setMinimum(0);
     scroll_bar->setMaximum(MAX_SCROLLBAR);
@@ -1552,23 +1529,6 @@ MainWidget::MainWidget(fz_context* mupdf_context,
 
     grabGesture(Qt::TapAndHoldGesture, Qt::DontStartGestureOnChildren);
     grabGesture(Qt::PinchGesture, Qt::DontStartGestureOnChildren | Qt::ReceivePartialGestures);
-    QObject::connect((QGuiApplication*)QGuiApplication::instance(), &QGuiApplication::applicationStateChanged, [&](Qt::ApplicationState state) {
-        if ((state == Qt::ApplicationState::ApplicationSuspended) || (state == Qt::ApplicationState::ApplicationInactive)) {
-#ifdef YAVIEW_ANDROID
-            persist(true);
-#endif
-        }
-#ifdef YAVIEW_ANDROID
-        if (state == Qt::ApplicationState::ApplicationActive) {
-            if (!pending_intents_checked) {
-                pending_intents_checked = true;
-                check_pending_intents("");
-            }
-        }
-#endif
-
-        });
-
 #ifdef Q_OS_MACOS
     // only apply titlebar menu if the user has specifically changed it in settings
     if (MACOS_TITLEBAR_COLOR[0] >= 0){
@@ -2145,7 +2105,6 @@ void MainWidget::toggle_mouse_drag_mode() {
 }
 
 void MainWidget::do_synctex_forward_search(const Path& pdf_file_path, const Path& latex_file_path, int line, int column) {
-#ifndef YAVIEW_ANDROID
 
     std::wstring latex_file_path_with_redundant_dot = add_redundant_dot_to_path(latex_file_path.get_path());
 
@@ -2224,7 +2183,6 @@ void MainWidget::do_synctex_forward_search(const Path& pdf_file_path, const Path
         open_document(pdf_file_path);
     }
     synctex_scanner_free(scanner);
-#endif
 }
 
 
@@ -2505,23 +2463,6 @@ void MainWidget::key_event(bool released, QKeyEvent* kevent, bool is_auto_repeat
 
 
     if (released == false) {
-
-#ifdef YAVIEW_ANDROID
-        if (kevent->key() == Qt::Key::Key_VolumeDown) {
-            execute_macro_if_enabled(VOLUME_DOWN_COMMAND);
-        }
-        if (kevent->key() == Qt::Key::Key_VolumeUp) {
-            execute_macro_if_enabled(VOLUME_UP_COMMAND);
-        }
-        if (kevent->key() == Qt::Key::Key_MediaTogglePlayPause){
-            // handle the tablet button
-            execute_macro_if_enabled(TABLET_PEN_CLICK_COMMAND);
-        }
-        if (kevent->key() == Qt::Key::Key_MediaNext){
-            // handle the tablet button
-            execute_macro_if_enabled(TABLET_PEN_DOUBLE_CLICK_COMMAND);
-        }
-#endif
 
 
         if (kevent->key() == Qt::Key::Key_Escape) {
@@ -5027,10 +4968,8 @@ void MainWidget::handle_link_click(const PdfLink& link) {
 void MainWidget::save_auto_config() {
     std::wofstream outfile(auto_config_path.get_path_utf8());
     outfile << get_serialized_configuration_string();
-#ifndef YAVIEW_ANDROID
     outfile << L"\n";
     config_manager->serialize_auto_configs(outfile);
-#endif
     outfile.close();
 }
 
@@ -5085,9 +5024,7 @@ std::wstring MainWidget::get_window_configuration_string() {
 
 void MainWidget::handle_close_event() {
     save_auto_config();
-#ifndef YAVIEW_ANDROID
     persist(true);
-#endif
 
     // we need to delete this here (instead of destructor) to ensure that application
     // closes immediately after the main window is closed
@@ -5488,7 +5425,6 @@ void MainWidget::reload(bool flush) {
 
 std::wstring MainWidget::synctex_under_pos(WindowPos position) {
     std::wstring res = L"";
-#ifndef YAVIEW_ANDROID
     auto [page, doc_x, doc_y] = main_document_view->window_to_document_pos(position);
     std::wstring docpath = main_document_view->get_document()->get_path();
     std::string docpath_utf8 = utf8_encode(docpath);
@@ -5534,7 +5470,7 @@ std::wstring MainWidget::synctex_under_pos(WindowPos position) {
                 QProcess::startDetached(args[0], args.mid(1));
             }
             else {
-                show_error_message(L"inverse_search_command is not set in prefs_user.config");
+                show_error_message(L"inverse_search_command is not set in yaview.config");
             }
 
         }
@@ -5542,7 +5478,6 @@ std::wstring MainWidget::synctex_under_pos(WindowPos position) {
     }
     synctex_scanner_free(scanner);
 
-#endif
     return res;
 }
 
@@ -6036,16 +5971,6 @@ void MainWidget::advance_command(std::unique_ptr<Command> new_command, std::wstr
                 else{
                     file_name = select_command_folder_name(root_dir);
                 }
-#ifdef YAVIEW_ANDROID
-
-                if (file_name.size() > 0 && QString::fromStdWString(file_name).startsWith("content://")) {
-                    if (!QString::fromStdWString(file_name).startsWith("content://com.android.providers.media.documents")){
-                        qDebug() << "yaview: trying to convert " << file_name;
-                        file_name = android_file_uri_from_content_uri(QString::fromStdWString(file_name)).toStdWString();
-                        qDebug() << "yaview: result was " << file_name;
-                    }
-                }
-#endif
                 if (file_name.size() > 0) {
                     pending_command_instance->set_file_requirement(file_name);
                     advance_command(std::move(pending_command_instance));
@@ -6661,15 +6586,7 @@ void MainWidget::handle_open_prev_doc() {
                 opened_docs_names.push_back(path.value_or(L"<ERROR>"));
             }
             else {
-#ifdef YAVIEW_ANDROID
-                std::wstring path_value = path.value();
-                if (path_value.substr(0, 10) == L"content://") {
-                    path_value = android_file_name_from_uri(QString::fromStdWString(path_value)).toStdWString();
-                }
-                opened_docs_names.push_back(Path(path.value()).filename_no_ext().value_or(L"<ERROR>"));
-#else
                 opened_docs_names.push_back(Path(path.value()).filename().value_or(L"<ERROR>"));
-#endif
             }
             opened_docs_hashes.push_back(utf8_encode(doc_hash_));
             opened_docs_actual_names.push_back(actual_doc_name);
@@ -6861,46 +6778,6 @@ void MainWidget::handle_open_link(const std::wstring& text, bool copy) {
         }
     }
     reset_highlight_links();
-}
-
-void MainWidget::handle_keys_user_all() {
-    std::vector<Path> keys_paths = input_handler->get_all_user_keys_paths();
-    std::vector<std::wstring> keys_paths_wstring;
-    for (auto path : keys_paths) {
-        keys_paths_wstring.push_back(path.get_path());
-    }
-
-    set_current_widget(new FilteredSelectWindowClass<std::wstring>(
-        FUZZY_SEARCHING,
-        keys_paths_wstring,
-        keys_paths_wstring,
-        [&](std::wstring* path) {
-            if (path) {
-                open_file(*path, true);
-            }
-        },
-        this));
-    show_current_widget();
-}
-
-void MainWidget::handle_prefs_user_all() {
-    std::vector<Path> prefs_paths = config_manager->get_all_user_config_files();
-    std::vector<std::wstring> prefs_paths_wstring;
-    for (auto path : prefs_paths) {
-        prefs_paths_wstring.push_back(path.get_path());
-    }
-
-    set_current_widget(new FilteredSelectWindowClass<std::wstring>(
-        FUZZY_SEARCHING,
-        prefs_paths_wstring,
-        prefs_paths_wstring,
-        [&](std::wstring* path) {
-            if (path) {
-                open_file(*path, true);
-            }
-        },
-        this));
-    show_current_widget();
 }
 
 void MainWidget::handle_portal_to_overview() {
@@ -7448,13 +7325,6 @@ bool MainWidget::handle_quick_tap(WindowPos click_pos) {
     last_quick_tap_time = now;
     return false;
 }
-
-//void MainWidget::applicationStateChanged(Qt::ApplicationState state){
-//    qDebug() << "application state changed\n";
-//    if ((state == Qt::ApplicationState::ApplicationSuspended) || (state == Qt::ApplicationState::ApplicationInactive)){
-//        persist();
-//    }
-//}
 
 void MainWidget::android_handle_visual_mode() {
     //	last_hold_point
@@ -9257,21 +9127,6 @@ bool MainWidget::execute_macro_if_enabled(std::wstring macro_command_string, QLo
 
 bool MainWidget::ensure_internet_permission() {
 
-#ifdef YAVIEW_ANDROID
-    //    qDebug() << "entered";
-    auto internet_permission_status = QtAndroidPrivate::checkPermission("android.permission.INTERNET").result();
-    //    qDebug() << "checked";
-    //    qDebug() << internet_permission_status;
-    if (internet_permission_status == QtAndroidPrivate::Denied) {
-        //        qDebug() << "was denied";
-        internet_permission_status = QtAndroidPrivate::requestPermission("android.permission.INTERNET").result();
-
-        if (internet_permission_status == QtAndroidPrivate::Denied) {
-            qDebug() << "Could not get internet permission\n";
-        }
-    }
-
-#endif
     return true;
 }
 
@@ -9349,11 +9204,7 @@ void MainWidget::update_selected_bookmark_font_size() {
 TextToSpeechHandler* MainWidget::get_tts() {
     if (tts) return tts;
 
-#ifdef YAVIEW_ANDROID
-    tts = new AndroidTextToSpeechHandler();
-#else
     tts = new QtTextToSpeechHandler();
-#endif
 
 
     //void sayingWord(const QString &word, qsizetype id, qsizetype start, qsizetype length);
@@ -9477,11 +9328,6 @@ TextToSpeechHandler* MainWidget::get_tts() {
             }
         }
         });
-#endif
-
-#ifdef YAVIEW_ANDROID
-        // wait for the tts engine to be initialized
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
 #endif
 
     return tts;
@@ -11038,15 +10884,64 @@ void MainWidget::initialize_helper(){
 }
 
 bool MainWidget::eventFilter(QObject* obj, QEvent* event) {
-    // Zoom keys pressed in the portal helper window zoom it.
-    if ((obj == helper_opengl_widget_) && (event->type() == QEvent::KeyPress)) {
-        std::vector<std::string> command_names = input_handler->get_single_key_command_names(static_cast<QKeyEvent*>(event));
-        if ((command_names.size() == 1) && ((command_names[0] == "zoom_in") || (command_names[0] == "zoom_out"))) {
-            helper_opengl_widget_->zoom_helper(command_names[0] == "zoom_in");
-            return true;
+    // Keys pressed in the portal helper window: the zoom keys zoom it; Cmd+W (close_tab), its toggle key (F12)
+    // and a typed `:q` + Enter close it. Everything else is ignored there.
+    if (obj == helper_opengl_widget_) {
+        if (event->type() == QEvent::Hide) {
+            helper_command_text = {};
+        }
+        if (event->type() == QEvent::KeyPress) {
+            QKeyEvent* key_event = static_cast<QKeyEvent*>(event);
+            if (helper_command_text) {
+                // typing after `:` (not shown anywhere); only the close_tab command and its `q` alias are understood
+                if ((key_event->key() == Qt::Key_Return) || (key_event->key() == Qt::Key_Enter)) {
+                    QString text = helper_command_text.value();
+                    helper_command_text = {};
+                    if ((text == "q") || (text == "close_tab")) {
+                        close_helper_window();
+                    }
+                }
+                else if (key_event->key() == Qt::Key_Escape) {
+                    helper_command_text = {};
+                }
+                else if (key_event->key() == Qt::Key_Backspace) {
+                    if (helper_command_text->isEmpty()) {
+                        helper_command_text = {};
+                    }
+                    else {
+                        helper_command_text->chop(1);
+                    }
+                }
+                else {
+                    helper_command_text.value() += key_event->text();
+                }
+                return true;
+            }
+
+            std::vector<std::string> command_names = input_handler->get_single_key_command_names(key_event);
+            if (command_names.size() == 1) {
+                const std::string& name = command_names[0];
+                if ((name == "zoom_in") || (name == "zoom_out")) {
+                    helper_opengl_widget_->zoom_helper(name == "zoom_in");
+                    return true;
+                }
+                if ((name == "close_tab") || (name == "toggle_window_configuration")) {
+                    close_helper_window();
+                    return true;
+                }
+                if (name == "command") {
+                    helper_command_text = QString();
+                    return true;
+                }
+            }
         }
     }
     return QWidget::eventFilter(obj, event);
+}
+
+void MainWidget::close_helper_window() {
+    apply_window_params_for_one_window_mode();
+    get_top_level_widget(opengl_widget)->activateWindow();
 }
 
 PdfViewOpenGLWidget* MainWidget::helper_opengl_widget(){
@@ -12305,10 +12200,7 @@ QMenuBar* MainWidget::create_main_menu_bar(){
         "Preferences",
         "",
         {
-            new MenuNode{ "prefs_user", "", {} },
-            new MenuNode{ "keys_user", "", {} },
-            new MenuNode{ "prefs_user_all", "", {} },
-            new MenuNode{ "keys_user_all", "", {} },
+            new MenuNode{ "config", "", {} },
             new MenuNode{ "keys", "", {} },
             new MenuNode{ "prefs", "", {} },
         }

@@ -1,27 +1,7 @@
 <RCC>
     <qresource prefix="/">
-        <file>tutorial.pdf</file>
         <file>pdf_viewer/keys.config</file>
         <file>pdf_viewer/prefs.config</file>
-        <file>pdf_viewer/shaders/custom_colors.fragment</file>
-        <file>pdf_viewer/shaders/dark_mode.fragment</file>
-        <file>pdf_viewer/shaders/debug.fragment</file>
-        <file>pdf_viewer/shaders/highlight.fragment</file>
-        <file>pdf_viewer/shaders/separator.fragment</file>
-        <file>pdf_viewer/shaders/simple.fragment</file>
-        <file>pdf_viewer/shaders/simple.vertex</file>
-        <file>pdf_viewer/shaders/stencil.fragment</file>
-        <file>pdf_viewer/shaders/stencil.vertex</file>
-        <file>pdf_viewer/shaders/unrendered_page.fragment</file>
-        <file>pdf_viewer/shaders/vertical_bar.fragment</file>
-        <file>pdf_viewer/shaders/vertical_bar_dark.fragment</file>
-        <file>pdf_viewer/shaders/line.vertex</file>
-        <file>pdf_viewer/shaders/line.fragment</file>
-        <file>pdf_viewer/shaders/compiled_drawing.vertex</file>
-        <file>pdf_viewer/shaders/dot.vertex</file>
-        <file>pdf_viewer/shaders/dot.fragment</file>
-        <file>pdf_viewer/shaders/compiled_line.fragment</file>
-        <file>begin.png</file>
         <file>pdf_viewer/touchui/TouchSlider.qml</file>
         <file>pdf_viewer/touchui/TouchCheckbox.qml</file>
         <file>pdf_viewer/touchui/TouchListView.qml</file>
@@ -105,7 +85,6 @@
         <file>icons/save.svg</file>
         <file>icons/load.svg</file>
         <file>icons/move.svg</file>
-        <file>end.png</file>
         <file>data/embedding.npy</file>
         <file>data/linear.npy</file>
         <file>data/command_docs.json</file>

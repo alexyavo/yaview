@@ -43,7 +43,7 @@ make -j"$jobs"
 resources_dir="$app_path/Contents/Resources"
 mkdir -p "$resources_dir/shaders"
 ditto "$repo_dir/pdf_viewer/shaders" "$resources_dir/shaders"
-for config_name in prefs.config prefs_user.config keys.config keys_user.config; do
+for config_name in prefs.config keys.config; do
   cp "$repo_dir/pdf_viewer/$config_name" "$resources_dir/$config_name"
 done
 cp "$repo_dir/tutorial.pdf" "$resources_dir/tutorial.pdf"

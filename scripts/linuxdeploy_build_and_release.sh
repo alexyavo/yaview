@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -e
+# the paths below are relative to the repository root
+cd "$(dirname "$0")/.."
 
 if [ -z ${MAKE_PARALLEL+x} ]; then export MAKE_PARALLEL=$(nproc); else echo "MAKE_PARALLEL defined"; fi
 echo "MAKE_PARALLEL set to $MAKE_PARALLEL"
@@ -35,9 +37,7 @@ rm -rf yaview-release 2> /dev/null
 make install INSTALL_ROOT=yaview-release -j$MAKE_PARALLEL
 
 cp pdf_viewer/prefs.config yaview-release/usr/bin/prefs.config
-cp pdf_viewer/prefs_user.config yaview-release/usr/share/prefs_user.config
 cp pdf_viewer/keys.config yaview-release/usr/bin/keys.config
-cp pdf_viewer/keys_user.config yaview-release/usr/share/keys_user.config
 cp -r pdf_viewer/shaders yaview-release/usr/bin/shaders
 cp tutorial.pdf yaview-release/usr/bin/tutorial.pdf
 

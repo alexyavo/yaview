@@ -1,5 +1,5 @@
 '''
-example `prefs_user.config`:
+example `yaview.config` settings:
     # start reading from highlighted line
     execute_command_a python D:\labs2\tts\second-try\server_read.py "%1" %4 "%6"
     # stop reading
@@ -11,13 +11,13 @@ example `prefs_user.config`:
     # start the tts server (should be running before executing previous commands)
     execute_command_e python D:\labs2\tts\second-try\manager_server.py
 
-example `keys_user.config`:
-    execute_command_a r
-    execute_command_b <S-r>
-    execute_command_e <C-<f5>>
+example `yaview.config` key bindings:
+    keymap execute_command_a r
+    keymap execute_command_b <S-r>
+    keymap execute_command_e <C-<f5>>
     # when we manually move the line, stop following it
-    move_visual_mark_down;execute_command_d j
-    move_visual_mark_up;execute_command_d k
+    keymap move_visual_mark_down;execute_command_d j
+    keymap move_visual_mark_up;execute_command_d k
 '''
 
 from flask import Flask

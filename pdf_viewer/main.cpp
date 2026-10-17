@@ -7,10 +7,6 @@
 #include <utility>
 #include <filesystem>
 
-#ifdef YAVIEW_ANDROID
-#include <QtCore/private/qandroidextras_p.h>
-#endif
-
 #include <QDebug>
 #include <qapplication.h>
 #include <qpushbutton.h>
@@ -92,22 +88,13 @@ std::ofstream LOG_FILE;
 Path standard_data_path;
 Path default_config_path(L"");
 Path default_keys_path(L"");
+// the single user configuration file (see configure_paths); a vector because ConfigManager takes a list
 std::vector<Path> user_config_paths = {};
-std::vector<Path> user_keys_paths = {};
 Path database_file_path(L"");
 Path local_database_file_path(L"");
 Path global_database_file_path(L"");
 
-#ifdef YAVIEW_MOBILE
-Path tutorial_path(L":/tutorial.pdf");
-Path android_config_path(L"");
-#else
 Path tutorial_path(L"");
-#endif
-
-#ifdef YAVIEW_ANDROID
-extern Path android_config_path;
-#endif
 
 Path last_opened_file_address_path(L"");
 Path shader_path(L"");
@@ -196,34 +183,7 @@ QStringList convert_arguments(QStringList input_args) {
     return output_args;
 }
 
-#ifdef YAVIEW_ANDROID
-void configure_paths_android() {
-
-    char* APPDIR = std::getenv("XDG_CONFIG_HOME");
-    Path linux_home_path(QDir::homePath().toStdWString());
-
-    if (!APPDIR) {
-        APPDIR = std::getenv("HOME");
-    }
-
-    standard_data_path = Path(utf8_decode(APPDIR));
-    standard_data_path = standard_data_path.slash(L".local").slash(L"share").slash(L"Yaview");
-    standard_data_path.create_directories();
-
-    database_file_path = standard_data_path.slash(L"test.db");
-    last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
-    local_database_file_path = standard_data_path.slash(L"local.db");
-    global_database_file_path = standard_data_path.slash(L"shared.db");
-    android_config_path = standard_data_path.slash(L"saved.config");
-    tutorial_path = Path(L":/tutorial.pdf");
-    downloaded_papers_path = standard_data_path.slash(L"downloads");
-}
-#endif
-
 void configure_paths() {
-#ifdef YAVIEW_ANDROID
-    configure_paths_android();
-#else
 
 
     Path parent_path(QCoreApplication::applicationDirPath().toStdWString());
@@ -238,18 +198,9 @@ void configure_paths() {
     default_config_path = mac_resources_path.slash(L"prefs.config");
     default_keys_path = mac_resources_path.slash(L"keys.config");
     tutorial_path = mac_resources_path.slash(L"tutorial.pdf");
-    Path mac_home_path(QDir::homePath().toStdWString());
-    Path mac_standard_config_path = mac_home_path.slash(L".config").slash(L"yaview");
-    user_keys_paths.push_back(mac_standard_config_path.slash(L"keys_user.config"));
-    user_config_paths.push_back(mac_standard_config_path.slash(L"prefs_user.config"));
 #endif
 
 #ifdef Q_OS_LINUX
-    QStringList all_config_paths = QStandardPaths::standardLocations(QStandardPaths::AppConfigLocation);
-    for (int i = all_config_paths.size() - 1; i >= 0; i--) {
-        user_config_paths.push_back(Path(all_config_paths.at(i).toStdWString()).slash(L"prefs_user.config"));
-        user_keys_paths.push_back(Path(all_config_paths.at(i).toStdWString()).slash(L"keys_user.config"));
-    }
 
 #ifdef LINUX_STANDARD_PATHS
     Path home_path(QDir::homePath().toStdWString());
@@ -269,7 +220,6 @@ void configure_paths() {
     shader_path = read_only_data_path.slash(L"shaders");
 #else
     char* APPDIR = std::getenv("XDG_DATA_HOME");
-    Path linux_home_path(QDir::homePath().toStdWString());
 
     if (!APPDIR) {
         APPDIR = std::getenv("HOME");
@@ -283,21 +233,12 @@ void configure_paths() {
     standard_data_path.create_directories();
 
     default_config_path = parent_path.slash(L"prefs.config");
-    //user_config_path = standard_data_path.slash(L"prefs_user.config");
-    user_config_paths.push_back(standard_data_path.slash(L"prefs_user.config"));
     default_keys_path = parent_path.slash(L"keys.config");
-    user_keys_paths.push_back(standard_data_path.slash(L"keys_user.config"));
     database_file_path = standard_data_path.slash(L"test.db");
     local_database_file_path = standard_data_path.slash(L"local.db");
     global_database_file_path = standard_data_path.slash(L"shared.db");
     tutorial_path = standard_data_path.slash(L"tutorial.pdf");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
-
-    Path linux_standard_config_path = linux_home_path.slash(L".config").slash(L"yaview");
-    //user_keys_paths.push_back(mac_standard_config_path.slash(L"keys_user.config"));
-    //user_config_paths.push_back(mac_standard_config_path.slash(L"prefs_user.config"));
-    user_keys_paths.push_back(linux_standard_config_path.slash(L"keys_user.config"));
-    user_config_paths.push_back(linux_standard_config_path.slash(L"prefs_user.config"));
 
     if (!tutorial_path.file_exists()) {
         copy_file(parent_path.slash(L"tutorial.pdf"), tutorial_path);
@@ -308,7 +249,6 @@ void configure_paths() {
     //install_app(exe_path.c_str());
 #endif
     standard_data_path = Path(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).at(0).toStdWString());
-    QStringList all_config_paths = QStandardPaths::standardLocations(QStandardPaths::AppConfigLocation);
 
     standard_data_path.create_directories();
 
@@ -319,19 +259,11 @@ void configure_paths() {
 #endif
 
 #if defined(NON_PORTABLE) || defined(Q_OS_MACOS)
-    user_config_paths.push_back(standard_data_path.slash(L"prefs_user.config"));
-    user_keys_paths.push_back(standard_data_path.slash(L"keys_user.config"));
-    for (int i = all_config_paths.size() - 1; i > 0; i--) {
-        user_config_paths.push_back(Path(all_config_paths.at(i).toStdWString()).slash(L"prefs_user.config"));
-        user_keys_paths.push_back(Path(all_config_paths.at(i).toStdWString()).slash(L"keys_user.config"));
-    }
     database_file_path = standard_data_path.slash(L"test.db");
     local_database_file_path = standard_data_path.slash(L"local.db");
     global_database_file_path = standard_data_path.slash(L"shared.db");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
 #else
-    user_config_paths.push_back(parent_path.slash(L"prefs_user.config"));
-    user_keys_paths.push_back(parent_path.slash(L"keys_user.config"));
     database_file_path = parent_path.slash(L"test.db");
     local_database_file_path = parent_path.slash(L"local.db");
     global_database_file_path = parent_path.slash(L"shared.db");
@@ -340,9 +272,17 @@ void configure_paths() {
 
 #endif
     auto_config_path = standard_data_path.slash(L"auto.config");
-    // user_config_paths.insert(user_config_paths.begin(), auto_config_path);
-    downloaded_papers_path = standard_data_path.slash(L"downloads");
+
+    // One user configuration file (the user's request): settings, `keymap <command> <keys>` lines and custom
+    // commands. The default prefs.config and keys.config ship with the app and are read first.
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    user_config_paths = { Path(QDir::homePath().toStdWString()).slash(L".config").slash(L"yaview").slash(L"yaview.config") };
+#elif defined(NON_PORTABLE)
+    user_config_paths = { standard_data_path.slash(L"yaview.config") };
+#else
+    user_config_paths = { parent_path.slash(L"yaview.config") };
 #endif
+    downloaded_papers_path = standard_data_path.slash(L"downloads");
 
 }
 
@@ -357,9 +297,17 @@ void verify_config_paths() {
     for (size_t i = 0; i < user_config_paths.size(); i++) {
         LOG(std::wcout << L"user_config_path: [ " << i << " ] " << user_config_paths[i] << L"\n");
     }
-    for (size_t i = 0; i < user_keys_paths.size(); i++) {
-        LOG(std::wcout << L"user_keys_path: [ " << i << " ] " << user_keys_paths[i] << L"\n");
-    }
+}
+
+// Creates the user configuration file on first start, so there is always one file to edit.
+void create_user_config_file() {
+    Path path = user_config_paths[0];
+    if (path.file_exists()) return;
+
+    path.file_parent().create_directories();
+    std::wofstream file(path.get_path_utf8());
+    file << L"# yaview configuration. Settings: `<name> <value>`. Key bindings: `keymap <command> <keys>`.\n"
+        << L"# Every setting and its default: https://github.com/alexyavo/yaview#configuration\n";
 }
 
 void verify_paths() {
@@ -534,13 +482,7 @@ MainWidget* handle_args(const QStringList& arguments, QLocalSocket* origin=nullp
     pdf_file_name = strip_uri(pdf_file_name, &page);
 
     if ((pdf_file_name.size() > 0) && (!QFile::exists(QString::fromStdWString(pdf_file_name)))) {
-#ifdef YAVIEW_ANDROID
-        if (!((pdf_file_name[0] == ':') || (pdf_file_name.substr(0, 2) == L"/:"))) {
-            return nullptr;
-        }
-#else
         return nullptr;
-#endif
     }
 
     MainWidget* target_window = nullptr;
@@ -672,18 +614,6 @@ int main(int argc, char* args[]) {
     SEARCH_URLS['s' - 'a'] = L"https://www.google.com/search?q=";
     SEARCH_URLS['c' - 'a'] = L"https://scholar.google.com/scholar?q=";
     SEARCH_URLS['g' - 'a'] = L"https://www.google.com/search?q=";
-#ifdef YAVIEW_ANDROID
-
-    auto r = QtAndroidPrivate::checkPermission("android.permission.WRITE_EXTERNAL_STORAGE").result();
-    if (r == QtAndroidPrivate::Denied) {
-        r = QtAndroidPrivate::requestPermission("android.permission.WRITE_EXTERNAL_STORAGE").result();
-
-        if (r == QtAndroidPrivate::Denied) {
-            qDebug() << "Could not get storage permission\n";
-        }
-    }
-
-#endif
 
     if (has_arg(argc, args, "--version")) {
         std::cout << "yaview " << APPLICATION_VERSION << "\n";
@@ -703,11 +633,7 @@ int main(int argc, char* args[]) {
     //load_npy(":/data/linear.npy", linear_weights, &nrows, &ncols);
 
     QSurfaceFormat format;
-#ifdef YAVIEW_ANDROID
-    format.setVersion(3, 1);
-#else
     format.setVersion(3, 3);
-#endif
 
     //    auto behaviour = format.swapBehavior();
     //    format.setSwapBehavior(QSurfaceFormat::SwapBehavior::SingleBuffer);
@@ -749,13 +675,10 @@ int main(int argc, char* args[]) {
 
     configure_paths();
     verify_config_paths();
+    create_user_config_file();
 
 
-#ifdef YAVIEW_ANDROID
-    ConfigManager config_manager(android_config_path, auto_config_path, user_config_paths);
-#else
     ConfigManager config_manager(default_config_path, auto_config_path, user_config_paths);
-#endif
     CommandManager* command_manager = new CommandManager(&config_manager);
 
     if (PAPERS_FOLDER_PATH.size() > 0) {
@@ -782,7 +705,6 @@ int main(int argc, char* args[]) {
         use_single_instance = false;
     }
 
-#ifndef YAVIEW_ANDROID
     std::string instance_name_string = "yaview";
     char* instance_name = get_argv_value(argc, args, "--instance-name");
 
@@ -804,13 +726,6 @@ int main(int argc, char* args[]) {
         std::wcout << utf8_decode(res);
         return 0;
     }
-#endif
-
-#ifdef YAVIEW_ANDROID
-    if (VOLUME_UP_COMMAND.size() > 0 || VOLUME_DOWN_COMMAND.size() > 0){
-        qputenv("QT_ANDROID_VOLUME_KEYS", "1");
-    }
-#endif
 
 
     QCoreApplication::setApplicationName(QString::fromStdWString(APPLICATION_NAME));
@@ -867,7 +782,8 @@ int main(int argc, char* args[]) {
     pdf_renderer->start_threads();
 
     qDebug() << "YAVIEW";
-    InputHandler input_handler(default_keys_path, user_keys_paths, command_manager);
+    // key bindings in the user configuration file are `keymap` lines, read by the ConfigManager
+    InputHandler input_handler(default_keys_path, {}, command_manager);
 
     std::vector<std::pair<std::wstring, std::wstring>> prev_path_hash_pairs;
     db_manager.get_prev_path_hash_pairs(prev_path_hash_pairs);
@@ -880,21 +796,19 @@ int main(int argc, char* args[]) {
     add_paths_to_file_system_watcher(pref_file_watcher, default_config_path, user_config_paths);
 
     QFileSystemWatcher key_file_watcher;
-    add_paths_to_file_system_watcher(key_file_watcher, default_keys_path, user_keys_paths);
+    add_paths_to_file_system_watcher(key_file_watcher, default_keys_path, {});
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
 
     MainWidget* main_widget = new MainWidget(mupdf_context, &db_manager, &document_manager, &config_manager, command_manager, &input_handler, &checksummer, &quit, pdf_renderer);
     windows.push_back(main_widget);
 
-#ifndef YAVIEW_ANDROID
     guard.on_delete = std::move([&](QLocalSocket* deleted_socket) {
         if (windows.size() > 0) {
             windows[0]->on_socket_deleted(deleted_socket);
         }
         //main_widget->on_socket_deleted(deleted_socket);
         });
-#endif
 
     if (DEFAULT_DARK_MODE && !USE_SYSTEM_THEME) {
         main_widget->toggle_dark_mode();
@@ -905,7 +819,6 @@ int main(int argc, char* args[]) {
     NewFileChecker new_file_checker(PAPERS_FOLDER_PATH, main_widget);
 
 
-#ifndef YAVIEW_ANDROID
     if (guard.isPrimary()) {
         QObject::connect(&guard, &RunGuard::messageReceived, [&main_widget](const QByteArray& message, QLocalSocket* socket) {
             QStringList args = deserialize_string_array(message);
@@ -923,7 +836,6 @@ int main(int argc, char* args[]) {
             }
             });
     }
-#endif
 
 
     main_widget->topLevelWidget()->resize(500, 500);
@@ -949,13 +861,12 @@ int main(int argc, char* args[]) {
 
     //main_widget->run_multiple_commands(STARTUP_COMMANDS);
 
-    // live reload the config files, no need to live reload on android because we are not changing config files anyway
-#ifndef YAVIEW_ANDROID
+    // live reload the config files
     QObject::connect(&pref_file_watcher, &QFileSystemWatcher::fileChanged, [&]() {
 
         std::vector<std::string> changed_config_file_names;
         config_manager.deserialize(&changed_config_file_names, default_config_path, auto_config_path, user_config_paths);
-        input_handler.reload_config_files(default_keys_path, user_keys_paths);
+        input_handler.reload_config_files(default_keys_path, {});
 
         ConfigFileChangeListener::notify_config_file_changed(&config_manager);
         for (auto window : windows) {
@@ -966,10 +877,9 @@ int main(int argc, char* args[]) {
         });
 
     QObject::connect(&key_file_watcher, &QFileSystemWatcher::fileChanged, [&]() {
-        input_handler.reload_config_files(default_keys_path, user_keys_paths);
-        add_paths_to_file_system_watcher(key_file_watcher, default_keys_path, user_keys_paths);
+        input_handler.reload_config_files(default_keys_path, {});
+        add_paths_to_file_system_watcher(key_file_watcher, default_keys_path, {});
         });
-#endif
 
 
     if (SHOULD_CHECK_FOR_LATEST_VERSION_ON_STARTUP) {

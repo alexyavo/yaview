@@ -3592,23 +3592,11 @@ std::wstring Document::get_addtional_yaview_file_path(QString type) {
 
 std::wstring Document::get_drawings_file_path() {
     Path path = Path(file_name);
-#ifdef YAVIEW_ANDROID
-    if (file_name == L":/tutorial.pdf") {
-        QString parent_path = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).at(0);
-        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.yaview.drawings").get_path();
-    }
-#endif
     return get_addtional_yaview_file_path("drawings");
 }
 
 std::wstring Document::get_scratchpad_file_path() {
     Path path = Path(file_name);
-#ifdef YAVIEW_ANDROID
-    if (file_name == L":/tutorial.pdf") {
-        QString parent_path = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).at(0);
-        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.yaview.scratchpad").get_path();
-    }
-#endif
     return get_addtional_yaview_file_path("scratchpad");
 }
 
@@ -3635,12 +3623,6 @@ bool Document::annotations_file_is_newer_than_database() {
 
 std::wstring Document::get_annotations_file_path() {
     Path path = Path(file_name);
-#ifdef YAVIEW_ANDROID
-    if (file_name == L":/tutorial.pdf") {
-        QString parent_path = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).at(0);
-        return Path(parent_path.toStdWString()).slash(L"tutorial.pdf.yaview.annotations").get_path();
-    }
-#endif
     return get_addtional_yaview_file_path("annotations");
 }
 

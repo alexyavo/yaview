@@ -4,7 +4,7 @@ Requires the following python packages to be installed:
 * PyPaperBot: https://github.com/ferru97/PyPaperBot
 * habanero: https://github.com/sckott/habanero
 
-Here is an example `prefs_user.config` file which uses this script:
+Here is an example `yaview.config` which uses this script:
 
     execute_command_l python /path/to/paper_downloader.py "%{yaview_path}" "%{paper_name}"
     control_click_command execute_command_l

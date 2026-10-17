@@ -12,7 +12,7 @@ Run the following commands to install dependencies, clone the repository and com
 sudo dnf install qt5-qtbase-devel qt5-qtbase-static qt5-qt3d-devel harfbuzz-devel
 git clone --recursive https://github.com/alexyavo/yaview
 cd yaview
-./build_linux.sh
+./scripts/build_linux.sh
 ```
 
 ### Generic distribution
@@ -27,7 +27,7 @@ sudo apt install libharfbuzz-dev
 ```
 git clone --recursive https://github.com/alexyavo/yaview
 cd yaview
-./build_linux.sh
+./scripts/build_linux.sh
 ```
 
 ## Windows
@@ -37,7 +37,7 @@ cd yaview
 ```
 git clone --recursive https://github.com/alexyavo/yaview
 cd yaview
-build_windows.bat
+scripts\build_windows.bat
 ```
 
 ## Mac
@@ -59,9 +59,9 @@ export PATH="/path/to/qt/6.8.2/macos/bin:$PATH"
 ```
 git clone --recursive https://github.com/alexyavo/yaview
 cd yaview
-chmod +x build_mac.sh
+chmod +x scripts/build_mac.sh
 setopt PIPE_FAIL PRINT_EXIT_VALUE ERR_RETURN SOURCE_TRACE XTRACE
-MAKE_PARALLEL=8 ./build_mac.sh
+MAKE_PARALLEL=8 ./scripts/build_mac.sh
 
 mv build/yaview.app /Applications/
 sudo codesign --force --sign - --deep /Applications/yaview.app

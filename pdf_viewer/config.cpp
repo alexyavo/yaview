@@ -53,17 +53,9 @@ bool RESTORE_ALL_WINDOWS_ON_STARTUP = false;
 bool DISABLE_CURSOR_BLINKING = false;
 bool FREE_TOUCHPAD_MOVEMENT = false;
 
-#ifdef YAVIEW_MOBILE
-bool TOUCH_MODE = true;
-#else
 bool TOUCH_MODE = false;
-#endif
 
-#ifdef YAVIEW_MOBILE
-bool SLICED_RENDERING = true;
-#else
 bool SLICED_RENDERING = false;
-#endif
 int NUM_V_SLICES = 5;
 int NUM_H_SLICES = 1;
 bool SHOULD_RENDER_PDF_ANNOTATIONS = true;
@@ -94,13 +86,8 @@ std::wstring PERIODIC_COMMANDS = L"";
 std::wstring MIDDLE_CLICK_SEARCH_ENGINE = L"s";
 std::wstring SHIFT_MIDDLE_CLICK_SEARCH_ENGINE = L"l";
 std::wstring PAPERS_FOLDER_PATH = L"";
-#ifndef YAVIEW_MOBILE
 std::wstring STATUS_BAR_FORMAT = L"[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{highlight}%{freehand_drawing}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}";
 std::wstring RIGHT_STATUS_BAR_FORMAT = L"";
-#else
-std::wstring STATUS_BAR_FORMAT = L"# %{current_page} / %{num_pages}%{search_results}%{search_progress}%{link_status}%{indexing}%{current_requirement_desc}";
-std::wstring RIGHT_STATUS_BAR_FORMAT = L"%{auto_name}";
-#endif
 
 float BLACK_COLOR[3] = { 0.0f, 0.0f, 0.0f };
 float HIGHLIGHT_COLORS[26 * 3] = { \
@@ -195,11 +182,7 @@ bool ALLOW_HORIZONTAL_DRAG_WHEN_DOCUMENT_IS_SMALL = false;
 bool INVERT_SELECTED_TEXT = false;
 bool IGNORE_SCROLL_EVENTS = false;
 
-#ifdef YAVIEW_MOBILE
-std::wstring STARTUP_COMMANDS = L"toggle_mouse_drag_mode;toggle_fullscreen";
-#else
 std::wstring STARTUP_COMMANDS = L"";
-#endif
 
 bool ALIGN_LINK_DEST_TO_TOP = false;
 int MAX_TAB_COUNT = 100;
@@ -220,11 +203,7 @@ bool FORCE_CUSTOM_LINE_ALGORITHM = false;
 float OVERVIEW_SIZE[2] = { 0.8f, 0.4f };
 float OVERVIEW_OFFSET[2] = { 0.0f, 0.0f };
 bool IGNORE_WHITESPACE_IN_PRESENTATION_MODE = false;
-#ifdef YAVIEW_MOBILE
-bool EXACT_HIGHLIGHT_SELECT = true;
-#else
 bool EXACT_HIGHLIGHT_SELECT = false;
-#endif
 bool SHOW_DOC_PATH = false;
 float FASTREAD_OPACITY = 0.5f;
 bool SHOULD_WARN_ABOUT_USER_KEY_OVERRIDE = true;
@@ -256,11 +235,7 @@ std::wstring CONTEXT_MENU_ITEMS_FOR_BOOKMARKS = L"delete_visible_annotation|edit
 std::wstring CONTEXT_MENU_ITEMS_FOR_OVERVIEW = L"";
 
 bool RIGHT_CLICK_CONTEXT_MENU = false;
-#ifdef YAVIEW_MOBILE
-int NUM_CACHED_PAGES = 3;
-#else
 int NUM_CACHED_PAGES = 5;
-#endif
 
 float PAGE_SEPARATOR_WIDTH = 0.0f;
 float PAGE_SEPARATOR_COLOR[3] = { 0.9f, 0.9f, 0.9f };
@@ -368,16 +343,10 @@ std::wstring CONTROL_RIGHT_CLICK_COMMAND = L"";
 std::wstring ALT_CLICK_COMMAND = L"";
 std::wstring ALT_RIGHT_CLICK_COMMAND = L"";
 std::wstring HOLD_MIDDLE_CLICK_COMMAND = L"download_paper_under_cursor";
-std::wstring TABLET_PEN_CLICK_COMMAND = L"[s]show_touch_draw_controls;[r]move_visual_mark_next";
 std::wstring RIGHT_CLICK_SCROLL_UP_COMMAND = L"";
 std::wstring RIGHT_CLICK_SCROLL_DOWN_COMMAND = L"";
 std::wstring LEFT_CLICK_SCROLL_UP_COMMAND = L"";
 std::wstring LEFT_CLICK_SCROLL_DOWN_COMMAND = L"";
-//std::wstring TABLET_PEN_CLICK_COMMAND = L"[s]show_touch_main_menu;[r]move_visual_mark_next";
-//std::wstring TABLET_PEN_DOUBLE_CLICK_COMMAND = L"toggle_scratchpad_mode";
-std::wstring TABLET_PEN_DOUBLE_CLICK_COMMAND = L"load_scratchpad";
-std::wstring VOLUME_DOWN_COMMAND = L"";
-std::wstring VOLUME_UP_COMMAND = L"";
 
 std::wstring BACK_RECT_TAP_COMMAND = L"prev_state";
 std::wstring BACK_RECT_HOLD_COMMAND = L"goto_mark";
@@ -391,11 +360,7 @@ std::wstring VISUAL_MARK_PREV_TAP_COMMAND = L"";
 std::wstring VISUAL_MARK_PREV_HOLD_COMMAND = L"";
 std::wstring MIDDLE_LEFT_RECT_TAP_COMMAND = L"";
 std::wstring MIDDLE_LEFT_RECT_HOLD_COMMAND = L"";
-#ifdef YAVIEW_MOBILE
-std::wstring MIDDLE_RIGHT_RECT_TAP_COMMAND = L"overview_definition";
-#else
 std::wstring MIDDLE_RIGHT_RECT_TAP_COMMAND = L"";
-#endif
 std::wstring MIDDLE_RIGHT_RECT_HOLD_COMMAND = L"";
 
 
@@ -1125,14 +1090,10 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_macro(L"control_click_command", &CONTROL_CLICK_COMMAND);
     add_macro(L"hold_middle_click_command", &HOLD_MIDDLE_CLICK_COMMAND);
     add_macro(L"back_rect_tap_command", &BACK_RECT_TAP_COMMAND);
-    add_macro(L"tablet_pen_click_command", &TABLET_PEN_CLICK_COMMAND);
     add_macro(L"right_click_scroll_up_command", &RIGHT_CLICK_SCROLL_UP_COMMAND);
     add_macro(L"right_click_scroll_down_command", &RIGHT_CLICK_SCROLL_DOWN_COMMAND);
     add_macro(L"left_click_scroll_up_command", &LEFT_CLICK_SCROLL_UP_COMMAND);
     add_macro(L"left_click_scroll_down_command", &LEFT_CLICK_SCROLL_DOWN_COMMAND);
-    add_macro(L"tablet_pen_double_click_command", &TABLET_PEN_DOUBLE_CLICK_COMMAND);
-    add_macro(L"volume_down_command", &VOLUME_DOWN_COMMAND);
-    add_macro(L"volume_down_command", &VOLUME_UP_COMMAND);
     add_macro(L"back_rect_hold_command", &BACK_RECT_HOLD_COMMAND);
     add_macro(L"forward_rect_tap_command", &FORWARD_RECT_TAP_COMMAND);
     add_macro(L"forward_rect_hold_command", &FORWARD_RECT_HOLD_COMMAND);
@@ -1214,19 +1175,12 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
 }
 
 void ConfigManager::persist_config() {
-#ifdef YAVIEW_ANDROID
-    serialize(android_config_path);
-#else
     //Path path(L"test.config");
     //serialize(path);
-#endif
 
 }
 
 void ConfigManager::restore_default() {
-#ifdef YAVIEW_ANDROID
-    clear_file(android_config_path);
-#endif
 }
 
 void ConfigManager::clear_file(const Path& path) {
@@ -1459,16 +1413,6 @@ std::optional<Path> ConfigManager::get_or_create_user_config_file() {
     user_config_paths.back().file_parent().create_directories();
     create_file_if_not_exists(user_config_paths.back().get_path());
     return user_config_paths.back();
-}
-
-std::vector<Path> ConfigManager::get_all_user_config_files() {
-    std::vector<Path> res;
-    for (int i = user_config_paths.size() - 1; i >= 0; i--) {
-        if (user_config_paths[i].file_exists()) {
-            res.push_back(user_config_paths[i]);
-        }
-    }
-    return  res;
 }
 
 std::vector<Config> ConfigManager::get_configs() {

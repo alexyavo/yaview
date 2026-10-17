@@ -1,5 +1,3 @@
-#ifndef YAVIEW_ANDROID
-
 #include "RunGuard.h"
 
 #include <QCryptographicHash>
@@ -145,4 +143,3 @@ std::string RunGuard::sendMessage(const QByteArray& message, bool wait)
     return "";
 }
 
-#endif // YAVIEW_ANDROID
