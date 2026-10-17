@@ -284,10 +284,6 @@ AndroidSelector::AndroidSelector(QWidget* parent) : QWidget(parent) {
         main_widget->run_command_with_name("delete_portal", true);
         });
 
-    QObject::connect(main_menu, &TouchMainMenu::globalBookmarksClicked, [&]() {
-        main_widget->run_command_with_name("goto_bookmark_g", true);
-        });
-
     QObject::connect(main_menu, &TouchMainMenu::globalHighlightsClicked, [&]() {
         main_widget->run_command_with_name("goto_highlight_g", true);
         });

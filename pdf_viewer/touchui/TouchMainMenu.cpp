@@ -140,12 +140,6 @@ TouchMainMenu::TouchMainMenu(bool fit_mode, bool portaling, bool fullscreen, boo
 
     QObject::connect(
         dynamic_cast<QObject*>(quick_widget->rootObject()),
-        SIGNAL(globalBookmarksClicked()),
-        this,
-        SLOT(handleGlobalBookmarks()));
-
-    QObject::connect(
-        dynamic_cast<QObject*>(quick_widget->rootObject()),
         SIGNAL(globalHighlightsClicked()),
         this,
         SLOT(handleGlobalHighlights()));
@@ -254,10 +248,6 @@ void TouchMainMenu::handlePortal() {
 
 void TouchMainMenu::handleDeletePortal() {
     emit deletePortalClicked();
-}
-
-void TouchMainMenu::handleGlobalBookmarks() {
-    emit globalBookmarksClicked();
 }
 
 void TouchMainMenu::handleGlobalHighlights() {

@@ -31,7 +31,6 @@ public slots:
     void handleAddBookmark();
     void handlePortal();
     void handleDeletePortal();
-    void handleGlobalBookmarks();
     void handleGlobalHighlights();
     void handleTTS();
     void handleHorizontalLock();
@@ -58,7 +57,6 @@ signals:
     void addBookmarkClicked();
     void portalClicked();
     void deletePortalClicked();
-    void globalBookmarksClicked();
     void globalHighlightsClicked();
     void ttsClicked();
     void horizontalLockClicked();

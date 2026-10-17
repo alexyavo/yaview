@@ -19,7 +19,6 @@ Rectangle{
     signal hintClicked();
     signal fullscreenClicked();
     signal bookmarksClicked();
-    signal globalBookmarksClicked();
     signal highlightsClicked();
     signal globalHighlightsClicked();
     signal rulerModeClicked();
@@ -141,7 +140,6 @@ Rectangle{
                     "qrc:/icons/unlink.svg",
                     _speaking ? "qrc:/icons/tts-enabled.svg" :  "qrc:/icons/tts.svg",
                     is_locked ? "qrc:/icons/lock-enabled.svg" :"qrc:/icons/lock.svg",
-                    "qrc:/icons/bookmark-g.svg",
                     "qrc:/icons/highlight-g.svg",
                     is_fit ? "qrc:/icons/fit-horizontal-enabled.svg" :  "qrc:/icons/fit-horizontal.svg",
                     "qrc:/icons/paper-download.svg"
@@ -152,7 +150,6 @@ Rectangle{
                     "Delete Portal",
                     "Text to Speech",
                     "Lock Horizontal Scroll",
-                    "All Bookmarks",
                     "All Highlights",
                     "Fit to Page Width",
                     "Download Paper"
@@ -184,16 +181,13 @@ Rectangle{
                                 is_locked = !is_locked;
                                 break;
                             case 5:
-                                /* emit */ globalBookmarksClicked();
-                                break;
-                            case 6:
                                 /* emit */ globalHighlightsClicked();
                                 break;
-                            case 7:
+                            case 6:
                                 /* emit */ fitToPageWidthClicked();
                                 is_fit = !is_fit;
                                 break;
-                            case 8:
+                            case 7:
                                 /* emit */ downloadPaperClicked();
                                 break;
                             default:
