@@ -1,0 +1,134 @@
+name: Release
+
+# Builds yaview from the latest commit on main and publishes it as a GitHub release with the macOS
+# app attached. Runs only when started by hand (Actions > Release > Run workflow), never on pushes
+# or tags.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag, e.g. v0.1.0 (empty uses today's date, vYYYY.MM.DD)
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      MAKE_PARALLEL: "3"
+    outputs:
+      commit: ${{ steps.notes.outputs.commit }}
+    steps:
+      # main, whichever branch the run was started from
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache Qt
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: .local/qt
+          key: qt-6.8.2-macos-qtspeech-qtshadertools-qtmultimedia
+
+      - name: Install Qt 6.8.2
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install 'aqtinstall==3.3.0'
+          python -m aqt install-qt mac desktop 6.8.2 clang_64 \
+            -m qtspeech qtshadertools qtmultimedia -O .local/qt
+
+      - name: MuPDF version
+        id: mupdf
+        run: echo "commit=$(git -C mupdf rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache MuPDF build
+        uses: actions/cache@v4
+        with:
+          path: mupdf/build
+          key: mupdf-${{ runner.arch }}-${{ steps.mupdf.outputs.commit }}
+
+      - name: Build yaview
+        run: ./scripts/build_local_macos.sh
+
+      - name: Package
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          ditto -c -k --keepParent build/local-macos/yaview.app "$RUNNER_TEMP/release/yaview-macos-arm64.zip"
+
+      # Release notes: how to install, the commit, and the commits since the previous release.
+      - name: Release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit=$(git rev-parse HEAD)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          previous=$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')
+          {
+            echo "Built from $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$commit."
+            echo
+            echo "For Macs with Apple silicon, macOS 15 or later. Unzip and move \`yaview.app\` to \`/Applications\`."
+            echo "The app isn't notarized by Apple, so macOS blocks it after a download; allow it once with:"
+            echo
+            echo '```'
+            echo 'xattr -dr com.apple.quarantine /Applications/yaview.app'
+            echo '```'
+            if [ -n "$previous" ] && git rev-parse -q --verify "$previous^{commit}" >/dev/null; then
+              echo
+              echo "Changes since $previous:"
+              echo
+              git log --no-merges --format='- %s' "$previous..$commit"
+            fi
+          } > "$RUNNER_TEMP/release/notes.md"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+
+  # A separate job, so the build never gets a token that can write to the repository.
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          tag_exists() { gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1" >/dev/null 2>&1; }
+          tag="$VERSION"
+          if [ -z "$tag" ]; then
+            # a second release on the same day gets .2, then .3, ...
+            tag="v$(date -u +%Y.%m.%d)"
+            n=1
+            while tag_exists "$tag"; do n=$((n + 1)); tag="v$(date -u +%Y.%m.%d).$n"; done
+          elif tag_exists "$tag"; then
+            echo "::error::The tag $tag already exists"
+            exit 1
+          fi
+          mv yaview-macos-arm64.zip "yaview-$tag-macos-arm64.zip"
+          gh release create "$tag" "yaview-$tag-macos-arm64.zip" -R "$GITHUB_REPOSITORY" \
+            --target "$COMMIT" --title "yaview $tag" --notes-file notes.md

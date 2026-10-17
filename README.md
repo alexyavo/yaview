@@ -53,13 +53,13 @@ lightweight, supports vim navigation.
 
 - <kbd>m</kbd> + letter set a mark at the current location (e.g. <kbd>ma</kbd>). Lowercase marks belong to the
   document, uppercase marks are global (going to one opens its document). Marks are kept across restarts.
-- <kbd>`</kbd> + letter go to a mark (e.g. <kbd>`</kbd><kbd>a</kbd>).
+- <kbd>&#96;</kbd> + letter go to a mark (e.g. <kbd>&#96;</kbd><kbd>a</kbd>).
 - `:show_marks` list the marks of all documents.
 - `:clear_document_marks` delete the marks of the current document (including the uppercase ones set in it).
 - `:clear_all_marks` delete the marks of all documents.
 - Right click a line to put a ruler (visual mark) under it.
 - <kbd>j</kbd> / <kbd>k</kbd> move the ruler to the next/previous line (also: <kbd>↓</kbd> / <kbd>↑</kbd>).
-- <kbd>`</kbd><kbd>`</kbd> go back to the ruler's last location (also: <kbd>`</kbd> then right click).
+- <kbd>&#96;</kbd><kbd>&#96;</kbd> go back to the ruler's last location (also: <kbd>&#96;</kbd> then right click).
 - <kbd>F7</kbd> toggle ruler scrolling, where the mouse wheel moves the ruler.
 
 ### Bookmarks
