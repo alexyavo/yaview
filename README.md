@@ -4,7 +4,7 @@
 
 <h1 align="center">yaview — a PDF Reader</h1>
 
-<p align="center">
+<p align="right">
   <a href="https://github.com/alexyavo/yaview/actions/workflows/memory-tests.yml"><img alt="Memory leak tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/alexyavo/yaview/badges/memory-tests.json"></a>
 </p>
 

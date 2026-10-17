@@ -1,0 +1,27 @@
+name: Memory leak test badge
+
+# Keeps the README's memory leak test badge current: on every push to main it recounts how many
+# commits main is ahead of the commit the last memory test run tested. It never runs the tests
+# (memory-tests.yml does, never on pushes) and leaves the recorded result and date alone.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: badges-branch
+
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update badge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/memory-tests-badge.sh
