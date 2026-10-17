@@ -117,6 +117,7 @@ highlight_color_z
 highlight_delete_threshold
 highlight_link_destination
 highlight_links
+highlight_list_text_length
 highlight_middle_click
 hold_middle_click_command
 horizontal_move_amount

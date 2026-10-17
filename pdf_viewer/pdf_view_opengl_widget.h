@@ -111,9 +111,7 @@ private:
 
     std::optional<AbsoluteRect> pending_portal_rect = {};
 
-    QIcon bookmark_icon;
     QIcon portal_icon;
-    QIcon bookmark_icon_white;
     QIcon portal_icon_white;
     QIcon hourglass_icon;
 
@@ -292,6 +290,7 @@ public:
     bool is_showing_rect_hints();
     void get_color_for_current_mode(const float* input_color, float* output_color);
     void render_ui_icon_for_current_color_mode(QPainter* painter, const QIcon& icon_black, const QIcon& icon_white, QRect rect, bool is_highlighted=false);
+    void render_bookmark_tag(QPainter* painter, QRect window_qrect, int bookmark_id, bool is_highlighted);
     void render_text_highlights();
     void render_highlight_annotations();
     std::array<float, 3> cc3(const float* input_color);

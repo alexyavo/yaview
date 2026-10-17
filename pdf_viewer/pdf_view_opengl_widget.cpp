@@ -1,6 +1,7 @@
 #include <cmath>
 
 #include <qcolor.h>
+#include <qpainterpath.h>
 #include <QMouseEvent>
 #include <qapplication.h>
 #include <qdatetime.h>
@@ -568,10 +569,7 @@ PdfViewOpenGLWidget::PdfViewOpenGLWidget(DocumentView* document_view, PdfRendere
     overview_offset_x = OVERVIEW_OFFSET[0];
     overview_offset_y = OVERVIEW_OFFSET[1];
 
-    //bookmark_pixmap = QPixmap(":/icons/B.svg");
-    bookmark_icon = QIcon(":/icons/B.svg");
     portal_icon = QIcon(":/icons/P.svg");
-    bookmark_icon_white = QIcon(":/icons/B_white.svg");
     portal_icon_white = QIcon(":/icons/P_white.svg");
     hourglass_icon = QIcon(":/icons/hourglass.svg");
 }
@@ -1464,7 +1462,7 @@ void PdfViewOpenGLWidget::my_render(QPainter* painter) {
                         QRect window_qrect = QRect(window_rect.x0, window_rect.y0, fz_irect_width(window_rect), fz_irect_height(window_rect));
                         bool is_highlighted = i == selected_bookmark_index;
 
-                        render_ui_icon_for_current_color_mode(painter, bookmark_icon, bookmark_icon_white, window_qrect, is_highlighted);
+                        render_bookmark_tag(painter, window_qrect, bookmarks[i].pdf_object, is_highlighted);
 
                     }
                 }
@@ -2787,6 +2785,52 @@ QColor PdfViewOpenGLWidget::qcc4(const float* input_color) {
     std::array<float, 4> result;
     get_color_for_current_mode(input_color, &result[0]);
     return convert_float4_to_qcolor(&result[0]);
+}
+
+// A bookmark's marker: a hanging tag (rounded top with a hole, swallowtail bottom) in one of a few muted
+// colors, picked by the bookmark's PDF object number so it stays the same; a selected tag gets an outline.
+void PdfViewOpenGLWidget::render_bookmark_tag(QPainter* painter, QRect window_qrect, int bookmark_id, bool is_highlighted) {
+    static const QColor tag_colors[] = {
+        QColor(0xC9, 0x9A, 0x92), // dusty rose
+        QColor(0x98, 0xA8, 0x82), // sage
+        QColor(0xD8, 0xC1, 0x95), // sand
+        QColor(0x86, 0xA9, 0xA4), // teal gray
+        QColor(0xA0, 0x8C, 0xB8), // lavender
+        QColor(0xA3, 0x93, 0x83), // taupe
+    };
+    QColor color = tag_colors[std::abs(bookmark_id) % 6];
+
+    float height = window_qrect.height();
+    float width = height * 0.42f;
+    float left = window_qrect.center().x() - width / 2;
+    float right = left + width;
+    float top = window_qrect.top();
+    float bottom = window_qrect.bottom();
+    float center_x = (left + right) / 2;
+
+    QPainterPath tag;
+    tag.moveTo(left, top + width * 0.35f);
+    tag.cubicTo(left, top + width * 0.1f, center_x - width * 0.25f, top, center_x, top);
+    tag.cubicTo(center_x + width * 0.25f, top, right, top + width * 0.1f, right, top + width * 0.35f);
+    tag.lineTo(right, bottom);
+    tag.lineTo(center_x, bottom - width * 0.45f);
+    tag.lineTo(left, bottom);
+    tag.closeSubpath();
+    QPainterPath hole;
+    hole.addEllipse(QPointF(center_x, top + width * 0.3f), width * 0.11f, width * 0.11f);
+    tag = tag.subtracted(hole);
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    painter->setBrush(color);
+    if (is_highlighted) {
+        painter->setPen(QPen(QColor(255, 200, 0), std::max(2.0f, height / 14)));
+    }
+    else {
+        painter->setPen(QPen(color.darker(140), std::max(1.0f, height / 40)));
+    }
+    painter->drawPath(tag);
+    painter->restore();
 }
 
 void PdfViewOpenGLWidget::render_ui_icon_for_current_color_mode(QPainter* painter, const QIcon& icon_black, const QIcon& icon_white, QRect window_qrect, bool is_highlighted){

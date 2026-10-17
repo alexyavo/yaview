@@ -83,7 +83,7 @@ std::wstring PERIODIC_COMMANDS = L"";
 std::wstring MIDDLE_CLICK_SEARCH_ENGINE = L"s";
 std::wstring SHIFT_MIDDLE_CLICK_SEARCH_ENGINE = L"l";
 std::wstring PAPERS_FOLDER_PATH = L"";
-std::wstring STATUS_BAR_FORMAT = L"[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{highlight}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}";
+std::wstring STATUS_BAR_FORMAT = L"[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}";
 std::wstring RIGHT_STATUS_BAR_FORMAT = L"";
 
 float BLACK_COLOR[3] = { 0.0f, 0.0f, 0.0f };
@@ -229,6 +229,7 @@ std::wstring CONTEXT_MENU_ITEMS_FOR_OVERVIEW = L"";
 bool RIGHT_CLICK_CONTEXT_MENU = false;
 int NUM_CACHED_PAGES = 5;
 int RECENT_DOCUMENTS_IN_ANNOTATION_LISTS = 20;
+int HIGHLIGHT_LIST_TEXT_LENGTH = 100;
 
 float PAGE_SEPARATOR_WIDTH = 0.0f;
 float PAGE_SEPARATOR_COLOR[3] = { 0.9f, 0.9f, 0.9f };
@@ -980,6 +981,7 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_bool(L"check_for_updates_on_startup", &SHOULD_CHECK_FOR_LATEST_VERSION_ON_STARTUP);
     add_bool(L"sort_bookmarks_by_location", &SORT_BOOKMARKS_BY_LOCATION);
     add_int(L"recent_documents_in_annotation_lists", &RECENT_DOCUMENTS_IN_ANNOTATION_LISTS, IntExtras{0, 1000});
+    add_int(L"highlight_list_text_length", &HIGHLIGHT_LIST_TEXT_LENGTH, IntExtras{0, 10000});
     add_bool(L"sort_highlights_by_location", &SORT_HIGHLIGHTS_BY_LOCATION);
     add_bool(L"hover_overview", &HOVER_OVERVIEW);
     add_bool(L"rerender_overview", &RERENDER_OVERVIEW);

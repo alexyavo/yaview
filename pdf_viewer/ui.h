@@ -111,6 +111,24 @@ public:
     int get_prev_word_position();
 };
 
+QString get_menu_stylesheet();
+
+// A text input in the style and place of the popup menus, for commands that ask for a text after a pick
+// from a menu (edit_mark, mark_to_bookmark). Enter confirms; Escape reaches the main window, which cancels.
+class TextPromptWidget : public QWidget {
+public:
+    TextPromptWidget(const QString& title, const QString& initial_text, MainWidget* parent, std::function<void(QString)> on_done);
+    void focus_input();
+    void resizeEvent(QResizeEvent* resize_event) override;
+    void showEvent(QShowEvent* show_event) override;
+
+private:
+    QLabel* title_label = nullptr;
+    QLineEdit* line_edit = nullptr;
+    bool is_placing = false;
+    void place();
+};
+
 class BaseSelectorWidget : public QWidget {
 
 protected:
@@ -335,6 +353,13 @@ public:
             for (int i = 0; i < n_cols; i++) {
                 table_view->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
             }
+        }
+    }
+
+    void fit_column_to_contents(int column) {
+        QTableView* table_view = dynamic_cast<QTableView*>(get_view());
+        if (table_view && column < n_cols) {
+            table_view->horizontalHeader()->setSectionResizeMode(column, QHeaderView::ResizeToContents);
         }
     }
 

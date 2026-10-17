@@ -90,6 +90,8 @@ public:
     virtual std::string get_pending_name();
     virtual std::string get_human_readable_name();
     virtual std::wstring get_text_default_value();
+    // whether the text requirement is asked in a centered prompt like the popup menus instead of the top bar
+    virtual bool uses_centered_text_prompt();
     virtual ~Command();
 };
 

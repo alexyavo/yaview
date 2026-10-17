@@ -118,6 +118,7 @@ extern bool FAIL_SAFE_AUTO_SAVE_SESSION;
 extern bool MULTILINE_MENUS;
 extern bool SORT_BOOKMARKS_BY_LOCATION;
 extern int RECENT_DOCUMENTS_IN_ANNOTATION_LISTS;
+extern int HIGHLIGHT_LIST_TEXT_LENGTH;
 extern bool SORT_HIGHLIGHTS_BY_LOCATION;
 extern bool FLAT_TABLE_OF_CONTENTS;
 extern bool HOVER_OVERVIEW;
@@ -5721,8 +5722,13 @@ void MainWidget::advance_command(std::unique_ptr<Command> new_command, std::wstr
 
             Requirement next_requirement = pending_command_instance->next_requirement(this).value();
             if (next_requirement.type == RequirementType::Text) {
-                show_textbar(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value(), false);
-                text_command_line_edit->setEchoMode(QLineEdit::EchoMode::Normal);
+                if (!TOUCH_MODE && pending_command_instance->uses_centered_text_prompt()) {
+                    show_centered_text_prompt(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value());
+                }
+                else {
+                    show_textbar(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value(), false);
+                    text_command_line_edit->setEchoMode(QLineEdit::EchoMode::Normal);
+                }
             }
             else if (next_requirement.type == RequirementType::Password) {
                 show_textbar(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value(), true);
@@ -6024,6 +6030,15 @@ char MainWidget::get_current_selected_highlight_type() {
     return 'a';
 }
 
+// A highlight in the highlight lists: its type and its text on one line, cut to highlight_list_text_length characters.
+std::wstring highlight_list_text(const Highlight& highlight) {
+    QString text = QString::fromStdWString(highlight.description).simplified();
+    if (HIGHLIGHT_LIST_TEXT_LENGTH > 0 && text.size() > HIGHLIGHT_LIST_TEXT_LENGTH) {
+        text = text.left(HIGHLIGHT_LIST_TEXT_LENGTH).trimmed() + QChar(0x2026);
+    }
+    return L"[" + std::wstring(1, highlight.type) + L"] " + text.toStdWString();
+}
+
 void MainWidget::handle_goto_highlight() {
     std::vector<std::wstring> option_names;
     std::vector<std::wstring> option_text_annotations;
@@ -6031,6 +6046,8 @@ void MainWidget::handle_goto_highlight() {
     bool has_text_annotations = false;
     std::vector<Highlight> highlights;
 
+    // the texts of highlights read from the file are extracted on demand
+    doc()->load_highlight_texts();
     if (SORT_HIGHLIGHTS_BY_LOCATION) {
         highlights = doc()->get_highlights_sorted();
     }
@@ -6041,9 +6058,7 @@ void MainWidget::handle_goto_highlight() {
     int closest_highlight_index = doc()->find_closest_highlight_index(highlights, main_document_view->get_offset_y());
 
     for (auto highlight : highlights) {
-        std::wstring type_name = L"a";
-        type_name[0] = highlight.type;
-        option_names.push_back(L"[" + type_name + L"] " + highlight.description);
+        option_names.push_back(highlight_list_text(highlight));
         option_text_annotations.push_back(highlight.text_annot);
         if (highlight.text_annot.size() > 0) {
             has_text_annotations = true;
@@ -11536,6 +11551,42 @@ void MainWidget::convert_mark_to_bookmark(char symbol, const std::wstring& text)
 }
 
 void MainWidget::handle_show_marks() {
+    show_mark_list([this](Mark* mark) { main_document_view->goto_mark(mark->symbol); }, true);
+}
+
+// The menu of the document's marks for the commands that act on one (edit_mark, mark_to_bookmark):
+// picking a mark gives the pending command its letter.
+void MainWidget::show_mark_picker() {
+    bool has_marks = std::any_of(doc()->get_marks().begin(), doc()->get_marks().end(), [](const Mark& mark) {
+        return std::isalpha(static_cast<unsigned char>(mark.symbol));
+        });
+    if (!has_marks) {
+        set_status_message(L"No marks in this document");
+        pending_command_instance = nullptr;
+        return;
+    }
+    show_mark_list([this](Mark* mark) {
+        if (pending_command_instance) {
+            pending_command_instance->set_generic_requirement(QString(QChar(mark->symbol)));
+            advance_command(std::move(pending_command_instance));
+        }
+        }, false);
+}
+
+void MainWidget::show_centered_text_prompt(const std::wstring& title, const std::wstring& initial_value) {
+    TextPromptWidget* prompt = new TextPromptWidget(QString::fromStdWString(title), QString::fromStdWString(initial_value), this,
+        [this](QString text) {
+            pop_current_widget();
+            setFocus();
+            handle_pending_text_command(text.toStdWString());
+        });
+    set_current_widget(prompt);
+    show_current_widget();
+    prompt->focus_input();
+}
+
+// The document's marks (letter, description, page); `can_edit` lets Ctrl+R edit the highlighted mark's description.
+void MainWidget::show_mark_list(std::function<void(Mark*)> on_select, bool can_edit) {
     std::vector<Mark> marks;
     std::vector<std::wstring> letters;
     std::vector<std::wstring> descriptions;
@@ -11556,19 +11607,22 @@ void MainWidget::handle_show_marks() {
         pages.push_back(get_page_formatted_string(page + 1));
     }
 
-    set_filtered_select_menu<Mark>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { letters, descriptions, pages }, marks, -1,
-        [&](Mark* mark) {
-            main_document_view->goto_mark(mark->symbol);
-        },
-        [&](Mark* mark) {
-            doc()->remove_mark(mark->symbol);
-        },
-        [&](Mark* mark) {
+    std::function<void(Mark*)> on_edit = nullptr;
+    if (can_edit) {
+        on_edit = [this](Mark* mark) {
             std::unique_ptr<Command> edit_command = command_manager->get_command_with_name(this, "edit_mark");
-            edit_command->set_symbol_requirement(mark->symbol);
+            edit_command->set_generic_requirement(QString(QChar(mark->symbol)));
             pop_current_widget();
             handle_command_types(std::move(edit_command), 0);
-        }
+            };
+    }
+
+    set_filtered_select_menu<Mark>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { letters, descriptions, pages }, marks, -1,
+        on_select,
+        [this](Mark* mark) {
+            doc()->remove_mark(mark->symbol);
+        },
+        on_edit
     );
     // the letters in their own bold column, set apart from the descriptions
     if (!TOUCH_MODE && current_widget_stack.size() > 0) {
@@ -11658,22 +11712,23 @@ void MainWidget::handle_goto_highlight_global() {
     std::vector<std::wstring> file_names;
     std::vector<BookState> book_states;
 
+    std::vector<std::wstring> pages;
     for (const std::wstring& path : get_open_and_recent_document_paths()) {
         std::vector<BookMark> bookmarks;
         std::vector<Highlight> highlights;
+        std::vector<int> highlight_pages;
         Document* document = document_manager->get_document(path);
-        if (!document->read_annotations_from_file(bookmarks, highlights)) continue;
+        if (!document->read_annotations_from_file(bookmarks, highlights, &highlight_pages)) continue;
         std::wstring file_name = Path(path).filename().value_or(L"");
         for (int i = 0; i < highlights.size(); i++) {
-            std::wstring highlight_type_string = L"a";
-            highlight_type_string[0] = highlights[i].type;
-            descs.push_back(L"[" + highlight_type_string + L"]" + document->get_highlight_text_of(highlights[i]));
+            descs.push_back(highlight_list_text(highlights[i]));
             file_names.push_back(file_name);
+            pages.push_back(get_page_formatted_string(highlight_pages[i] + 1));
             book_states.push_back({ path, highlights[i].selection_begin.y, highlights[i].pdf_object });
         }
     }
 
-    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names }, book_states, -1,
+    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names, pages }, book_states, -1,
         [&](BookState* book_state) {
             if (pending_command_instance) {
                 pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
@@ -11685,6 +11740,12 @@ void MainWidget::handle_goto_highlight_global() {
             document->delete_highlight_with_index(document->get_highlight_index_with_object(book_state->pdf_object));
             invalidate_render();
         });
+    // the text takes the remaining width; the file name column is as wide as the names
+    if (!TOUCH_MODE && current_widget_stack.size() > 0) {
+        if (auto* table = dynamic_cast<FilteredSelectTableWindowClass<BookState>*>(current_widget_stack.back())) {
+            table->fit_column_to_contents(1);
+        }
+    }
 
     show_current_widget();
 }

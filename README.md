@@ -59,9 +59,9 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 - <kbd>m</kbd> + letter set a mark at the current location (e.g. <kbd>ma</kbd>). Marks belong to the document and are
   saved in it; <kbd>a</kbd> and <kbd>A</kbd> are two different marks. Setting a mark again moves it.
 - <kbd>&#96;</kbd> + letter go to a mark (e.g. <kbd>&#96;</kbd><kbd>a</kbd>).
-- `:edit_mark` + letter edit the mark's description (its name).
-- `:mark_to_bookmark` + letter turn the mark into a bookmark at its location; the bookmark text starts as the mark's
-  description.
+- `:edit_mark` pick a mark from the list, then edit its description (its name).
+- `:mark_to_bookmark` pick a mark from the list and turn it into a bookmark at its location; the bookmark text starts
+  as the mark's description.
 - `:show_marks` list the marks of the current document with their descriptions (in the list,
   <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the highlighted mark's description).
 - `:clear_document_marks` delete the marks of the current document.
@@ -85,8 +85,10 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 
 - <kbd>h</kbd> + lowercase letter highlight the selected text (e.g. <kbd>ha</kbd>). The letter is the highlight's type;
   each type has its own color (`highlight_color_<letter>` in `yaview.config`).
-- <kbd>gh</kbd> search the highlights of the current document.
-- <kbd>gH</kbd> search the highlights of the open documents and the recently opened ones (like <kbd>gB</kbd>).
+- <kbd>gh</kbd> search the highlights of the current document (type, text cut to `highlight_list_text_length`
+  characters, page).
+- <kbd>gH</kbd> search the highlights of the open documents and the recently opened ones (like <kbd>gB</kbd>), with
+  their file names and pages.
 - <kbd>gnh</kbd> / <kbd>gNh</kbd> go to the next/previous highlight.
 - <kbd>dh</kbd> delete the clicked highlight.
 
@@ -185,7 +187,7 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `status_bar_format` | `[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{highlight}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}` | Template of the left part of the status bar; each `%{...}` placeholder is replaced by its value. |
+| `status_bar_format` | `[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}` | Template of the left part of the status bar; each `%{...}` placeholder is replaced by its value. |
 | `right_status_bar_format` |  | Template of the right-aligned part of the status bar, with the same placeholders. |
 | `status_bar_color` | `0 0 0` | Background of the status bar, the text input bar and the command hints. |
 | `status_bar_text_color` | `1 1 1` | Text color of the status bar, the text input bar and the command hints. |
@@ -334,6 +336,7 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 | `exact_highlight_select` | `0` | Highlight exactly the selected characters instead of expanding to whole words. |
 | `sort_highlights_by_location` | `1` | Sort the highlight list by position in the document instead of creation time. |
 | `sort_bookmarks_by_location` | `1` | Sort the bookmark and portal lists by position in the document instead of creation time. |
+| `highlight_list_text_length` | `100` | How many characters of each highlight's text the highlight lists show; 0 shows all of it (range 0–10000). |
 | `recent_documents_in_annotation_lists` | `20` | How many of the most recently opened documents `gB` and `gH` include, besides the open ones (range 0–1000). |
 | `freetext_bookmark_color` | `0 0 0` | Text color of new freetext bookmarks. |
 | `freetext_bookmark_font_size` | `8` | Default font size of freetext bookmarks; `increase_freetext_font_size`/`decrease_freetext_font_size` change it (range 0–100). |

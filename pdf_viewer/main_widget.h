@@ -628,6 +628,9 @@ public:
     void handle_goto_portal_list();
     void handle_goto_bookmark();
     void handle_show_marks();
+    void show_mark_picker();
+    void show_mark_list(std::function<void(Mark*)> on_select, bool can_edit);
+    void show_centered_text_prompt(const std::wstring& title, const std::wstring& initial_value);
     void handle_goto_bookmark_global();
     std::vector<std::wstring> get_open_and_recent_document_paths();
     Document* get_loaded_document(const std::wstring& path);

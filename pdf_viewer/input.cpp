@@ -324,6 +324,7 @@ public:
     }
 
     void set_text_requirement(std::wstring value) { get_command()->set_text_requirement(value); }
+    bool uses_centered_text_prompt() { return get_command()->uses_centered_text_prompt(); }
     void set_symbol_requirement(char value) { get_command()->set_symbol_requirement(value); }
     void set_file_requirement(std::wstring value) { get_command()->set_file_requirement(value); }
     void set_rect_requirement(AbsoluteRect value) { get_command()->set_rect_requirement(value); }
@@ -449,6 +450,13 @@ public:
             return commands.back()->get_result();
         }
         return {};
+    }
+
+    bool uses_centered_text_prompt() {
+        for (auto& command : commands) {
+            if (command->next_requirement(widget)) return command->uses_centered_text_prompt();
+        }
+        return false;
     }
 
     void set_text_requirement(std::wstring value) {
@@ -1269,8 +1277,9 @@ public:
     }
 };
 
-// Base of the commands that take a mark's letter and then a text, prefilled with the mark's description.
-// A letter without a mark ends the command before the text prompt.
+// Base of the commands that act on a mark and then ask for a text, prefilled with the mark's description:
+// the mark is picked from a menu of the document's marks, the text typed in a centered prompt. A macro
+// gives the mark's letter as the first argument. A letter without a mark ends the command.
 class MarkTextCommand : public Command {
 protected:
     char symbol = 0;
@@ -1283,7 +1292,7 @@ public:
 
     std::optional<Requirement> next_requirement(MainWidget* widget) {
         if (symbol == 0) {
-            return Requirement{ RequirementType::Symbol, "Mark" };
+            return Requirement{ RequirementType::Generic, "Mark" };
         }
         if (!widget->doc()->get_mark_if_exists(symbol)) {
             return {};
@@ -1294,12 +1303,23 @@ public:
         return {};
     }
 
-    void set_symbol_requirement(char value) {
-        symbol = value;
+    void set_generic_requirement(QVariant value) {
+        QString letter = value.toString();
+        if (letter.size() > 0) {
+            symbol = letter.at(0).toLatin1();
+        }
+    }
+
+    void handle_generic_requirement() {
+        widget->show_mark_picker();
     }
 
     void set_text_requirement(std::wstring value) {
         text = value;
+    }
+
+    bool uses_centered_text_prompt() {
+        return true;
     }
 
     std::wstring get_text_default_value() {
@@ -7889,6 +7909,10 @@ void Command::set_symbol_requirement(char value) {}
 void Command::set_file_requirement(std::wstring value) {}
 void Command::set_rect_requirement(AbsoluteRect value) {}
 void Command::set_point_requirement(AbsoluteDocumentPos value) {}
+
+bool Command::uses_centered_text_prompt() {
+    return false;
+}
 
 std::wstring Command::get_text_default_value() {
     return L"";

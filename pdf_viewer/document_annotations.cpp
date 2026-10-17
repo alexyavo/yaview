@@ -729,10 +729,16 @@ std::string Document::portal_destination_file_spec(const std::wstring& document_
 
 // Reads a document's bookmarks and highlights without keeping it open (for the lists across all
 // documents). An open document's annotations are already in memory.
-bool Document::read_annotations_from_file(std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights) {
+bool Document::read_annotations_from_file(std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights, std::vector<int>* out_highlight_pages) {
     if (doc && are_highlights_loaded) {
+        load_highlight_texts();
         out_bookmarks = bookmarks;
         out_highlights = highlights;
+        if (out_highlight_pages) {
+            for (const Highlight& highlight : highlights) {
+                out_highlight_pages->push_back(absolute_to_page_pos(highlight.selection_begin).page);
+            }
+        }
         return true;
     }
     if (!QFileInfo(QString::fromStdWString(file_name)).exists()) {
@@ -752,7 +758,11 @@ bool Document::read_annotations_from_file(std::vector<BookMark>& out_bookmarks, 
         for (int i = 0; i < n; i++) {
             fz_page* page = fz_load_page(context, file_doc, i);
             fz_rect bounds = fz_bound_page(context, page);
+            size_t num_highlights = out_highlights.size();
             read_page_annotations(context, page, i, bounds.x1 - bounds.x0, y_offset, out_bookmarks, out_highlights, ignored_portals);
+            if (out_highlight_pages) {
+                out_highlight_pages->resize(out_highlights.size(), i);
+            }
             widths.push_back(bounds.x1 - bounds.x0);
             y_offsets.push_back(y_offset);
             y_offset += bounds.y1 - bounds.y0;
