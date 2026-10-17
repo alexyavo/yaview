@@ -63,7 +63,7 @@ by more than `--max-footprint-growth-mb` per iteration (default 1 MB). With `--s
 fail too. Footprint growth isn't necessarily a leak: it also covers memory that is still
 referenced but never released, such as unbounded caches, which `leaks` can't see.
 
-The test window is 1000x800 points (set in the test home folder's `prefs_user.config`), so
+The test window is 1000x800 points (set in the test home folder's `yaview.config`), so
 footprints are comparable between runs; a screen-sized window has a footprint of several GB.
 
 Your own yaview data is never touched. Each scenario runs with its own throwaway home folder
@@ -99,5 +99,5 @@ totals instead. Allocation stacks come from `MallocStackLogging=lite`;
 
 Add a `Scenario` to `SCENARIOS` in `memory_leak_tests.py`. Each `Step` is a macro (yaview
 commands separated by `;`), optional `--execute-command-data`, or `open_document=N` to open one
-of the test documents (copies of `tutorial.pdf`). Steps that open a popup must pass
+of the test documents (six-page PDFs the runner writes, with a table of contents). Steps that open a popup must pass
 `wait=False`: a popup waits for input, so yaview doesn't answer until it closes.

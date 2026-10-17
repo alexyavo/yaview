@@ -181,8 +181,6 @@ unix:!mac {
     icon.path = $$PREFIX/share/pixmaps/
     shaders.files = pdf_viewer/shaders/
     shaders.path = $$PREFIX/share/yaview/
-    tutorial.files = tutorial.pdf
-    tutorial.path = $$PREFIX/share/yaview/
     keys.files = pdf_viewer/keys.config
     keys.path = $$PREFIX/etc/yaview
     prefs.files = pdf_viewer/prefs.config
@@ -191,7 +189,6 @@ unix:!mac {
     INSTALLS += shortcutfiles
     INSTALLS += icon
     INSTALLS += shaders
-    INSTALLS += tutorial
     INSTALLS += keys
     INSTALLS += prefs	
     DISTFILES += resources/yaview.desktop\

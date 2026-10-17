@@ -29,7 +29,6 @@ from typing import List, Optional
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_APP = os.path.join(REPO_DIR, "build", "local-macos", "yaview.app")
-TUTORIAL_PDF = os.path.join(REPO_DIR, "tutorial.pdf")
 DOCUMENT_COUNT = 6
 
 
@@ -119,6 +118,44 @@ class TestError(Exception):
     pass
 
 
+def write_test_pdf(path, pages=6, lines_per_page=40):
+    """Writes a plain PDF to test with: pages of text (with matches for the search scenario) and a
+    table of contents with one entry per page, for goto_toc."""
+    page_ids = [5 + 3 * i for i in range(pages)]
+    objects = {
+        1: "<< /Type /Catalog /Pages 2 0 R /Outlines 3 0 R >>",
+        2: f"<< /Type /Pages /Kids [{' '.join(f'{p} 0 R' for p in page_ids)}] /Count {pages} >>",
+        3: f"<< /Type /Outlines /First {page_ids[0] + 2} 0 R /Last {page_ids[-1] + 2} 0 R /Count {pages} >>",
+        4: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    }
+    for i, page in enumerate(page_ids):
+        text = [f"BT /F1 18 Tf 72 740 Td (Section {i + 1}) Tj ET", "BT /F1 11 Tf 14 TL 72 710 Td"]
+        for line in range(lines_per_page):
+            text.append(f"(Line {line + 1}: the portal on page {i + 1} links to the next section of the document.) Tj T*")
+        text.append("ET")
+        stream = "\n".join(text)
+        outline = [f"/Title (Section {i + 1}) /Parent 3 0 R /Dest [{page} 0 R /XYZ 0 792 0]"]
+        if i > 0:
+            outline.append(f"/Prev {page - 1} 0 R")
+        if i < pages - 1:
+            outline.append(f"/Next {page + 5} 0 R")
+        objects[page] = (f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                         f"/Resources << /Font << /F1 4 0 R >> >> /Contents {page + 1} 0 R >>")
+        objects[page + 1] = f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream"
+        objects[page + 2] = f"<< {' '.join(outline)} >>"
+    data = b"%PDF-1.4\n"
+    offsets = []
+    for number in range(1, len(objects) + 1):
+        offsets.append(len(data))
+        data += f"{number} 0 obj\n{objects[number]}\nendobj\n".encode("latin-1")
+    xref = len(data)
+    data += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("latin-1")
+    data += "".join(f"{offset:010d} 00000 n \n" for offset in offsets).encode("latin-1")
+    data += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("latin-1")
+    with open(path, "wb") as f:
+        f.write(data)
+
+
 def run(cmd, env=None, timeout=None, check=True):
     result = subprocess.run(cmd, env=env, timeout=timeout, capture_output=True, text=True)
     if check and result.returncode != 0:
@@ -166,12 +203,12 @@ def prepare_home(work_dir, name):
     os.makedirs(config_dir)
     # A fixed window size keeps footprints comparable: without it the window opens screen-sized,
     # and page renders and GPU buffers grow with the window (several GB on a large display).
-    with open(os.path.join(config_dir, "prefs_user.config"), "w") as f:
+    with open(os.path.join(config_dir, "yaview.config"), "w") as f:
         f.write("single_main_window_size 1000 800\nsingle_main_window_move 60 60\n")
     paths = []
     for i in range(DOCUMENT_COUNT):
         path = os.path.join(docs, f"doc-{i}.pdf")
-        shutil.copyfile(TUTORIAL_PDF, path)
+        write_test_pdf(path)
         paths.append(path)
     return home, paths
 

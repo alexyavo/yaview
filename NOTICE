@@ -18,7 +18,6 @@ renamed from "sioyek" to "yaview" by alexyavo starting on 2026-10-14. The git hi
 https://github.com/alexyavo/yaview lists every change.
 
 The application icon (resources/yaview-icon.png and the icons derived from it) is new in yaview.
-The bundled tutorial.pdf comes from sioyek unchanged.
 
 Third-party components keep their own licenses:
 - MuPDF (mupdf/): GNU Affero General Public License v3, see mupdf/COPYING

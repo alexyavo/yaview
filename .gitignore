@@ -364,13 +364,6 @@ pdf_viewer/todo.txt
 yaview_log.txt
 fast/*
 debuglibs/*
-tutorial/*.aux
-tutorial/*.fdb_latexmk
-tutorial/*.fls
-tutorial/*.pdf
-tutorial/*.synctex.gz
-tutorial/*.bbl
-tutorial/*.blg
 *.o.d
 compile_commands.json
 
@@ -385,7 +378,6 @@ CMakeCache.txt
 .qt_plugins/*
 .qt/*
 .DS_STORE
-tutorial/*.blg
 
 xcodebuild/*
 

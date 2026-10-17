@@ -34,7 +34,6 @@ cp -r pdf_viewer/shaders build/yaview.app/Contents/Resources/shaders
 
 cp pdf_viewer/prefs.config build/yaview.app/Contents/Resources/prefs.config
 cp pdf_viewer/keys.config build/yaview.app/Contents/Resources/keys.config
-cp tutorial.pdf build/yaview.app/Contents/Resources/tutorial.pdf
 
 # Capture the current PATH
 CURRENT_PATH=$(echo $PATH)

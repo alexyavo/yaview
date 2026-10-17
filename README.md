@@ -398,7 +398,6 @@ lightweight, supports vim navigation.
 |---|---|---|
 | `open_last_file_on_startup` | `1` | Reopen the last session's tabs when yaview starts without a file. |
 | `restore_all_windows_on_startup` | `0` | Save every window with its tabs and geometry, and restore them all at startup. |
-| `should_load_tutorial_when_no_other_file` | `1` | Open the tutorial when there is no file to open or restore. |
 | `should_launch_new_window` | `0` | Open files passed from outside (command line, Finder) in a new window instead of the current one. |
 | `should_launch_new_instance` | `0` | Deprecated: start a separate yaview process for every opened file instead of reusing the running one. |
 | `startup_commands` |  | Commands, separated by `;`, run at startup and in every new window. |

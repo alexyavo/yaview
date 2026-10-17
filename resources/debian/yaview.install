@@ -1,6 +1,5 @@
 pdf_viewer/prefs.config etc/yaview/
 pdf_viewer/keys.config etc/yaview/
-tutorial.pdf usr/share/yaview/
 pdf_viewer/shaders/simple.vertex usr/share/yaview/shaders/
 pdf_viewer/shaders/custom_colors.fragment usr/share/yaview/shaders/
 pdf_viewer/shaders/dark_mode.fragment usr/share/yaview/shaders/

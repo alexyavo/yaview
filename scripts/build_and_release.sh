@@ -32,7 +32,6 @@ make install INSTALL_ROOT=yaview-release -j$MAKE_PARALLEL
 cp pdf_viewer/prefs.config yaview-release/usr/bin/prefs.config
 cp pdf_viewer/keys.config yaview-release/usr/bin/keys.config
 cp -r pdf_viewer/shaders yaview-release/usr/bin/shaders
-cp tutorial.pdf yaview-release/usr/bin/tutorial.pdf
 
 ./linuxdeployqt-continuous-x86_64.AppImage ./yaview-release/usr/share/applications/yaview.desktop -qmldir=./pdf_viewer/touchui -appimage
 # ./linuxdeployqt-continuous-x86_64.AppImage ./yaview-release/usr/share/applications/yaview.desktop -appimage

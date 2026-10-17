@@ -210,8 +210,6 @@ install(TARGETS yaview
 if(UNIX AND NOT APPLE)
   install(DIRECTORY pdf_viewer/shaders/
           DESTINATION ${CMAKE_INSTALL_DATADIR}/yaview/shaders)
-  install(FILES tutorial.pdf
-          DESTINATION ${CMAKE_INSTALL_DATADIR}/yaview)
   install(FILES pdf_viewer/keys.config pdf_viewer/prefs.config
           DESTINATION ${CMAKE_INSTALL_DATADIR}/yaview)
   install(FILES resources/yaview.desktop

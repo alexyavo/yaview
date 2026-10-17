@@ -46,7 +46,6 @@ ditto "$repo_dir/pdf_viewer/shaders" "$resources_dir/shaders"
 for config_name in prefs.config keys.config; do
   cp "$repo_dir/pdf_viewer/$config_name" "$resources_dir/$config_name"
 done
-cp "$repo_dir/tutorial.pdf" "$resources_dir/tutorial.pdf"
 
 # Bundle Qt so the installed app also runs without this SDK in PATH.
 "$qt_dir/bin/macdeployqt" "$app_path" -always-overwrite -no-strip

@@ -18,7 +18,6 @@ cp release\yaview.exe yaview-release-windows\yaview.exe
 cp pdf_viewer\keys.config yaview-release-windows\keys.config
 cp pdf_viewer\prefs.config yaview-release-windows\prefs.config
 cp -r pdf_viewer\shaders yaview-release-windows\shaders
-cp tutorial.pdf yaview-release-windows\tutorial.pdf
 windeployqt --qmldir ./pdf_viewer/touchui --release yaview-release-windows\yaview.exe
 REM windeployqt yaview-release-windows\yaview.exe
 cp windows_runtime\vcruntime140_1.dll yaview-release-windows\vcruntime140_1.dll

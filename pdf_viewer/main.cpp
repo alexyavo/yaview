@@ -94,8 +94,6 @@ Path database_file_path(L"");
 Path local_database_file_path(L"");
 Path global_database_file_path(L"");
 
-Path tutorial_path(L"");
-
 Path last_opened_file_address_path(L"");
 Path shader_path(L"");
 Path auto_config_path(L"");
@@ -119,7 +117,6 @@ extern std::wstring STARTUP_COMMANDS;
 extern bool SHOULD_LAUNCH_NEW_WINDOW;
 extern bool SHOULD_LAUNCH_NEW_INSTANCE;
 extern bool SHOULD_CHECK_FOR_LATEST_VERSION_ON_STARTUP;
-extern bool SHOULD_LOAD_TUTORIAL_WHEN_NO_OTHER_FILE;
 extern std::wstring SHARED_DATABASE_PATH;
 extern std::wstring SEARCH_URLS[26];
 extern std::wstring PAPERS_FOLDER_PATH;
@@ -197,7 +194,6 @@ void configure_paths() {
     shader_path = mac_resources_path.slash(L"shaders");
     default_config_path = mac_resources_path.slash(L"prefs.config");
     default_keys_path = mac_resources_path.slash(L"keys.config");
-    tutorial_path = mac_resources_path.slash(L"tutorial.pdf");
 #endif
 
 #ifdef Q_OS_LINUX
@@ -215,7 +211,6 @@ void configure_paths() {
     database_file_path = standard_data_path.slash(L"test.db");
     local_database_file_path = standard_data_path.slash(L"local.db");
     global_database_file_path = standard_data_path.slash(L"shared.db");
-    tutorial_path = read_only_data_path.slash(L"tutorial.pdf");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
     shader_path = read_only_data_path.slash(L"shaders");
 #else
@@ -237,12 +232,7 @@ void configure_paths() {
     database_file_path = standard_data_path.slash(L"test.db");
     local_database_file_path = standard_data_path.slash(L"local.db");
     global_database_file_path = standard_data_path.slash(L"shared.db");
-    tutorial_path = standard_data_path.slash(L"tutorial.pdf");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
-
-    if (!tutorial_path.file_exists()) {
-        copy_file(parent_path.slash(L"tutorial.pdf"), tutorial_path);
-    }
 #endif
 #else //windows
 #ifdef NDEBUG
@@ -255,7 +245,6 @@ void configure_paths() {
 #ifndef Q_OS_MACOS
     default_config_path = parent_path.slash(L"prefs.config");
     default_keys_path = parent_path.slash(L"keys.config");
-    tutorial_path = parent_path.slash(L"tutorial.pdf");
 #endif
 
 #if defined(NON_PORTABLE) || defined(Q_OS_MACOS)
@@ -314,7 +303,6 @@ void verify_paths() {
     LOG(std::wcout << L"database_file_path: " << database_file_path << L"\n");
     LOG(std::wcout << L"local_database_file_path: " << local_database_file_path << L"\n");
     LOG(std::wcout << L"global_database_file_path: " << global_database_file_path << L"\n");
-    LOG(std::wcout << L"tutorial_path: " << tutorial_path << L"\n");
     LOG(std::wcout << L"last_opened_file_address_path: " << last_opened_file_address_path << L"\n");
     LOG(std::wcout << L"shader_path: " << shader_path << L"\n");
     CHECK_DIR_EXIST(shader_path);
@@ -409,7 +397,7 @@ MainWidget* handle_args(const QStringList& arguments, QLocalSocket* origin=nullp
     }
     else {
         if (windows[0]->doc() == nullptr) {
-            // when no file is specified, and no current file is open, use the last opened file or tutorial
+            // when no file is specified, and no current file is open, use the last opened file
             if (RESTORE_ALL_WINDOWS_ON_STARTUP) {
                 std::vector<WindowState> saved_states = get_last_saved_windows_states();
                 if (!saved_states.empty()) {
@@ -426,18 +414,12 @@ MainWidget* handle_args(const QStringList& arguments, QLocalSocket* origin=nullp
                         }
                     }
                 }
-                else if (SHOULD_LOAD_TUTORIAL_WHEN_NO_OTHER_FILE) {
-                    pdf_file_name = tutorial_path.get_path();
-                }
             }
             else {
                 std::vector<std::wstring> last_opened_file_paths = get_last_opened_file_name();
                 if (last_opened_file_paths.size() > 0) {
                     pdf_file_name = last_opened_file_paths[0];
                     windows[0]->open_tabs(last_opened_file_paths);
-                }
-                else if (SHOULD_LOAD_TUTORIAL_WHEN_NO_OTHER_FILE) {
-                    pdf_file_name = tutorial_path.get_path();
                 }
             }
         }
@@ -552,14 +534,9 @@ MainWidget* handle_args(const QStringList& arguments, QLocalSocket* origin=nullp
         if (target_window->doc()) {
             pdf_file_name = target_window->doc()->get_path();
         }
-        else {
-            if (windows.size() > 1) {
-                if (windows[windows.size() - 2]->doc()) {
-                    pdf_file_name = windows[windows.size() - 2]->doc()->get_path();
-                }
-            }
-            else {
-                pdf_file_name = tutorial_path.get_path();
+        else if (windows.size() > 1) {
+            if (windows[windows.size() - 2]->doc()) {
+                pdf_file_name = windows[windows.size() - 2]->doc()->get_path();
             }
         }
     }

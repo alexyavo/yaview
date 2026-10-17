@@ -681,9 +681,7 @@ yaview \- a lightweight PDF reader with Vim ergonomics
 [OPTIONS] [FILENAME]
 .SH DESCRIPTION
 .PP
-With no arguments, open the most recent document by default. If none exists and
-.B should_load_tutorial_when_no_other_file
-is set in a preference file (see below), then open a tutorial PDF.
+With no arguments, open the most recent document by default.
 
 .SH OPTIONS
 .HP
@@ -787,10 +785,6 @@ Default preferences
 .B /usr/share/yaview/shaders
 
 Default shader files
-.HP
-.B /usr/share/yaview/tutorial.pdf
-
-yaview tutorial PDF
 .HP
 .B ~/.config/yaview/yaview.config
 
@@ -928,11 +922,6 @@ contents).
 
 If it is 1, when launching the application if we detect multiple
 monitors, we automatically launch the helper window in second monitor.
-.HP
-.B should_load_tutorial_when_no_other_file
-.I boolean
-
-If the last opened document is empty, load the tutorial pdf instead..
 .HP
 .B should_launch_new_instance
 .I boolean

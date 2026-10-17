@@ -146,7 +146,6 @@ extern Path default_config_path;
 extern Path default_keys_path;
 extern std::vector<Path> user_config_paths;
 extern Path database_file_path;
-extern Path tutorial_path;
 extern Path last_opened_file_address_path;
 extern Path auto_config_path;
 extern std::wstring ITEM_LIST_PREFIX;
