@@ -24,6 +24,7 @@ QJsonObject Mark::to_json() const
     QJsonObject res;
     res["y_offset"] = y_offset;
     res["symbol"] = symbol;
+    res["description"] = QString::fromStdWString(description);
     if (x_offset) {
         res["x_offset"] = x_offset.value();
     }

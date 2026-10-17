@@ -1238,8 +1238,6 @@ public:
         assert(this->symbol != 0);
         widget->goto_mark(this->symbol);
     }
-
-    bool requires_document() { return false; }
 };
 
 class ClearDocumentMarksCommand : public Command {
@@ -1251,19 +1249,6 @@ public:
     void perform() {
         widget->clear_document_marks();
     }
-};
-
-class ClearAllMarksCommand : public Command {
-public:
-    static inline const std::string cname = "clear_all_marks";
-    static inline const std::string hname = "Delete all marks in all documents";
-    ClearAllMarksCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->clear_all_marks();
-    }
-
-    bool requires_document() { return false; }
 };
 
 class SetMark : public SymbolCommand {
@@ -1281,6 +1266,42 @@ public:
     void perform() {
         assert(this->symbol != 0);
         widget->set_mark_in_current_location(this->symbol);
+    }
+};
+
+class EditMarkCommand : public Command {
+    char symbol = 0;
+    std::optional<std::wstring> text = {};
+public:
+    static inline const std::string cname = "edit_mark";
+    static inline const std::string hname = "Edit the description of a mark";
+    EditMarkCommand(MainWidget* w) : Command(cname, w) {}
+
+    std::optional<Requirement> next_requirement(MainWidget* widget) {
+        if (symbol == 0) {
+            return Requirement{ RequirementType::Symbol, "symbol" };
+        }
+        if (!text.has_value()) {
+            return Requirement{ RequirementType::Text, "Mark Description" };
+        }
+        return {};
+    }
+
+    void set_symbol_requirement(char value) {
+        symbol = value;
+    }
+
+    void set_text_requirement(std::wstring value) {
+        text = value;
+    }
+
+    std::wstring get_text_default_value() {
+        std::optional<Mark> mark = widget->doc()->get_mark_if_exists(symbol);
+        return mark ? mark->description : L"";
+    }
+
+    void perform() {
+        widget->edit_mark_description(symbol, text.value());
     }
 };
 
@@ -2346,7 +2367,7 @@ public:
 class ShowMarks : public GenericGotoLocationCommand {
 public:
     static inline const std::string cname = "show_marks";
-    static inline const std::string hname = "Show the list of the current marks in all documents.";
+    static inline const std::string hname = "Show the list of the marks of the current document";
     ShowMarks(MainWidget* w) : GenericGotoLocationCommand(cname, w) {};
 
     void handle_generic_requirement() {
@@ -2375,19 +2396,6 @@ public:
     void handle_generic_requirement() {
         widget->handle_goto_portal_list();
     }
-};
-
-class GotoBookmarkGlobalCommand : public GenericPathAndLocationCommand {
-public:
-    static inline const std::string cname = "goto_bookmark_g";
-    static inline const std::string hname = "Open the bookmark list of all documents";
-
-    GotoBookmarkGlobalCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w) {};
-
-    void handle_generic_requirement() {
-        widget->handle_goto_bookmark_global();
-    }
-    bool requires_document() { return false; }
 };
 
 class IncreaseFreetextBookmarkFontSizeCommand : public Command {
@@ -6706,8 +6714,8 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<MoveTextMarkDownCommand>();
     register_command<MoveTextMarkUpCommand>();
     register_command<SetMark>();
+    register_command<EditMarkCommand>();
     register_command<ClearDocumentMarksCommand>();
-    register_command<ClearAllMarksCommand>();
     register_command<GotoMark>();
     register_command<GotoPageWithPageNumberCommand>();
     register_command<EditSelectedBookmarkCommand>();
@@ -6780,7 +6788,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<GotoPortalListCommand>();
     register_command<ShowMarks>();
     register_command<GotoBookmarkCommand>();
-    register_command<GotoBookmarkGlobalCommand>();
     register_command<GotoHighlightGlobalCommand>();
     register_command<PortalCommand>();
     register_command<PortalCommand>();

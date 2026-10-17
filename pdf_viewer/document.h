@@ -200,8 +200,9 @@ public:
 
     // whether annotations can be stored in this document (it is a PDF file)
     bool can_annotate();
-    // a position at the left margin of the page at y_offset, for bookmarks and portals set from the keyboard
-    AbsoluteDocumentPos left_margin_pos(float y_offset);
+    // a position at the left (bookmarks) or right (portals) margin of the page at y_offset, for the
+    // markers of bookmarks and portals made from the keyboard, which have no position of their own
+    AbsoluteDocumentPos margin_pos(float y_offset, bool right);
     // a portal destination at a position in this document
     PortalViewState portal_destination(AbsoluteDocumentPos pos, float zoom_level);
     // the bookmarks and highlights of a document that is not open, read from its file (or copied when it is open)
@@ -275,6 +276,7 @@ public:
     PdfLink pdf_link_from_fz_link(int page, fz_link* link);
     void add_mark(char symbol, float y_offset, std::optional<float> x_offset, std::optional<float> zoom_level);
     bool remove_mark(char symbol);
+    bool set_mark_description(char symbol, const std::wstring& description);
     void clear_marks();
     std::optional<Mark> get_mark_if_exists(char symbol);
     ~Document();

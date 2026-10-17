@@ -8,8 +8,8 @@
 //     and a box bookmark a Square annotation,
 //   - a portal is a Link annotation with a GoTo (same file) or GoToR (another file) action to its destination,
 //     marked with a /Yaview /Portal entry to tell it from the document's own links.
-// Marks have no PDF equivalent: they are destinations in a /Marks dictionary of a private /Yaview dictionary
-// in the document catalog.
+// Marks have no PDF equivalent: they are entries << /D destination /Title description >> in a /Marks
+// dictionary of a private /Yaview dictionary in the document catalog, keyed by the mark's letter.
 //
 // Annotations of these types that other programs made are read the same way: every Highlight, Text, FreeText
 // and Square annotation in the file is a yaview highlight or bookmark, drawn by yaview rather than by MuPDF
@@ -389,6 +389,10 @@ void Document::read_marks(fz_context* ctx, pdf_document* pdf_doc, const std::vec
             fz_point point = fz_transform_point(fz_make_point(destination->x.value_or(0), destination->y.value()), page_transform(ctx, pdf_doc, destination->page));
             Mark mark;
             mark.symbol = name[0];
+            pdf_obj* entry = pdf_dict_get_val(ctx, marks_dict, i);
+            if (pdf_is_dict(ctx, entry)) {
+                mark.description = utf8_decode(pdf_dict_get_text_string(ctx, entry, PDF_NAME(Title)));
+            }
             mark.y_offset = point.y + y_offsets[destination->page];
             if (destination->x) {
                 mark.x_offset = point.x - widths[destination->page] / 2;
@@ -668,11 +672,16 @@ bool Document::write_mark(const Mark& mark) {
     if (!pdf_doc) return false;
     DocumentPos pos = page_pos_to_pdf_space(absolute_to_page_pos({ mark.x_offset.value_or(0), mark.y_offset }));
     std::string name(1, mark.symbol);
+    std::string description = utf8_encode(mark.description);
     bool written = true;
     fz_var(written);
     fz_try(context) {
         pdf_obj* marks_dict = marks_dictionary(context, pdf_doc, true);
-        pdf_dict_puts_drop(context, marks_dict, name.c_str(), new_destination(pos, mark.x_offset ? std::optional<float>(pos.x) : std::nullopt, mark.zoom_level, false));
+        pdf_obj* entry = pdf_dict_puts_dict(context, marks_dict, name.c_str(), 2);
+        pdf_dict_put_drop(context, entry, PDF_NAME(D), new_destination(pos, mark.x_offset ? std::optional<float>(pos.x) : std::nullopt, mark.zoom_level, false));
+        if (description.size() > 0) {
+            pdf_dict_put_text_string(context, entry, PDF_NAME(Title), description.c_str());
+        }
     }
     fz_catch(context) {
         show_error_message(L"Could not save the mark to " + file_name + L": " + utf8_decode(yaview_error_message(context)));

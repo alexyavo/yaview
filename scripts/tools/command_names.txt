@@ -8,7 +8,6 @@ add_marked_bookmark
 add_marked_data
 change_highlight
 chapter_search
-clear_all_marks
 clear_document_history
 clear_document_marks
 clear_status_string
@@ -379,6 +378,7 @@ download_overview_paper
 download_paper_under_cursor
 download_paper_with_name
 download_paper_with_url
+edit_mark
 edit_portal
 edit_selected_annotation
 edit_selected_bookmark
@@ -414,7 +414,6 @@ get_paper_name
 get_state_json
 goto_beginning
 goto_bookmark
-goto_bookmark_g
 goto_bottom_of_page
 goto_definition
 goto_end

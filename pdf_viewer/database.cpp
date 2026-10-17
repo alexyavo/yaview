@@ -10,10 +10,6 @@ namespace {
         return utf8_encode(QString::fromStdWString(text).replace("'", "''").toStdWString());
     }
 
-    std::string number(std::optional<float> value) {
-        return value ? std::to_string(value.value()) : "NULL";
-    }
-
     std::optional<float> column_float(const char* value) {
         if (value == nullptr) return {};
         return static_cast<float>(std::atof(value));
@@ -42,18 +38,6 @@ namespace {
         if (width && height) {
             res->push_back({ width.value(), height.value() });
         }
-        return 0;
-    }
-
-    int global_mark_callback(void* res_vector, int argc, char** argv, char** col_name) {
-        auto* res = static_cast<std::vector<GlobalMark>*>(res_vector);
-        GlobalMark mark;
-        mark.symbol = argv[0][0];
-        mark.document_path = utf8_decode(argv[1]);
-        mark.offset_y = column_float(argv[2]).value_or(0);
-        mark.offset_x = column_float(argv[3]);
-        mark.zoom_level = column_float(argv[4]);
-        res->push_back(mark);
         return 0;
     }
 }
@@ -93,13 +77,7 @@ bool DatabaseManager::create_tables() {
         "last_access_time TEXT,"
         "layout_width REAL,"
         "layout_height REAL);";
-    const char* global_marks_sql = "CREATE TABLE IF NOT EXISTS global_marks ("
-        "symbol TEXT PRIMARY KEY,"
-        "path TEXT,"
-        "offset_y REAL,"
-        "offset_x REAL,"
-        "zoom_level REAL);";
-    return run("create_tables", documents_sql) && run("create_tables", global_marks_sql);
+    return run("create_tables", documents_sql);
 }
 
 bool DatabaseManager::update_document(const std::wstring& path, float zoom_level, float offset_x, float offset_y, const std::wstring& name) {
@@ -127,8 +105,7 @@ bool DatabaseManager::delete_document(const std::wstring& path) {
 }
 
 bool DatabaseManager::rename_document(const std::wstring& old_path, const std::wstring& new_path) {
-    return run("rename_document", "UPDATE documents SET path='" + esc(new_path) + "' WHERE path='" + esc(old_path) + "';")
-        && run("rename_document", "UPDATE global_marks SET path='" + esc(new_path) + "' WHERE path='" + esc(old_path) + "';");
+    return run("rename_document", "UPDATE documents SET path='" + esc(new_path) + "' WHERE path='" + esc(old_path) + "';");
 }
 
 bool DatabaseManager::set_layout_size(const std::wstring& path, float width, float height) {
@@ -143,34 +120,4 @@ std::optional<std::pair<float, float>> DatabaseManager::select_layout_size(const
     run("select_layout_size", "SELECT layout_width, layout_height FROM documents WHERE path='" + esc(path) + "';", layout_size_callback, &sizes);
     if (sizes.empty()) return {};
     return sizes[0];
-}
-
-bool DatabaseManager::set_global_mark(const GlobalMark& mark) {
-    std::stringstream ss;
-    ss << "INSERT OR REPLACE INTO global_marks (symbol, path, offset_y, offset_x, zoom_level) VALUES ('" << mark.symbol << "', '"
-        << esc(mark.document_path) << "', " << mark.offset_y << ", " << number(mark.offset_x) << ", " << number(mark.zoom_level) << ");";
-    return run("set_global_mark", ss.str());
-}
-
-std::optional<GlobalMark> DatabaseManager::select_global_mark(char symbol) {
-    std::vector<GlobalMark> marks;
-    run("select_global_mark", std::string("SELECT symbol, path, offset_y, offset_x, zoom_level FROM global_marks WHERE symbol='") + symbol + "';", global_mark_callback, &marks);
-    if (marks.empty()) return {};
-    return marks[0];
-}
-
-bool DatabaseManager::select_global_marks(std::vector<GlobalMark>& out_marks) {
-    return run("select_global_marks", "SELECT symbol, path, offset_y, offset_x, zoom_level FROM global_marks ORDER BY symbol;", global_mark_callback, &out_marks);
-}
-
-bool DatabaseManager::delete_global_mark(char symbol) {
-    return run("delete_global_mark", std::string("DELETE FROM global_marks WHERE symbol='") + symbol + "';");
-}
-
-bool DatabaseManager::delete_global_marks_of_document(const std::wstring& path) {
-    return run("delete_global_marks_of_document", "DELETE FROM global_marks WHERE path='" + esc(path) + "';");
-}
-
-bool DatabaseManager::delete_all_global_marks() {
-    return run("delete_all_global_marks", "DELETE FROM global_marks;");
 }

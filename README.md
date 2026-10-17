@@ -54,12 +54,13 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 
 ### Marks
 
-- <kbd>m</kbd> + letter set a mark at the current location (e.g. <kbd>ma</kbd>). Lowercase marks belong to the
-  document, uppercase marks are global (going to one opens its document). Marks are kept across restarts.
+- <kbd>m</kbd> + letter set a mark at the current location (e.g. <kbd>ma</kbd>). Marks belong to the document and are
+  saved in it; <kbd>a</kbd> and <kbd>A</kbd> are two different marks. Setting a mark again moves it.
 - <kbd>&#96;</kbd> + letter go to a mark (e.g. <kbd>&#96;</kbd><kbd>a</kbd>).
-- `:show_marks` list the marks of the current document and the global marks.
-- `:clear_document_marks` delete the marks of the current document (including the uppercase ones set in it).
-- `:clear_all_marks` delete the global marks and the marks of all open documents.
+- `:edit_mark` + letter edit the mark's description (its name).
+- `:show_marks` list the marks of the current document with their descriptions (in the list,
+  <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the highlighted mark's description).
+- `:clear_document_marks` delete the marks of the current document.
 - Right click a line to put a ruler (visual mark) under it.
 - <kbd>j</kbd> / <kbd>k</kbd> move the ruler to the next/previous line (also: <kbd>↓</kbd> / <kbd>↑</kbd>).
 - <kbd>&#96;</kbd><kbd>&#96;</kbd> go back to the ruler's last location (also: <kbd>&#96;</kbd> then right click).
@@ -69,8 +70,8 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
 
 - <kbd>b</kbd> add a bookmark at the current location: type its text and press <kbd>Enter</kbd>. Selected text is
   filled in as the bookmark text.
-- <kbd>gb</kbd> search the bookmarks of the current document.
-- <kbd>gB</kbd> search the bookmarks of all previously opened documents (read from their files).
+- <kbd>gb</kbd> search the bookmarks of the current document (in the list, <kbd>Ctrl</kbd>+<kbd>r</kbd> edits the
+  highlighted bookmark's text).
 - <kbd>db</kbd> delete the closest bookmark.
 
 ### Highlights

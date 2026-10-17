@@ -601,6 +601,7 @@ public:
     bool is_rect_visible(DocumentRect rect);
     void set_mark_in_current_location(char symbol);
     void goto_mark(char symbol);
+    void edit_mark_description(char symbol, const std::wstring& description);
     void advance_command(std::unique_ptr<Command> command, std::wstring* result = nullptr);
     void add_search_term(const std::wstring& term);
     void perform_search(std::wstring text, bool is_regex = false, bool is_incremental = false);
@@ -624,7 +625,6 @@ public:
     void handle_goto_portal_list();
     void handle_goto_bookmark();
     void handle_show_marks();
-    void handle_goto_bookmark_global();
     std::wstring handle_add_highlight(char symbol);
     // the result of a command that adds a bookmark: the bookmark's object number in the PDF, empty when none was added
     std::wstring bookmark_result_string(int bookmark_index);
@@ -636,7 +636,6 @@ public:
     void handle_open_prev_doc();
     void clear_document_history();
     void clear_document_marks();
-    void clear_all_marks();
     void handle_open_all_docs();
     void show_opened_documents(bool include_current);
     void handle_move_screen(int amount);

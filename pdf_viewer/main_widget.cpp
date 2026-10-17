@@ -3987,7 +3987,7 @@ void MainWidget::handle_portal() {
     }
     else {
         Portal new_portal;
-        new_portal.src_pos = doc()->left_margin_pos(main_document_view->get_offset_y());
+        new_portal.src_pos = doc()->margin_pos(main_document_view->get_offset_y(), true);
         set_pending_portal(doc()->get_path(), new_portal);
     }
 
@@ -5846,7 +5846,7 @@ void MainWidget::portal_to_definition() {
         AbsoluteDocumentPos abspos = defpos[0].get_abspos(main_document_view);
         Portal link;
         link.dst = doc()->portal_destination(abspos, main_document_view->get_zoom_level());
-        link.src_pos = doc()->left_margin_pos(main_document_view->get_ruler_pos());
+        link.src_pos = doc()->margin_pos(main_document_view->get_ruler_pos(), true);
         doc()->add_portal(link);
     }
 }
@@ -6268,7 +6268,7 @@ void MainWidget::handle_portal_to_link(const std::wstring& text) {
 
         Portal portal;
         portal.dst = doc()->portal_destination(dst_abspos, main_document_view->get_zoom_level());
-        portal.src_pos = doc()->left_margin_pos(src_abspos.y);
+        portal.src_pos = doc()->margin_pos(src_abspos.y, true);
         doc()->add_portal(portal);
     }
     reset_highlight_links();
@@ -6308,7 +6308,7 @@ void MainWidget::handle_portal_to_overview() {
         AbsoluteDocumentPos abs_pos = maybe_overview_position->to_absolute(doc());
         Portal new_portal;
         new_portal.dst = doc()->portal_destination(abs_pos, main_document_view->get_zoom_level());
-        new_portal.src_pos = doc()->left_margin_pos(main_document_view->get_offset_y());
+        new_portal.src_pos = doc()->margin_pos(main_document_view->get_offset_y(), true);
         doc()->add_portal(new_portal);
     }
 }
@@ -10283,7 +10283,7 @@ QString MainWidget::get_command_documentation(QString command_name){
     load_command_docs();
     auto command_parts= command_name.split("_");
     if (command_parts.at(command_parts.size()-1).size() == 1){
-        if (command_name != "goto_bookmark_g" && command_name != "goto_highlight_g") {
+        if (command_name != "goto_highlight_g") {
             command_name = command_name.left(command_name.size()-1) + "*";
         }
     }
@@ -11034,7 +11034,6 @@ QMenuBar* MainWidget::create_main_menu_bar(){
         "",
         {
             new MenuNode{ "goto_bookmark", "", {} },
-            new MenuNode{ "goto_bookmark_g", "", {} },
             new MenuNode{ "add_bookmark", "", {} },
             new MenuNode{ "add_marked_bookmark", "", {} },
             new MenuNode{ "add_freetext_bookmark", "", {} },
@@ -11467,34 +11466,13 @@ std::optional<std::wstring> MainWidget::get_last_opened_file_path() {
 }
 
 void MainWidget::set_mark_in_current_location(char symbol) {
-    if (!doc()) return;
-    if (isupper(symbol)) {
-        // a global mark opens its document, so it is kept in the database rather than in a document
-        AbsoluteDocumentPos offsets = main_document_view->get_offsets();
-        db_manager->set_global_mark({ symbol, doc()->get_path(), offsets.y, offsets.x, main_document_view->get_zoom_level() });
-    }
-    else {
-        if (!ensure_annotatable()) return;
-        main_document_view->add_mark(symbol);
-        validate_render();
-    }
+    if (!ensure_annotatable()) return;
+    main_document_view->add_mark(symbol);
+    validate_render();
 }
 
 void MainWidget::clear_document_marks() {
-    // includes the global (uppercase) marks that point into this document
-    db_manager->delete_global_marks_of_document(doc()->get_path());
     doc()->clear_marks();
-    invalidate_render();
-}
-
-// Marks live in their documents, so this clears the global marks and the marks of the open documents.
-void MainWidget::clear_all_marks() {
-    db_manager->delete_all_global_marks();
-    for (auto [path, document] : document_manager->get_cached_documents()) {
-        if (document->doc) {
-            document->clear_marks();
-        }
-    }
     invalidate_render();
 }
 
@@ -11502,99 +11480,50 @@ void MainWidget::goto_mark(char symbol) {
     if (symbol == '`' || symbol == '\'') {
         return_to_last_visual_mark();
     }
-    else if (isupper(symbol)) { // global mark
-        std::optional<GlobalMark> mark = db_manager->select_global_mark(symbol);
-        if (mark) {
-            open_document(mark->document_path, mark->offset_x, mark->offset_y, mark->zoom_level);
-        }
-    }
     else {
         main_document_view->goto_mark(symbol);
     }
 }
 
+void MainWidget::edit_mark_description(char symbol, const std::wstring& description) {
+    if (!doc()->set_mark_description(symbol, description)) {
+        set_status_message(std::wstring(L"No mark named ") + static_cast<wchar_t>(symbol));
+    }
+}
+
 void MainWidget::handle_show_marks() {
-    struct MarkEntry {
-        char symbol;
-        std::wstring document_path;
-        float offset_y;
-        bool is_global;
-    };
-    std::vector<MarkEntry> entries;
+    std::vector<Mark> marks;
     std::vector<std::wstring> option_names;
     std::vector<std::wstring> option_location_strings;
 
-    if (doc()) {
-        for (const Mark& mark : doc()->get_marks()) {
-            entries.push_back({ mark.symbol, doc()->get_path(), mark.y_offset, false });
+    for (const Mark& mark : doc()->get_marks()) {
+        // the '/' mark, which a search sets, is not one of the user's marks
+        if (std::isalpha(static_cast<unsigned char>(mark.symbol))) {
+            marks.push_back(mark);
         }
     }
-    std::vector<GlobalMark> global_marks;
-    db_manager->select_global_marks(global_marks);
-    for (const GlobalMark& mark : global_marks) {
-        entries.push_back({ mark.symbol, mark.document_path, mark.offset_y, true });
+    std::sort(marks.begin(), marks.end(), [](const Mark& lhs, const Mark& rhs) { return lhs.symbol < rhs.symbol; });
+
+    for (const Mark& mark : marks) {
+        option_names.push_back(ITEM_LIST_PREFIX + L" " + static_cast<wchar_t>(mark.symbol) + L" " + mark.description);
+        auto [page, _, __] = doc()->absolute_to_page_pos({ 0, mark.y_offset });
+        option_location_strings.push_back(get_page_formatted_string(page + 1));
     }
 
-    for (const MarkEntry& entry : entries) {
-        std::wstring mark_type_string = entry.is_global ? L"[G]" : L"[L]";
-        option_names.push_back(ITEM_LIST_PREFIX + L" " + mark_type_string + L" " + static_cast<wchar_t>(entry.symbol));
-        option_location_strings.push_back(entry.document_path);
-    }
-
-    set_filtered_select_menu<MarkEntry>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { option_names, option_location_strings }, entries, -1,
-        [&](MarkEntry* entry) {
-            if (entry->is_global) {
-                goto_mark(entry->symbol);
-            }
-            else {
-                main_document_view->goto_mark(entry->symbol);
-            }
+    set_filtered_select_menu<Mark>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { option_names, option_location_strings }, marks, -1,
+        [&](Mark* mark) {
+            main_document_view->goto_mark(mark->symbol);
         },
-        [&](MarkEntry* entry) {
-            if (entry->is_global) {
-                db_manager->delete_global_mark(entry->symbol);
-            }
-            else if (doc()) {
-                doc()->remove_mark(entry->symbol);
-            }
+        [&](Mark* mark) {
+            doc()->remove_mark(mark->symbol);
+        },
+        [&](Mark* mark) {
+            std::unique_ptr<Command> edit_command = command_manager->get_command_with_name(this, "edit_mark");
+            edit_command->set_symbol_requirement(mark->symbol);
+            pop_current_widget();
+            handle_command_types(std::move(edit_command), 0);
         }
     );
-    show_current_widget();
-}
-
-// The bookmarks (or highlights) of every document in the list of opened documents, read from the files.
-void MainWidget::handle_goto_bookmark_global() {
-    std::vector<std::wstring> descs;
-    std::vector<std::wstring> file_names;
-    std::vector<BookState> book_states;
-
-    std::vector<std::pair<std::wstring, std::wstring>> documents;
-    db_manager->select_documents(documents);
-    for (const auto& [path, name] : documents) {
-        std::vector<BookMark> bookmarks;
-        std::vector<Highlight> highlights;
-        if (!document_manager->get_document(path)->read_annotations_from_file(bookmarks, highlights)) continue;
-        std::wstring file_name = Path(path).filename().value_or(L"");
-        for (const BookMark& bm : bookmarks) {
-            descs.push_back(ITEM_LIST_PREFIX + L" " + bm.description);
-            file_names.push_back(file_name);
-            book_states.push_back({ path, bm.get_y_offset(), bm.pdf_object });
-        }
-    }
-
-    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names }, book_states, -1,
-        [&](BookState* book_state) {
-            if (pending_command_instance) {
-                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
-            }
-            advance_command(std::move(pending_command_instance));
-        },
-        [&](BookState* book_state) {
-            Document* document = document_manager->get_document(book_state->document_path);
-            document->open(nullptr, true);
-            document->delete_bookmark(document->get_bookmark_index_with_object(book_state->pdf_object));
-        });
-
     show_current_widget();
 }
 

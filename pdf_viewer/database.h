@@ -8,22 +8,9 @@
 #include "book.h"
 
 /*
-    A global (uppercase) mark: it opens its document when gone to, so it is the reader's state rather
-    than a document's and lives in the database. Lowercase marks are stored in the document (see
-    document_annotations.cpp).
-*/
-struct GlobalMark {
-    char symbol;
-    std::wstring document_path;
-    float offset_y;
-    std::optional<float> offset_x;
-    std::optional<float> zoom_level;
-};
-
-/*
     The database holds the reader's state about documents, keyed by their path: the reading position and
-    zoom of every document opened so far (which is also the list of previously opened documents), the
-    layout size of reflowable documents, and the global marks. Annotations are in the documents themselves.
+    zoom of every document opened so far (which is also the list of previously opened documents) and the
+    layout size of reflowable documents. Annotations, marks included, are in the documents themselves.
 */
 class DatabaseManager {
 private:
@@ -43,11 +30,4 @@ public:
 
     bool set_layout_size(const std::wstring& path, float width, float height);
     std::optional<std::pair<float, float>> select_layout_size(const std::wstring& path);
-
-    bool set_global_mark(const GlobalMark& mark);
-    std::optional<GlobalMark> select_global_mark(char symbol);
-    bool select_global_marks(std::vector<GlobalMark>& out_marks);
-    bool delete_global_mark(char symbol);
-    bool delete_global_marks_of_document(const std::wstring& path);
-    bool delete_all_global_marks();
 };

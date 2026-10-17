@@ -66,16 +66,17 @@ struct Annotation {
 };
 
 /*
-    A mark is a location in the document labeled with a symbol (which is a single character [a-z]). For example
-    we can mark a location with symbol 'a' and later return to that location by going to the mark named 'a'.
-    Lower case marks are local to the document and are stored in the PDF file, upper case marks are global
-    and are stored in the database.
+    A mark is a location in the document labeled with a symbol (a letter, a-z or A-Z, which are different marks).
+    For example we can mark a location with symbol 'a' and later return to that location by going to the mark
+    named 'a'. Marks belong to their document and are stored in the PDF file; the description is the mark's
+    editable name.
 */
 struct Mark {
     float y_offset;
     char symbol;
     std::optional<float> x_offset = {};
     std::optional<float> zoom_level = {};
+    std::wstring description;
 
     QJsonObject to_json() const;
 };

@@ -171,9 +171,10 @@ void Document::set_annotations(std::vector<Mark>& new_marks, std::vector<BookMar
     portals = std::move(new_portals);
 }
 
-AbsoluteDocumentPos Document::left_margin_pos(float y_offset) {
+AbsoluteDocumentPos Document::margin_pos(float y_offset, bool right) {
     int page = get_offset_page_number(y_offset);
-    return { -get_page_width(page) / 2 + 2 * BOOKMARK_RECT_SIZE, y_offset };
+    float x = get_page_width(page) / 2 - 2 * BOOKMARK_RECT_SIZE;
+    return { right ? x : -x, y_offset };
 }
 
 PortalViewState Document::portal_destination(AbsoluteDocumentPos pos, float zoom_level) {
@@ -185,7 +186,7 @@ PortalViewState Document::portal_destination(AbsoluteDocumentPos pos, float zoom
 }
 
 int Document::add_bookmark(const std::wstring& desc, float y_offset) {
-    return add_marked_bookmark(desc, left_margin_pos(y_offset));
+    return add_marked_bookmark(desc, margin_pos(y_offset, false));
 }
 
 int Document::add_marked_bookmark(const std::wstring& desc, AbsoluteDocumentPos pos) {
@@ -364,10 +365,11 @@ void Document::delete_portal_with_object(int pdf_object) {
 }
 
 // Letter marks are saved in the file; the '/' mark, which a search sets to return to, is session state.
+// Setting a mark that exists moves it and clears its description.
 void Document::add_mark(char symbol, float y_offset, std::optional<float> x_offset, std::optional<float> zoom_level) {
     bool saved = std::isalpha(static_cast<unsigned char>(symbol));
     if (saved && !can_annotate()) return;
-    Mark mark{ y_offset, symbol, x_offset, zoom_level };
+    Mark mark{ y_offset, symbol, x_offset, zoom_level, L"" };
     int index = get_mark_index(symbol);
     if (index == -1) {
         marks.push_back(mark);
@@ -386,6 +388,13 @@ bool Document::remove_mark(char symbol) {
     marks.erase(marks.begin() + index);
     erase_marks(symbol);
     return true;
+}
+
+bool Document::set_mark_description(char symbol, const std::wstring& description) {
+    int index = get_mark_index(symbol);
+    if (index == -1) return false;
+    marks[index].description = description;
+    return write_mark(marks[index]);
 }
 
 void Document::clear_marks() {

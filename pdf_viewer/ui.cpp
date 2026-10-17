@@ -1534,6 +1534,7 @@ bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
     // down / up (physical Ctrl key, also on macOS). Handled for both the search box and the list,
     // because focus moves to the list once it is navigated; the list ignores these keys and would
     // pass them on to the main window, which would move the document behind the popup instead.
+    // Ctrl+R edits (renames) the highlighted entry, like Insert, which Mac keyboards don't have.
     if ((obj == line_edit || obj == get_view()) && event->type() == QEvent::KeyPress) {
         QKeyEvent* key_event = static_cast<QKeyEvent*>(event);
         if (is_platform_control_pressed(key_event) && !key_event->modifiers().testFlag(Qt::ShiftModifier)) {
@@ -1548,6 +1549,10 @@ bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
             if (move_key) {
                 // Forwarded without modifiers: Ctrl+arrow in an item view moves focus without selecting.
                 QCoreApplication::postEvent(get_view(), new QKeyEvent(QEvent::KeyPress, move_key.value(), Qt::NoModifier));
+                return true;
+            }
+            if (key_event->key() == Qt::Key_R) {
+                handle_edit();
                 return true;
             }
         }
