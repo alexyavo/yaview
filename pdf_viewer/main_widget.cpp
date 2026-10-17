@@ -514,10 +514,10 @@ void MainWidget::resizeEvent(QResizeEvent* resize_event) {
     int status_bar_height = get_status_bar_height();
 
     if (text_command_line_edit_container != nullptr) {
-        text_command_line_edit_container->move(0, 0);
         text_command_line_edit_container->resize(main_window_width, status_bar_height);
     }
 
+    // also moves the text command line below the tab bar
     update_tab_bar();
 
     if (status_label != nullptr) {
@@ -5958,6 +5958,21 @@ void MainWidget::set_mark_in_current_location(char symbol) {
     }
 }
 
+void MainWidget::clear_document_marks() {
+    // includes the global (uppercase) marks that point into this document
+    db_manager->delete_document_marks(doc()->get_checksum());
+    doc()->clear_marks();
+    invalidate_render();
+}
+
+void MainWidget::clear_all_marks() {
+    db_manager->delete_all_marks();
+    for (auto [path, document] : document_manager->get_cached_documents()) {
+        document->clear_marks();
+    }
+    invalidate_render();
+}
+
 void MainWidget::goto_mark(char symbol) {
     if (symbol == '`' || symbol == '\'') {
         return_to_last_visual_mark();
@@ -6676,6 +6691,19 @@ void MainWidget::handle_open_prev_doc() {
 
     make_current_menu_columns_equal();
     show_current_widget();
+}
+
+void MainWidget::clear_document_history() {
+    // An entry also holds the document's reading position, so documents open in tabs keep theirs.
+    std::vector<std::wstring> tabs = document_manager->get_tabs();
+    std::vector<std::wstring> opened_docs_hashes;
+    db_manager->select_opened_books_path_values(opened_docs_hashes);
+
+    for (const auto& doc_hash : opened_docs_hashes) {
+        std::optional<std::wstring> path = checksummer->get_path(utf8_encode(doc_hash));
+        if (path && std::find(tabs.begin(), tabs.end(), path.value()) != tabs.end()) continue;
+        db_manager->delete_opened_book(utf8_encode(doc_hash));
+    }
 }
 
 void MainWidget::handle_move_screen(int amount) {
@@ -9002,10 +9030,18 @@ void MainWidget::update_tab_bar() {
                 current_rect.width() / 2 + TAB_SCROLL_BUTTON_WIDTH + 4, 0);
         }
         update_tab_scroll_buttons();
+        // The text command line (bookmark text, search, ...) sits at the top of the window, where the tab bar
+        // and the window buttons covered it.
+        if (text_command_line_edit_container) {
+            text_command_line_edit_container->move(0, tabs_size.height());
+        }
     }
     else {
         tab_scroll_area->hide();
         tab_strip->hide();
+        if (text_command_line_edit_container) {
+            text_command_line_edit_container->move(0, 0);
+        }
 #ifdef Q_OS_MACOS
         if (tabs_in_titlebar) {
             // back to the normal title bar

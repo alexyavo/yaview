@@ -82,6 +82,8 @@ public:
     bool select_opened_books_path_and_doc_names(std::vector<std::pair<std::wstring, std::wstring>>& out_result);
     bool delete_mark_with_symbol(char symbol);
     bool delete_mark_with_uuid(const std::string& uuid);
+    bool delete_document_marks(const std::string& checksum);
+    bool delete_all_marks();
     bool select_global_mark(char symbol, std::vector<std::pair<std::string, float>>& out_result);
     bool delete_opened_book(const std::string& book_path);
     bool delete_highlight(const std::string& uuid);

@@ -684,6 +684,9 @@ public:
     void handle_goto_highlight_global();
     void handle_goto_toc();
     void handle_open_prev_doc();
+    void clear_document_history();
+    void clear_document_marks();
+    void clear_all_marks();
     void handle_open_all_docs();
     void handle_move_screen(int amount);
     MainWidget* handle_new_window();

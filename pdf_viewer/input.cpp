@@ -1250,6 +1250,30 @@ public:
     bool requires_document() { return false; }
 };
 
+class ClearDocumentMarksCommand : public Command {
+public:
+    static inline const std::string cname = "clear_document_marks";
+    static inline const std::string hname = "Delete all marks in the current document";
+    ClearDocumentMarksCommand(MainWidget* w) : Command(cname, w) {};
+
+    void perform() {
+        widget->clear_document_marks();
+    }
+};
+
+class ClearAllMarksCommand : public Command {
+public:
+    static inline const std::string cname = "clear_all_marks";
+    static inline const std::string hname = "Delete all marks in all documents";
+    ClearAllMarksCommand(MainWidget* w) : Command(cname, w) {};
+
+    void perform() {
+        widget->clear_all_marks();
+    }
+
+    bool requires_document() { return false; }
+};
+
 class SetMark : public SymbolCommand {
 public:
     static inline const std::string cname = "set_mark";
@@ -4094,6 +4118,19 @@ public:
 
     void handle_generic_requirement() {
         widget->handle_open_prev_doc();
+    }
+
+    bool requires_document() { return false; }
+};
+
+class ClearDocumentHistoryCommand : public Command {
+public:
+    static inline const std::string cname = "clear_document_history";
+    static inline const std::string hname = "Clear the list of previously opened documents (except open tabs)";
+    ClearDocumentHistoryCommand(MainWidget* w) : Command(cname, w) {};
+
+    void perform() {
+        widget->clear_document_history();
     }
 
     bool requires_document() { return false; }
@@ -7247,6 +7284,8 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<MoveTextMarkDownCommand>();
     register_command<MoveTextMarkUpCommand>();
     register_command<SetMark>();
+    register_command<ClearDocumentMarksCommand>();
+    register_command<ClearAllMarksCommand>();
     register_command<ToggleDrawingMask>();
     register_command<TurnOnAllDrawings>();
     register_command<TurnOffAllDrawings>();
@@ -7350,6 +7389,7 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<EditPortalCommand>();
     register_command<EditPortalCommand>();
     register_command<OpenPrevDocCommand>();
+    register_command<ClearDocumentHistoryCommand>();
     register_command<OpenAllDocsCommand>();
     register_command<OpenDocumentEmbeddedCommand>();
     register_command<OpenDocumentEmbeddedFromCurrentPathCommand>();

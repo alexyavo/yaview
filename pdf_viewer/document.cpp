@@ -625,6 +625,10 @@ bool Document::remove_mark(char symbol) {
     return false;
 }
 
+void Document::clear_marks() {
+    marks.clear();
+}
+
 std::optional<Mark> Document::get_mark_if_exists(char symbol){
     int mark_index = get_mark_index(symbol);
     if (mark_index == -1) {

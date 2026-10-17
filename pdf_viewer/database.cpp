@@ -776,6 +776,31 @@ bool DatabaseManager::delete_mark_with_uuid(const std::string& uuid) {
         error_message);
 }
 
+bool DatabaseManager::delete_document_marks(const std::string& checksum) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex);
+
+    std::wstringstream ss;
+    ss << "DELETE FROM marks where document_path='" << esc(checksum) << "';";
+    char* error_message = nullptr;
+
+    int error_code = sqlite3_exec(global_db, utf8_encode(ss.str()).c_str(), null_callback, 0, &error_message);
+    return handle_error(
+        "delete_document_marks",
+        error_code,
+        error_message);
+}
+
+bool DatabaseManager::delete_all_marks() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex);
+
+    char* error_message = nullptr;
+    int error_code = sqlite3_exec(global_db, "DELETE FROM marks;", null_callback, 0, &error_message);
+    return handle_error(
+        "delete_all_marks",
+        error_code,
+        error_message);
+}
+
 bool DatabaseManager::insert_bookmark(const std::string& document_path, const std::wstring& desc, float offset_y, std::wstring uuid) {
     std::lock_guard<std::recursive_mutex> lock(db_mutex);
 

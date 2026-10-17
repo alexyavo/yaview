@@ -6,13 +6,18 @@
 
 yaview is a fork of [sioyek](https://github.com/ahrm/sioyek).
 
+lightweight, supports vim navigation.
+
 ### Basics
 
 - <kbd>o</kbd> open a file, starting in the current document's folder.
 - <kbd>Ctrl</kbd>+<kbd>o</kbd> open a file, starting in `default_open_file_path` (the home folder if unset).
 - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>o</kbd> open a file with the system's file dialog (starts in
   `default_open_file_path` if set).
-- <kbd>Shift</kbd>+<kbd>o</kbd> open a previously opened document.
+- <kbd>Shift</kbd>+<kbd>o</kbd> open a previously opened document (in the list, <kbd>Cmd</kbd>+<kbd>Backspace</kbd> removes
+  the highlighted one).
+- `:clear_document_history` clear the list of previously opened documents, except the ones open in tabs. yaview also
+  forgets where you were in the removed documents.
 - <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> navigation.
 - <kbd>Ctrl</kbd>+<kbd>d</kbd> page down by half a screen (also: <kbd>Space</kbd>, <kbd>PageDown</kbd>)
 - <kbd>Ctrl</kbd>+<kbd>u</kbd> page up by half a screen (also: <kbd>Shift</kbd>+<kbd>Space</kbd>, <kbd>PageUp</kbd>)
@@ -37,176 +42,77 @@ yaview is a fork of [sioyek](https://github.com/ahrm/sioyek).
   search_url_s https://kagi.com/search?q=
   ```
 
-  Try it out on the following text:
-
-  > Vaswani, Ashish, et al. "**Attention is all you need**." Advances in neural information processing systems. 2017.
-
-### Tabs
-
-- Every opened document gets a tab in the tab bar at the top of the window (on macOS, in the title bar next to the
-  window buttons). Click a tab to switch to it.
-- Press <kbd>Ctrl</kbd>+<kbd>Tab</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd> to go to the next/previous tab.
-- Press <kbd>Cmd</kbd>+<kbd>w</kbd> (macOS) or enter `:q` to close the current tab. You can also click a tab's ×
-  button, or middle click the tab.
-
-### Command Palette
-
-- Press <kbd>:</kbd> to open a searchable list of all yaview commands.
-- If the command is bound to a key, the keybinding is shown on the right (multiple keybinds are separated by `|` symbol).
-
-### Search
-
-- Press <kbd>Ctrl</kbd>+<kbd>f</kbd> or <kbd>/</kbd> to search.
-- Press <kbd>n</kbd> / <kbd>Shift</kbd>+<kbd>n</kbd> to go to the next/previous match.
-- In order to quickly jump in search results, you can use `[NUM]`<kbd>n</kbd> where `[NUM]` is a number. For example in
-  order to jump to the 10th next occurance of current search term, enter <kbd>10n</kbd>. In fact most commands in yaview
-  can be prefixed with a number `N` which is equivalent to repeating them `N` times.
+- <kbd>:</kbd> for commands
+- <kbd>/</kbd> to search. <kbd>n</kbd> / <kbd>Shift</kbd>+<kbd>n</kbd> to go to the next/previous match.
 
 ### Marks
 
-- Press <kbd>m</kbd> to set a mark in current location. After you press <kbd>m</kbd>, yaview waits for you to press
-  another symbol which is the name of the mark. For example to create a mark named u, enter <kbd>mu</kbd>.
-- In order to go to a mark, press <kbd>`</kbd> (backtick) followed by the name of the mark. For example in order to go to
-  the mark in previous example, we enter <kbd>`</kbd> <kbd>u</kbd>. Note that the backtick character <kbd>`</kbd> is
-  different from the single quote character <kbd>'</kbd>.
-- Note that marks are persistent (they are saved even after yaview is closed). Lower case marks are local to each file,
-  while upper case marks are global.
-- You can right click on any line to create a visual mark which highlights below the line. This highlight has multiple
-  functions. First, it can reduce disorientation when scrolling by first right clicking the line we are reading and then
-  scrolling. Second, it can also act as a mark, so we can jump back to the location where we last put the highlight by
-  pressing <kbd>`</kbd> and then right clicking. You can try it out on the "**Right click on me!**" line in the tutorial.
-- You can move this visual mark to the next/previous line by pressing <kbd>j</kbd> and <kbd>k</kbd>. You can also press
-  <kbd>F7</kbd> to enable visual scroll mode. In this mode, scrolling the mouse wheel moves this visual mark.
+- <kbd>m</kbd> + letter set a mark at the current location (e.g. <kbd>ma</kbd>). Lowercase marks belong to the
+  document, uppercase marks are global (going to one opens its document). Marks are kept across restarts.
+- <kbd>`</kbd> + letter go to a mark (e.g. <kbd>`</kbd><kbd>a</kbd>).
+- `:show_marks` list the marks of all documents.
+- `:clear_document_marks` delete the marks of the current document (including the uppercase ones set in it).
+- `:clear_all_marks` delete the marks of all documents.
+- Right click a line to put a ruler (visual mark) under it.
+- <kbd>j</kbd> / <kbd>k</kbd> move the ruler to the next/previous line (also: <kbd>↓</kbd> / <kbd>↑</kbd>).
+- <kbd>`</kbd><kbd>`</kbd> go back to the ruler's last location (also: <kbd>`</kbd> then right click).
+- <kbd>F7</kbd> toggle ruler scrolling, where the mouse wheel moves the ruler.
 
 ### Bookmarks
 
-- Press <kbd>b</kbd> to create a bookmark in the current location.
-- Press <kbd>gb</kbd> to search the bookmarks in the current file and <kbd>gB</kbd> (that is g followed by capital B) to
-  search all the bookmarks.
-- In order to delete a bookmark, first goto the bookmark and then enter <kbd>db</kbd> (delete the closest bookmark).
-- If you select a piece of text and then press <kbd>b</kbd> then the selected text will automatically be used as the
-  bookmark text. You can try it on the "**Bookmark me!**" text in the tutorial.
+- <kbd>b</kbd> add a bookmark at the current location: type its text and press <kbd>Enter</kbd>. Selected text is
+  filled in as the bookmark text.
+- <kbd>gb</kbd> search the bookmarks of the current document.
+- <kbd>gB</kbd> search the bookmarks of all documents.
+- <kbd>db</kbd> delete the closest bookmark.
 
 ### Highlights
 
-- Select a piece of text and then press <kbd>h</kbd> followed by a lower case letter to highlight the selected text (the
-  letter can be though of as the "type" of the highlight). For example you can press <kbd>hh</kbd> to create a highlight
-  of type "h". Different types of highlight are colored differently, and the color is configurable in the
-  `prefs.config` file.
-- Press <kbd>gh</kbd> to search the highlights in the current file and <kbd>gH</kbd> (that is g followed by capital H)
-  to search all the highlights.
-- In order to delete a highlight, you can click on a highlight and then press <kbd>dh</kbd>.
+- <kbd>h</kbd> + lowercase letter highlight the selected text (e.g. <kbd>ha</kbd>). The letter is the highlight's type;
+  each type has its own color (`highlight_color_<letter>` in `prefs_user.config`).
+- <kbd>gh</kbd> search the highlights of the current document.
+- <kbd>gH</kbd> search the highlights of all documents.
+- <kbd>gnh</kbd> / <kbd>gNh</kbd> go to the next/previous highlight.
+- <kbd>dh</kbd> delete the clicked highlight.
 
 ### Smart Jump
 
-- You can middle click on figure names (for example on "1" in "Figure 1") to jump to the location where that figure is
-  located. This works even if the document is not linked. You can also middle click on in-line references (for example
-  on "2" in "[1, 2]") to go to the corresponding entry in the "References" section.
-- You can also right click on figure names or in-line references to open a quick overview of their location instead of
-  jumping to them.
-- Try it out in the tutorial by middle / right clicking on the figure name / in-line reference in the following text:
-
-  > You can see a beautiful colorization of mandlebrot set in Figure 1. For more information about the mandlebrot set,
-  > see [1].
-- You can also middle click on the full-citation of a paper to search it with the `s` search engine (Google; set
-  `middle_click_search_engine` in `prefs_user.config` to use another one, for example `c` for Google Scholar). You can
-  use this feature, for example, while in the "References" section of a document.
+- Middle click a figure name (the "1" in "Figure 1") or an in-line reference (the "2" in "[1, 2]") to jump to the
+  figure or the reference entry, also in documents without links.
+- Right click a figure name or in-line reference to show its target in an overview instead (right click again to close
+  it).
+- Middle click a full citation (e.g. in the References section) to search the paper with the `s` search engine
+  (`middle_click_search_engine` in `prefs_user.config` picks another `search_url_<letter>`).
 
 ### Portals
 
-- Press <kbd>F12</kbd> to open the helper window. This window automatically displays the closest portal to the current
-  location.
-- In order to create a portal, press <kbd>p</kbd> to enter the current location as the source of the portal. Now you
-  navigate to the portal destination and press <kbd>p</kbd> again to mark that location as the destination of the portal
-  (note that source and destination don't have to be in the same document, for example you can create a portal from a
-  reference to a paper to the actual paper).
-- You can also create a portal by pressing <kbd>p</kbd> and then clicking (or middle clicking using smart jumps) on a
-  link. This automatically creates a link between the current location and the destination of the link.
-- In order to delete a portal, press <kbd>dp</kbd>. This deletes the closest portal to the current location (the portal
-  that is being displayed in the helper window).
-- Sometimes you need to slightly edit a portal (especially when creating a portal using links, because sometimes for
-  example a link to a figure doesn't center the figure properly in the screen). In order to do this, press
-  <kbd>Shift</kbd>+<kbd>p</kbd> (<kbd>P</kbd>) while the portal is active. This takes you to the portal's destination.
-  Now you can adjust the destination and once you are done press the back button (by default it is
-  <kbd>Backspace</kbd>) to go back to where you were.
-- You can also use the mouse wheel to adjust the portal in helper window. You can also pan it using mouse drag or zoom
-  using mouse wheel while holding control.
+- <kbd>p</kbd> start a portal at the current location; go to the destination (in any document) and press <kbd>p</kbd>
+  again. Clicking a link after the first <kbd>p</kbd> uses the link's destination.
+- <kbd>F12</kbd> toggle the helper window, which shows the destination of the closest portal. In it, the mouse wheel
+  and dragging adjust the destination and <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + wheel zooms.
+- <kbd>Tab</kbd> go to the closest portal's destination (also: <kbd>gp</kbd>).
+- <kbd>Shift</kbd>+<kbd>Tab</kbd> edit the closest portal: go to its destination, adjust it, and go back
+  (<kbd>Backspace</kbd>) to save it (also: <kbd>P</kbd>).
+- <kbd>dp</kbd> delete the closest portal.
 
 ### Configuration
 
-- There are four configuration files: two of them are system-wide and are not meant to be edited by the user
-  (`keys.config` and `prefs.config`), while the other two are user-editable (`keys_user.config` and
-  `prefs_user.config`).
-- The former (i.e., the system-wide configuration files) are always loaded by yaview before the latter. This implies
-  that configuration options set in the user-editable configuration files always overwrite the ones in the system-wide
-  files.
-- In order to edit any configuration, copy the configuration line you want to edit to the user-editable config file and
-  change it there. For example, suppose we want to change the key that opens the table of contents. We search for
-  "table of contents" in `keys.config` and find the following:
+- `keys.config` and `prefs.config` hold the defaults; don't edit them. `keys_user.config` and `prefs_user.config` are
+  loaded after them and override them.
+- To change a setting, copy its line from `prefs.config` to `prefs_user.config` and edit it there. Key bindings in
+  `keys_user.config` are added to the defaults. For example, to also open the table of contents with <kbd>T</kbd>,
+  find its line in `keys.config`:
 
   ```
   # Open table of contents.
   goto_toc t
   ```
 
-  We copy this line to `keys_user.config` and change the key. For example, suppose we want to use capital <kbd>T</kbd>
-  to open the table of contents. We can put the following line in `keys_user.config`:
+  and put this in `keys_user.config`:
 
   ```
   goto_toc T
   ```
-- In portable builds, the config files are located in the same place where `yaview` executable file is located. In
-  non-portable builds, their location is OS-dependent (on macOS, `~/.config/yaview/` and
-  `~/Library/Application Support/yaview/`). You can also open them by pressing <kbd>:</kbd> to open the command window
-  and then entering one of the following:
-  - `prefs`
-  - `prefs_user`
-  - `keys`
-  - `keys_user`
-
-### Synctex
-
-- Press <kbd>F4</kbd> to enable "synctex mode". While in synctex mode, right clicking on a piece of texts opens the
-  corresponding latex file location.
-- You can configure the synctex inverse search command using `inverse_search_command` config in `prefs.config`. Here is
-  an example for VsCode:
-
-  ```
-  inverse_search_command 		"C:\path\to\vscode\Code.exe" -r -g %1:%2
-  ```
-
-  `%1` stands for the name of the file and `%2` stands for the line number in the file.
-- Here is the forward search configuration for Latex Workshop for VsCode:
-
-  ```json
-  "latex-workshop.view.pdf.external.synctex.command": "C:\\path\\to\\yaview.exe",
-  "latex-workshop.view.pdf.external.synctex.args": [
-  	"--inverse-search",
-  	"\"C:\\path\\to\\vscode\\Code.exe\" -r -g %1:%2",
-  	"--reuse-window",
-  	"--forward-search-file",
-  	"%TEX%",
-  	"--forward-search-line",
-  	"%LINE%",
-  	"%PDF%"
-  ]
-  ```
-
-  And here is example configuration for VimTeX, which has no yaview viewer of its own; its sioyek viewer works with
-  yaview's executable:
-
-  ```vim
-  let g:vimtex_view_method = 'sioyek'
-  let g:vimtex_view_sioyek_exe = 'yaview'
-  ```
-
-### Extensions
-
-You can extend yaview by writing your own extensions. See
-[the documentation](https://sioyek-documentation.readthedocs.io/en/latest/scripting.html) on how to do it. sioyek also
-has some extensions [available here](https://github.com/ahrm/sioyek-python-extensions). For example there is an extension
-that downloads the paper from google scholar just by control+clicking on its name.
-
-## Building
-
-See [docs/build.md](docs/build.md).
+- Location: on macOS `~/.config/yaview/` or `~/Library/Application Support/yaview/`; in portable builds, next to the
+  `yaview` executable.
+- `:prefs`, `:prefs_user`, `:keys`, `:keys_user` open the files.

@@ -2,7 +2,8 @@ name: Memory leak tests
 
 # Runs tests/memory/memory_leak_tests.py on a GitHub-hosted Mac, so the tests don't need the
 # developer's machine. Results (leak reports, footprints, logs) are uploaded as an artifact.
-# Runs only when started by hand and once a week, never on pushes.
+# Runs when started by hand and at most once a week, never on pushes. The weekly run only tests
+# when the app's source code changed since the last tested commit.
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +21,36 @@ permissions:
   contents: read
 
 jobs:
+  # Decides whether a scheduled run tests anything: only when the app's source code (not the
+  # documentation, tests or other files) changed since the commit the last run tested, which the
+  # badge job records in memory-tests-commit on the `badges` branch. Manual runs always test.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for source changes
+        id: check
+        run: |
+          tested=""
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && git fetch -q origin badges; then
+            tested=$(git show FETCH_HEAD:memory-tests-commit 2>/dev/null || true)
+          fi
+          if [ -n "$tested" ] && git cat-file -e "$tested^{commit}" 2>/dev/null &&
+            git diff --quiet "$tested" HEAD -- pdf_viewer fzf mupdf zlib pdf_viewer_build_config.pro resources.qrc; then
+            echo "No source changes since the last tested commit $tested"
+            echo run=false >> "$GITHUB_OUTPUT"
+          else
+            echo run=true >> "$GITHUB_OUTPUT"
+          fi
+
   memory-tests:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: macos-15
     timeout-minutes: 120
     env:
@@ -80,8 +110,9 @@ jobs:
 
   # GitHub's own workflow badge can't show a date, so this job publishes the result and date of
   # the run as a shields.io endpoint badge (memory-tests.json on the orphan `badges` branch, which
-  # the README's badge reads). It's a separate job so the build and tests never get a token that
-  # can write to the repository. Cancelled runs leave the badge alone.
+  # the README's badge reads), plus the tested commit for the `changes` job. It's a separate job so
+  # the build and tests never get a token that can write to the repository. Cancelled and skipped
+  # runs leave the badge alone.
   badge:
     needs: memory-tests
     if: always() && contains(fromJSON('["success", "failure"]'), needs.memory-tests.result)
@@ -99,7 +130,8 @@ jobs:
           git init -q -b badges
           printf '{"schemaVersion": 1, "label": "memory leak tests", "message": "%s · %s", "color": "%s"}\n' \
             "$message" "$(date -u +%Y-%m-%d)" "$color" > memory-tests.json
-          git add memory-tests.json
+          echo "$GITHUB_SHA" > memory-tests-commit
+          git add memory-tests.json memory-tests-commit
           git -c user.name='github-actions[bot]' \
             -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -q -m "Memory leak tests $message: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
