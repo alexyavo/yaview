@@ -2142,6 +2142,18 @@ void PdfViewOpenGLWidget::wheelEvent(QWheelEvent* wevent) {
 
 }
 
+// Zooms the portal helper window like Ctrl + wheel does, which also saves the zoom into the portal it shows.
+void PdfViewOpenGLWidget::zoom_helper(bool zoom_in) {
+    if (!is_helper || (document_view == nullptr) || (document_view->get_document() == nullptr)) return;
+
+    float zoom_level = document_view->get_zoom_level();
+    document_view->set_zoom_level(zoom_in ? zoom_level * ZOOM_INC_FACTOR : zoom_level / ZOOM_INC_FACTOR, true);
+    if (this->on_link_edit) {
+        (this->on_link_edit.value())(document_view->get_state().book_state);
+    }
+    update();
+}
+
 void PdfViewOpenGLWidget::register_on_link_edit_listener(std::function<void(const OpenedBookState&)> listener) {
     this->on_link_edit = listener;
 }

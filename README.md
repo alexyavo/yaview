@@ -1,8 +1,12 @@
-<img src="resources/yaview-icon.png" alt="yaview icon" width="128">
+<p align="center">
+  <img src="resources/yaview-icon.png" alt="yaview icon" width="128">
+</p>
 
-# yaview -- a PDF Viewer
+<h1 align="center">yaview -- a PDF Viewer</h1>
 
-[![Memory leak tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/alexyavo/yaview/badges/memory-tests.json)](https://github.com/alexyavo/yaview/actions/workflows/memory-tests.yml)
+<p align="center">
+  <a href="https://github.com/alexyavo/yaview/actions/workflows/memory-tests.yml"><img alt="Memory leak tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/alexyavo/yaview/badges/memory-tests.json"></a>
+</p>
 
 yaview is a fork of [sioyek](https://github.com/ahrm/sioyek).
 
@@ -75,21 +79,14 @@ lightweight, supports vim navigation.
 - <kbd>gnh</kbd> / <kbd>gNh</kbd> go to the next/previous highlight.
 - <kbd>dh</kbd> delete the clicked highlight.
 
-### Smart Jump
-
-- Middle click a figure name (the "1" in "Figure 1") or an in-line reference (the "2" in "[1, 2]") to jump to the
-  figure or the reference entry, also in documents without links.
-- Right click a figure name or in-line reference to show its target in an overview instead (right click again to close
-  it).
-- Middle click a full citation (e.g. in the References section) to search the paper with the `s` search engine
-  (`middle_click_search_engine` in `prefs_user.config` picks another `search_url_<letter>`).
 
 ### Portals
 
 - <kbd>p</kbd> start a portal at the current location; go to the destination (in any document) and press <kbd>p</kbd>
   again. Clicking a link after the first <kbd>p</kbd> uses the link's destination.
 - <kbd>F12</kbd> toggle the helper window, which shows the destination of the closest portal. In it, the mouse wheel
-  and dragging adjust the destination and <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + wheel zooms.
+  and dragging adjust the destination; <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + wheel and the zoom keys (<kbd>+</kbd> / <kbd>-</kbd>,
+  <kbd>Cmd</kbd>+<kbd>=</kbd> / <kbd>Cmd</kbd>+<kbd>-</kbd>) zoom it.
 - <kbd>Tab</kbd> go to the closest portal's destination (also: <kbd>gp</kbd>).
 - <kbd>Shift</kbd>+<kbd>Tab</kbd> edit the closest portal: go to its destination, adjust it, and go back
   (<kbd>Backspace</kbd>) to save it (also: <kbd>P</kbd>).

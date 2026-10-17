@@ -265,6 +265,7 @@ public:
     void mouseReleaseEvent(QMouseEvent* mevent) override;
     void wheelEvent(QWheelEvent* wevent) override;
     void register_on_link_edit_listener(std::function<void(const OpenedBookState&)> listener);
+    void zoom_helper(bool zoom_in);
     void set_overview_page(std::optional<OverviewState> overview_page);
     std::optional<OverviewState> get_overview_page();
     void draw_empty_helper_message(QPainter* painter, QString message);

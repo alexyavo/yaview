@@ -175,6 +175,7 @@ public:
     //std::vector<std::unique_ptr<Command>> handle_key(QKeyEvent* key_event, bool shift_pressed, bool control_pressed, bool alt_pressed ,int* num_repeats);
     int get_event_key(QKeyEvent* key_event, bool* shift_pressed, bool* control_pressed, bool* is_command_pressed, bool* alt_pressed);
     std::unique_ptr<Command> handle_key(MainWidget* w, QKeyEvent* key_event, bool shift_pressed, bool control_pressed, bool is_command_pressed, bool alt_pressed, int* num_repeats);
+    std::vector<std::string> get_single_key_command_names(QKeyEvent* key_event);
     std::unique_ptr<Command> get_menu_command(MainWidget* w, QKeyEvent* key_event, bool shift_pressed, bool control_pressed, bool command_pressed, bool alt_pressed);
     void delete_current_parse_tree(InputParseTreeNode* node_to_delete);
 

@@ -8203,6 +8203,22 @@ std::unique_ptr<Command> InputHandler::handle_key(MainWidget* w, QKeyEvent* key_
     return nullptr;
 }
 
+// The commands bound to key_event as a one-key binding. Unlike handle_key, this leaves the pending key sequence alone.
+std::vector<std::string> InputHandler::get_single_key_command_names(QKeyEvent* key_event) {
+    bool shift_pressed = key_event->modifiers() & Qt::ShiftModifier;
+    bool control_pressed = is_platform_control_pressed(key_event);
+    bool command_pressed = is_platform_meta_pressed(key_event);
+    bool alt_pressed = key_event->modifiers() & Qt::AltModifier;
+    int key = get_event_key(key_event, &shift_pressed, &control_pressed, &command_pressed, &alt_pressed);
+
+    for (InputParseTreeNode* child : root->children) {
+        if (child->is_final && child->matches(key, shift_pressed, control_pressed, command_pressed, alt_pressed)) {
+            return child->name_;
+        }
+    }
+    return {};
+}
+
 void InputHandler::delete_current_parse_tree(InputParseTreeNode* node_to_delete)
 {
     bool is_root = false;

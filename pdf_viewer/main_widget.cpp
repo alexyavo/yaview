@@ -11033,6 +11033,20 @@ void MainWidget::initialize_helper(){
     helper_opengl_widget_->register_on_link_edit_listener([this](OpenedBookState state) {
             this->update_closest_link_with_opened_book_state(state);
             });
+    // the helper window has no key handling of its own (see eventFilter)
+    helper_opengl_widget_->installEventFilter(this);
+}
+
+bool MainWidget::eventFilter(QObject* obj, QEvent* event) {
+    // Zoom keys pressed in the portal helper window zoom it.
+    if ((obj == helper_opengl_widget_) && (event->type() == QEvent::KeyPress)) {
+        std::vector<std::string> command_names = input_handler->get_single_key_command_names(static_cast<QKeyEvent*>(event));
+        if ((command_names.size() == 1) && ((command_names[0] == "zoom_in") || (command_names[0] == "zoom_out"))) {
+            helper_opengl_widget_->zoom_helper(command_names[0] == "zoom_in");
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 PdfViewOpenGLWidget* MainWidget::helper_opengl_widget(){

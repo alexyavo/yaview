@@ -473,6 +473,7 @@ public:
 
     void update_selected_bookmark_font_size();
     //bool eventFilter(QObject* obj, QEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
     void set_command_textbox_text(const std::wstring& txt);
     void change_selected_highlight_type(char new_type);
     void change_selected_bookmark_text(const std::wstring& new_text);
