@@ -21,7 +21,6 @@
 #include <mupdf/pdf.h>
 
 #include "sqlite3.h"
-#include "checksum.h"
 #include "database.h"
 #include "utf8/checked.h"
 #include "utils.h"
@@ -55,11 +54,9 @@ extern Path standard_data_path;
 extern bool VERBOSE;
 extern float FREETEXT_BOOKMARK_COLOR[3];
 extern float FREETEXT_BOOKMARK_FONT_SIZE;
-extern std::wstring SHARED_DATABASE_PATH;
+extern float BOOKMARK_RECT_SIZE;
 extern bool DEBUG;
 extern bool EXACT_HIGHLIGHT_SELECT;
-extern std::wstring ANNOTATIONS_DIR_PATH;
-extern bool LIGHTEN_COLORS_WHEN_EMBEDDING_ANNOTATIONS;
 extern bool USE_PAGE_LABELS_IN_TABLE_OF_CONTENTS;
 
 int Document::get_mark_index(char symbol) {
@@ -152,92 +149,401 @@ CharacterIterator PageIterator::end() const {
     return CharacterIterator(nullptr, nullptr, nullptr);
 }
 
-void Document::load_document_metadata_from_db() {
-
-    marks.clear();
-    bookmarks.clear();
-    highlights.clear();
-    portals.clear();
-    portals.clear();
-
-    std::optional<std::string> checksum_ = get_checksum_fast();
-    if (checksum_) {
-        std::string checksum = checksum_.value();
-        db_manager->select_mark(checksum, marks);
-        db_manager->select_bookmark(checksum, bookmarks);
-        db_manager->select_highlight(checksum, highlights);
-        db_manager->select_links(checksum, portals);
-        should_reload_annotations = false;
+// Replaces the annotations with the ones read from the file. Annotations added while the file was being
+// read are in the file too, but not in what was read, so they are kept.
+void Document::set_annotations(std::vector<Mark>& new_marks, std::vector<BookMark>& new_bookmarks, std::vector<Highlight>& new_highlights, std::vector<Portal>& new_portals) {
+    auto merge = [](auto& loaded, const auto& current) {
+        for (const auto& annotation : current) {
+            bool loaded_too = std::any_of(loaded.begin(), loaded.end(), [&](const auto& l) { return l.pdf_object == annotation.pdf_object; });
+            if (!loaded_too) loaded.push_back(annotation);
+        }
+    };
+    merge(new_bookmarks, bookmarks);
+    merge(new_highlights, highlights);
+    merge(new_portals, portals);
+    for (const Mark& mark : marks) {
+        bool loaded_too = std::any_of(new_marks.begin(), new_marks.end(), [&](const Mark& m) { return m.symbol == mark.symbol; });
+        if (!loaded_too) new_marks.push_back(mark);
     }
-    else {
-        auto checksum_thread = std::thread([&]() {
-            std::string checksum = get_checksum();
-            if ((checksummer->num_docs_with_checksum(checksum) > 1) || annotations_file_exists()) {
-                if (marks.size() == 0 && bookmarks.size() == 0 && highlights.size() == 0 && portals.size() == 0) {
-                    db_manager->select_mark(checksum, marks);
-                    db_manager->select_bookmark(checksum, bookmarks);
-                    db_manager->select_highlight(checksum, highlights);
-                    db_manager->select_links(checksum, portals);
-                }
-                // we already have a document with the same hash so there might be
-                // annotations that are not loaded
-                should_reload_annotations = true;
-            }
-            db_manager->insert_document_hash(get_path(), checksum);
-            });
-        checksum_thread.detach();
-        //checksum_thread.join();
-    }
+    marks = std::move(new_marks);
+    bookmarks = std::move(new_bookmarks);
+    highlights = std::move(new_highlights);
+    portals = std::move(new_portals);
 }
 
-
-std::string Document::add_bookmark(const std::wstring& desc, float y_offset) {
-    BookMark bookmark;
-    bookmark.y_offset_ = y_offset;
-    bookmark.description = desc;
-    bookmark.uuid = new_uuid_utf8();
-    bookmark.update_creation_time();
-    bookmarks.push_back(bookmark);
-    db_manager->insert_bookmark(get_checksum(), desc, y_offset, utf8_decode(bookmark.uuid));
-    is_annotations_dirty = true;
-    return bookmark.uuid;
+AbsoluteDocumentPos Document::margin_pos(float y_offset, bool right) {
+    int page = get_offset_page_number(y_offset);
+    float x = get_page_width(page) / 2 - 2 * BOOKMARK_RECT_SIZE;
+    return { right ? x : -x, y_offset };
 }
 
-std::string Document::add_marked_bookmark(const std::wstring& desc, AbsoluteDocumentPos pos) {
+PortalViewState Document::portal_destination(AbsoluteDocumentPos pos, float zoom_level) {
+    PortalViewState res;
+    res.document_path = file_name;
+    res.pos = page_pos_to_pdf_space(absolute_to_page_pos(pos));
+    res.zoom_level = zoom_level;
+    return res;
+}
+
+int Document::add_bookmark(const std::wstring& desc, float y_offset) {
+    return add_marked_bookmark(desc, margin_pos(y_offset, false));
+}
+
+int Document::add_marked_bookmark(const std::wstring& desc, AbsoluteDocumentPos pos) {
+    if (!can_annotate()) return -1;
     BookMark bookmark;
     bookmark.description = desc;
-    bookmark.y_offset_ = pos.y;
     bookmark.begin_x = pos.x;
     bookmark.begin_y = pos.y;
-    bookmark.uuid = new_uuid_utf8();
     bookmark.update_creation_time();
-
-    if (db_manager->insert_bookmark_marked(get_checksum(), desc, pos.x, pos.y, utf8_decode(bookmark.uuid))) {
-        bookmarks.push_back(bookmark);
-        is_annotations_dirty = true;
-    }
-    return bookmark.uuid;
+    bookmark.pdf_object = write_bookmark(bookmark);
+    if (bookmark.pdf_object == 0) return -1;
+    bookmarks.push_back(bookmark);
+    return bookmarks.size() - 1;
 }
 
 int Document::add_incomplete_bookmark(BookMark incomplete_bookmark){
-    incomplete_bookmark.uuid = new_uuid_utf8();
     bookmarks.push_back(incomplete_bookmark);
     return bookmarks.size() - 1;
 }
 
-std::string Document::add_pending_bookmark(int index, const std::wstring& desc) {
+int Document::add_pending_bookmark(int index, const std::wstring& desc) {
     BookMark& bookmark = bookmarks[index];
     bookmark.description = desc;
     bookmark.font_size = FREETEXT_BOOKMARK_FONT_SIZE;
     bookmark.update_creation_time();
-
-    if (!db_manager->insert_bookmark_freetext(get_checksum(), bookmark)) {
+    bookmark.pdf_object = can_annotate() ? write_bookmark(bookmark) : 0;
+    if (bookmark.pdf_object == 0) {
         undo_pending_bookmark(index);
+        return -1;
+    }
+    return index;
+}
+
+void Document::add_freetext_bookmark_with_color(const std::wstring& desc, AbsoluteRect absrect, float* color, float font_size) {
+    if (!can_annotate()) return;
+    BookMark bookmark;
+    bookmark.description = desc;
+    bookmark.begin_x = absrect.x0;
+    bookmark.begin_y = absrect.y0;
+    bookmark.end_x = absrect.x1;
+    bookmark.end_y = absrect.y1;
+    std::copy(color, color + 3, bookmark.color);
+    bookmark.font_size = font_size < 0 ? FREETEXT_BOOKMARK_FONT_SIZE : font_size;
+    bookmark.update_creation_time();
+    bookmark.pdf_object = write_bookmark(bookmark);
+    if (bookmark.pdf_object != 0) {
+        bookmarks.push_back(bookmark);
+    }
+}
+
+const std::wstring& Document::get_highlight_text(int index) {
+    return get_highlight_text_of(highlights[index]);
+}
+
+const std::wstring& Document::get_highlight_text_of(Highlight& highlight) {
+    if (highlight.description.empty()) {
+        std::deque<AbsoluteRect> selected_characters;
+        get_text_selection(highlight.selection_begin, highlight.selection_end, !EXACT_HIGHLIGHT_SELECT, selected_characters, highlight.description);
+    }
+    return highlight.description;
+}
+
+void Document::load_highlight_texts() {
+    for (size_t i = 0; i < highlights.size(); i++) {
+        get_highlight_text(i);
+    }
+}
+
+int Document::add_highlight(const std::wstring& annot, AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type) {
+    std::deque<AbsoluteRect> selected_characters;
+    std::vector<AbsoluteRect> merged_rects;
+    std::wstring selected_text;
+    get_text_selection(selection_begin, selection_end, !EXACT_HIGHLIGHT_SELECT, selected_characters, selected_text);
+    merge_selected_character_rects<AbsoluteRect>(selected_characters, merged_rects, type != '_');
+
+    Highlight highlight;
+    highlight.description = selected_text;
+    highlight.text_annot = annot;
+    highlight.selection_begin = selection_begin;
+    highlight.selection_end = selection_end;
+    highlight.type = type;
+    highlight.highlight_rects = merged_rects;
+    return add_highlight(highlight);
+}
+
+int Document::add_highlight(const std::wstring& desc,
+    const std::vector<AbsoluteRect>& highlight_rects,
+    AbsoluteDocumentPos selection_begin,
+    AbsoluteDocumentPos selection_end,
+    char type)
+{
+    Highlight highlight;
+    highlight.description = desc;
+    highlight.selection_begin = selection_begin;
+    highlight.selection_end = selection_end;
+    highlight.type = type;
+    highlight.highlight_rects = highlight_rects;
+    return add_highlight(highlight);
+}
+
+int Document::add_highlight(Highlight highlight) {
+    if (!can_annotate() || highlight.highlight_rects.empty()) return -1;
+    if ((highlight.type != '_') && !std::isalpha(static_cast<unsigned char>(highlight.type))) {
+        highlight.type = 'a';
+    }
+    highlight.update_creation_time();
+    highlight.pdf_object = write_highlight(highlight);
+    if (highlight.pdf_object == 0) return -1;
+    highlights.push_back(highlight);
+    return highlights.size() - 1;
+}
+
+int Document::add_portal(Portal portal) {
+    if (!can_annotate()) return -1;
+    portal.update_creation_time();
+    portal.pdf_object = write_portal(portal);
+    if (portal.pdf_object == 0) return -1;
+    portals.push_back(portal);
+    return portals.size() - 1;
+}
+
+void Document::delete_closest_bookmark(float to_y_offset) {
+    delete_bookmark(find_closest_bookmark_index(bookmarks, to_y_offset));
+}
+
+void Document::delete_bookmark(int index) {
+    if ((index >= 0) && (index < bookmarks.size())) {
+        delete_annotation(get_offset_page_number(bookmarks[index].begin_y), bookmarks[index].pdf_object);
+        bookmarks.erase(bookmarks.begin() + index);
+    }
+}
+
+void Document::delete_bookmark_with_index(int index) {
+    delete_bookmark(index);
+}
+
+void Document::delete_highlight_with_index(int index) {
+    if ((index >= 0) && (index < highlights.size())) {
+        delete_annotation(get_offset_page_number(highlights[index].selection_begin.y), highlights[index].pdf_object);
+        highlights.erase(highlights.begin() + index);
+    }
+}
+
+// Changes the destination of the portal that new_portal is a copy of.
+bool Document::update_portal(Portal new_portal) {
+    int index = get_portal_index_with_object(new_portal.pdf_object);
+    if (index == -1) return false;
+    Portal& portal = portals[index];
+    portal.dst = new_portal.dst;
+    portal.update_modification_time();
+    return update_portal_link(portal.pdf_object, [&](pdf_obj* link) { write_portal_action(link, portal); });
+}
+
+void Document::delete_closest_portal(float to_offset_y) {
+    int closest_index = -1;
+    if (find_closest_portal(to_offset_y, &closest_index)) {
+        delete_portal_with_object(portals[closest_index].pdf_object);
+    }
+}
+
+int Document::get_portal_index_with_object(int pdf_object) {
+    for (int i = 0; i < portals.size(); i++) {
+        if (portals[i].pdf_object == pdf_object) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void Document::delete_portal_with_object(int pdf_object) {
+    int index = get_portal_index_with_object(pdf_object);
+    if (index > -1) {
+        delete_annotation(get_offset_page_number(portals[index].src_pos.y), pdf_object);
+        portals.erase(portals.begin() + index);
+    }
+}
+
+// Letter marks are saved in the file; the '/' mark, which a search sets to return to, is session state.
+// Setting a mark that exists moves it and clears its description.
+void Document::add_mark(char symbol, float y_offset, std::optional<float> x_offset, std::optional<float> zoom_level) {
+    bool saved = std::isalpha(static_cast<unsigned char>(symbol));
+    if (saved && !can_annotate()) return;
+    Mark mark{ y_offset, symbol, x_offset, zoom_level, L"" };
+    int index = get_mark_index(symbol);
+    if (index == -1) {
+        marks.push_back(mark);
     }
     else {
-        is_annotations_dirty = true;
+        marks[index] = mark;
     }
-    return bookmark.uuid;
+    if (saved) {
+        write_mark(mark);
+    }
+}
+
+bool Document::remove_mark(char symbol) {
+    int index = get_mark_index(symbol);
+    if (index == -1) return false;
+    marks.erase(marks.begin() + index);
+    erase_marks(symbol);
+    return true;
+}
+
+bool Document::set_mark_description(char symbol, const std::wstring& description) {
+    int index = get_mark_index(symbol);
+    if (index == -1) return false;
+    marks[index].description = description;
+    return write_mark(marks[index]);
+}
+
+void Document::clear_marks() {
+    marks.clear();
+    erase_marks({});
+}
+
+void Document::update_highlight_add_text_annotation(int index, const std::wstring& text_annot) {
+    if ((index >= 0) && (index < highlights.size())) {
+        Highlight& highlight = highlights[index];
+        highlight.text_annot = text_annot;
+        highlight.update_modification_time();
+        std::string contents = utf8_encode(text_annot);
+        update_annotation(get_offset_page_number(highlight.selection_begin.y), highlight.pdf_object, [&](pdf_annot* annot) {
+            pdf_set_annot_contents(context, annot, contents.c_str());
+            });
+    }
+}
+
+// The type decides the annotation's subtype (highlight, underline or strikethrough), so the annotation is
+// written anew.
+void Document::update_highlight_type(int index, char new_type) {
+    if ((index >= 0) && (index < highlights.size())) {
+        Highlight& highlight = highlights[index];
+        highlight.type = new_type;
+        highlight.update_modification_time();
+        delete_annotation(get_offset_page_number(highlight.selection_begin.y), highlight.pdf_object);
+        highlight.pdf_object = write_highlight(highlight);
+    }
+}
+
+void Document::update_bookmark_text(int index, const std::wstring& new_text, float new_font_size) {
+    if ((index >= 0) && (index < bookmarks.size())) {
+        BookMark& bookmark = bookmarks[index];
+        bookmark.description = new_text;
+        if (new_font_size > 0) bookmark.font_size = new_font_size;
+        bookmark.update_modification_time();
+        std::string contents = utf8_encode(new_text);
+        update_annotation(get_offset_page_number(bookmark.begin_y), bookmark.pdf_object, [&](pdf_annot* annot) {
+            pdf_set_annot_contents(context, annot, contents.c_str());
+            if (bookmark.is_box()) {
+                pdf_set_annot_color(context, annot, 3, get_highlight_type_color(bookmark.get_type().value_or('a')));
+            }
+            else if (bookmark.is_freetext()) {
+                pdf_set_annot_default_appearance(context, annot, "Helv", bookmark.font_size, 3, bookmark.color);
+            }
+            });
+    }
+}
+
+// A bookmark that moves to another page is written anew there.
+void Document::update_bookmark_position(int index, AbsoluteDocumentPos new_begin_position, AbsoluteDocumentPos new_end_position) {
+    if ((index >= 0) && (index < bookmarks.size())) {
+        BookMark& bookmark = bookmarks[index];
+        int old_page = get_offset_page_number(bookmark.begin_y);
+        bookmark.begin_x = new_begin_position.x;
+        bookmark.begin_y = new_begin_position.y;
+        bookmark.end_x = new_end_position.x;
+        bookmark.end_y = new_end_position.y;
+        bookmark.update_modification_time();
+        if (get_offset_page_number(bookmark.begin_y) != old_page) {
+            delete_annotation(old_page, bookmark.pdf_object);
+            bookmark.pdf_object = write_bookmark(bookmark);
+            return;
+        }
+        PagelessDocumentRect rect = bookmark.is_marked() ?
+            bookmark.get_rectangle().to_document(this).rect : bookmark.rect().to_document(this).rect;
+        update_annotation(old_page, bookmark.pdf_object, [&](pdf_annot* annot) {
+            pdf_set_annot_rect(context, annot, rect);
+            });
+    }
+}
+
+void Document::update_portal_src_position(int index, AbsoluteDocumentPos new_position){
+    if ((index >= 0) && (index < portals.size())) {
+        Portal& portal = portals[index];
+        int old_page = get_offset_page_number(portal.src_pos.y);
+        portal.src_pos = new_position;
+        portal.update_modification_time();
+        if (get_offset_page_number(portal.src_pos.y) != old_page) {
+            delete_annotation(old_page, portal.pdf_object);
+            portal.pdf_object = write_portal(portal);
+            return;
+        }
+        DocumentRect rect = portal.get_rectangle().to_document(this);
+        DocumentPos top_left = page_pos_to_pdf_space({ rect.page, rect.rect.x0, rect.rect.y0 });
+        DocumentPos bottom_right = page_pos_to_pdf_space({ rect.page, rect.rect.x1, rect.rect.y1 });
+        update_portal_link(portal.pdf_object, [&](pdf_obj* link) {
+            pdf_dict_put_rect(context, link, PDF_NAME(Rect), fz_make_rect(top_left.x, top_left.y, bottom_right.x, bottom_right.y));
+            });
+    }
+}
+
+int Document::get_highlight_index_with_object(int pdf_object) {
+    for (int i = 0; i < highlights.size(); i++) {
+        if (highlights[i].pdf_object == pdf_object) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int Document::get_bookmark_index_with_object(int pdf_object) {
+    for (int i = 0; i < bookmarks.size(); i++) {
+        if (bookmarks[i].pdf_object == pdf_object) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+std::vector<Portal> Document::get_intersecting_portals(float absrange_begin, float absrange_end) {
+    std::vector<Portal> res;
+
+    for (auto portal : portals) {
+        if (portal.src_pos.y >= absrange_begin && portal.src_pos.y <= absrange_end) {
+            res.push_back(portal);
+        }
+    }
+
+    return res;
+}
+
+const std::vector<Mark>& Document::get_marks() const {
+    return marks;
+}
+
+Document::Document(fz_context* context, std::wstring file_name, DatabaseManager* db) :
+    db_manager(db),
+    context(context),
+    file_name(file_name),
+    doc(nullptr) {
+    last_update_time = QDateTime::currentDateTime();
+    should_render_annotations = SHOULD_RENDER_PDF_ANNOTATIONS;
+}
+
+DocumentManager::DocumentManager(fz_context* mupdf_context, DatabaseManager* db) :
+    mupdf_context(mupdf_context),
+    db_manager(db)
+{
+}
+
+Document* DocumentManager::get_document(const std::wstring& path) {
+    if (cached_documents.find(path) != cached_documents.end()) {
+        return cached_documents.at(path);
+    }
+    Document* new_doc = new Document(mupdf_context, path, db_manager);
+    cached_documents[path] = new_doc;
+    return new_doc;
 }
 
 void Document::undo_pending_bookmark(int index) {
@@ -246,182 +552,19 @@ void Document::undo_pending_bookmark(int index) {
     }
 }
 
-void Document::add_freetext_bookmark_with_color(const std::wstring& desc, AbsoluteRect absrect, float* color, float font_size) {
-    BookMark bookmark;
-    bookmark.description = desc;
-    bookmark.y_offset_ = absrect.y0;
-
-    bookmark.begin_x = absrect.x0;
-    bookmark.begin_y = absrect.y0;
-    bookmark.end_x = absrect.x1;
-    bookmark.end_y = absrect.y1;
-
-    bookmark.color[0] = color[0];
-    bookmark.color[1] = color[1];
-    bookmark.color[2] = color[2];
-    bookmark.font_size = font_size < 0 ? FREETEXT_BOOKMARK_FONT_SIZE : font_size;
-    bookmark.uuid = new_uuid_utf8();
-    bookmark.update_creation_time();
-
-    if (db_manager->insert_bookmark_freetext(get_checksum(), bookmark)) {
-        bookmarks.push_back(bookmark);
-        is_annotations_dirty = true;
-    }
-}
 void Document::add_freetext_bookmark(const std::wstring& desc, AbsoluteRect absrect) {
     add_freetext_bookmark_with_color(desc, absrect, FREETEXT_BOOKMARK_COLOR);
 }
 
-void Document::fill_index_highlight_rects(int highlight_index, fz_context* thread_context, fz_document* thread_document) {
-
-    if (highlight_index >= highlights.size()) {
-        return;
-    }
-    if (thread_context == nullptr) thread_context = context;
-    if (thread_document == nullptr) thread_document = doc;
-
-    const Highlight highlight = highlights[highlight_index];
-    std::deque<AbsoluteRect> highlight_rects;
-    std::vector<AbsoluteRect> merged_rects;
-    std::wstring highlight_text;
-    get_text_selection(thread_context, highlight.selection_begin, highlight.selection_end, !EXACT_HIGHLIGHT_SELECT, highlight_rects, highlight_text, thread_document);
-    merge_selected_character_rects(highlight_rects, merged_rects, highlights[highlight_index].type != '_');
-    highlights[highlight_index].highlight_rects = std::move((std::vector<AbsoluteRect>&)merged_rects);
-}
-
-void Document::fill_highlight_rects(fz_context* ctx, fz_document* doc_) {
-    // Fill the `highlight_rects` attribute of all highlights with a vector of merged highlight rects of
-    // individual characters in the highlighted area (we merge the rects of characters in a single line
-    // which makes the result look nicer)
-
-    for (size_t i = 0; i < highlights.size(); i++) {
-        fill_index_highlight_rects(i, ctx, doc_);
-    }
-}
-
-
-std::string Document::add_highlight(const std::wstring& annot, AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type) {
-    std::deque<AbsoluteRect> selected_characters;
-    std::vector<AbsoluteRect> merged_rects;
-    std::wstring selected_text;
-    get_text_selection(selection_begin, selection_end, true, selected_characters, selected_text);
-
-    if ((type != '_') && (!((type <= 'z' && type >= 'a') || (type <= 'Z' && type >= 'A')))) {
-        type = 'a';
-    }
-
-    merge_selected_character_rects<AbsoluteRect>(selected_characters, merged_rects);
-    Highlight highlight;
-    highlight.description = selected_text;
-    highlight.text_annot = annot;
-    highlight.selection_begin = selection_begin;
-    highlight.selection_end = selection_end;
-    highlight.type = type;
-    highlight.highlight_rects = merged_rects;
-    highlight.uuid = new_uuid_utf8();
-    highlight.update_creation_time();
-
-    if (db_manager->insert_highlight_with_annotation(
-        get_checksum(),
-        selected_text,
-        annot,
-        selection_begin.x,
-        selection_begin.y,
-        selection_end.x,
-        selection_end.y,
-        highlight.type,
-        utf8_decode(highlight.uuid))) {
-        highlights.push_back(highlight);
-        is_annotations_dirty = true;
-    }
-
-    return highlight.uuid;
-}
-
-std::string Document::add_highlight(const std::wstring& desc,
-    const std::vector<AbsoluteRect>& highlight_rects,
-    AbsoluteDocumentPos selection_begin,
-    AbsoluteDocumentPos selection_end,
-    char type)
-{
-    //if (type > 'z' || type < 'a') {
-    if ((type != '_') && (!((type <= 'z' && type >= 'a') || (type <= 'Z' && type >= 'A')))) {
-        type = 'a';
-    }
-
-    Highlight highlight;
-    highlight.description = desc;
-    highlight.selection_begin = selection_begin;
-    highlight.selection_end = selection_end;
-    highlight.type = type;
-    highlight.highlight_rects = highlight_rects;
-    highlight.uuid = new_uuid_utf8();
-    highlight.update_creation_time();
-
-    highlights.push_back(highlight);
-    db_manager->insert_highlight(
-        get_checksum(),
-        desc,
-        selection_begin.x,
-        selection_begin.y,
-        selection_end.x,
-        selection_end.y,
-        highlight.type,
-        utf8_decode(highlight.uuid));
-    is_annotations_dirty = true;
-    return highlight.uuid;
-}
 
 bool Document::get_is_indexing() {
     return is_indexing;
-}
-
-int Document::add_portal(Portal portal, bool insert_into_database) {
-    portal.uuid = new_uuid_utf8();
-    portal.update_creation_time();
-    portals.push_back(portal);
-    int index = portals.size() - 1;
-    if (insert_into_database) {
-        if (portal.is_visible()) {
-            bool res = db_manager->insert_visible_portal(
-                get_checksum(),
-                portal.dst.document_checksum,
-                portal.dst.book_state.offset_x,
-                portal.dst.book_state.offset_y,
-                portal.dst.book_state.zoom_level,
-                portal.src_offset_x.value(),
-                portal.src_offset_y,
-                utf8_decode(portal.uuid));
-        }
-        else {
-            db_manager->insert_portal(
-                get_checksum(),
-                portal.dst.document_checksum,
-                portal.dst.book_state.offset_x,
-                portal.dst.book_state.offset_y,
-                portal.dst.book_state.zoom_level,
-                portal.src_offset_y,
-                utf8_decode(portal.uuid));
-        }
-        is_annotations_dirty = true;
-    }
-    return index;
 }
 
 
 std::wstring Document::get_path() {
 
     return file_name;
-}
-
-std::string Document::get_checksum() {
-
-    return checksummer->get_checksum(get_path());
-}
-
-std::optional<std::string> Document::get_checksum_fast() {
-
-    return checksummer->get_checksum_fast(get_path());
 }
 
 int Document::find_closest_bookmark_index(const std::vector<BookMark>& sorted_bookmarks, float to_offset_y) const {
@@ -436,7 +579,7 @@ int Document::find_closest_bookmark_index(const std::vector<BookMark>& sorted_bo
 int Document::find_closest_portal_index(const std::vector<Portal>& sorted_portals, float to_offset_y) const {
 
     int min_index = argminf<Portal>(sorted_portals, [to_offset_y](Portal portal) {
-        return abs(portal.src_offset_y - to_offset_y);
+        return abs(portal.src_pos.y - to_offset_y);
         });
 
     return min_index;
@@ -451,41 +594,6 @@ int Document::find_closest_highlight_index(const std::vector<Highlight>& sorted_
     return min_index;
 }
 
-void Document::delete_closest_bookmark(float to_y_offset) {
-    int closest_index = find_closest_bookmark_index(bookmarks, to_y_offset);
-    if (closest_index > -1) {
-        db_manager->delete_bookmark(bookmarks[closest_index].uuid);
-        is_annotations_dirty = true;
-        bookmarks.erase(bookmarks.begin() + closest_index);
-    }
-}
-
-void Document::delete_bookmark(int index) {
-
-    if ((index != -1) && (index < bookmarks.size())) {
-        if (db_manager->delete_bookmark(bookmarks[index].uuid)) {
-            bookmarks.erase(bookmarks.begin() + index);
-            is_annotations_dirty = true;
-        }
-    }
-}
-
-void Document::delete_highlight_with_index(int index) {
-    Highlight highlight_to_delete = highlights[index];
-
-    db_manager->delete_highlight(highlight_to_delete.uuid);
-    highlights.erase(highlights.begin() + index);
-    is_annotations_dirty = true;
-}
-
-void Document::delete_bookmark_with_index(int index) {
-    BookMark bookmark_to_delete = bookmarks[index];
-
-    db_manager->delete_bookmark(bookmark_to_delete.uuid);
-    bookmarks.erase(bookmarks.begin() + index);
-    is_annotations_dirty = true;
-}
-
 void Document::delete_highlight(Highlight hl) {
     for (size_t i = (highlights.size() - 1); i >= 0; i--) {
         if (highlights[i] == hl) {
@@ -497,7 +605,7 @@ void Document::delete_highlight(Highlight hl) {
 
 std::optional<Portal> Document::find_closest_portal(float to_offset_y, int* index) {
     int min_index = argminf<Portal>(portals, [to_offset_y](Portal l) {
-        return abs(l.src_offset_y - to_offset_y);
+        return abs(l.src_pos.y - to_offset_y);
         });
 
     if (min_index >= 0) {
@@ -505,42 +613,6 @@ std::optional<Portal> Document::find_closest_portal(float to_offset_y, int* inde
         return portals[min_index];
     }
     return {};
-}
-
-bool Document::update_portal(Portal new_portal) {
-    for (auto& portal : portals) {
-        if (portal.src_offset_y == new_portal.src_offset_y) {
-            portal.dst.book_state = new_portal.dst.book_state;
-            return true;
-        }
-    }
-    return false;
-}
-
-void Document::delete_closest_portal(float to_offset_y) {
-    int closest_index = -1;
-    if (find_closest_portal(to_offset_y, &closest_index)) {
-        db_manager->delete_portal(portals[closest_index].uuid);
-        portals.erase(portals.begin() + closest_index);
-        is_annotations_dirty = true;
-    }
-}
-
-int Document::get_portal_index_with_uuid(const std::string& uuid) {
-    for (int i = 0; i < portals.size(); i++) {
-        if (portals[i].uuid == uuid) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-void Document::delete_portal_with_uuid(const std::string& uuid) {
-    int index = get_portal_index_with_uuid(uuid);
-    if (index > -1) {
-        db_manager->delete_portal(uuid);
-        portals.erase(portals.begin() + index);
-    }
 }
 
 std::vector<BookMark>& Document::get_bookmarks() {
@@ -555,7 +627,7 @@ std::vector<BookMark> Document::get_sorted_bookmarks() const {
 
 std::vector<Portal> Document::get_sorted_portals() const {
     std::vector<Portal> res = portals;
-    std::sort(res.begin(), res.end(), [](const Portal& lhs, const Portal& rhs) {return lhs.src_offset_y < rhs.src_offset_y; });
+    std::sort(res.begin(), res.end(), [](const Portal& lhs, const Portal& rhs) {return lhs.src_pos.y < rhs.src_pos.y; });
     return res;
 }
 
@@ -592,59 +664,12 @@ const std::vector<Highlight> Document::get_highlights_sorted(char type) const {
 }
 
 
-void Document::add_mark(char symbol, float y_offset, std::optional<float> x_offset, std::optional<float> zoom_level) {
-    int current_mark_index = get_mark_index(symbol);
-    if (current_mark_index == -1) {
-        Mark m;
-        m.y_offset = y_offset;
-        m.symbol = symbol;
-        m.update_creation_time();
-        m.x_offset = x_offset;
-        m.zoom_level = zoom_level;
-        marks.push_back(m);
-        db_manager->insert_mark(get_checksum(), symbol, y_offset, new_uuid(), x_offset, zoom_level);
-        is_annotations_dirty = true;
-    }
-    else {
-        marks[current_mark_index].y_offset = y_offset;
-        marks[current_mark_index].x_offset = x_offset;
-        marks[current_mark_index].zoom_level = zoom_level;
-        marks[current_mark_index].update_modification_time();
-        db_manager->update_mark(get_checksum(), symbol, y_offset, x_offset, zoom_level);
-        is_annotations_dirty = true;
-    }
-}
-
-bool Document::remove_mark(char symbol) {
-    for (size_t i = 0; i < marks.size(); i++) {
-        if (marks[i].symbol == symbol) {
-            marks.erase(marks.begin() + i);
-            return true;
-        }
-    }
-    return false;
-}
-
-void Document::clear_marks() {
-    marks.clear();
-}
-
 std::optional<Mark> Document::get_mark_if_exists(char symbol){
     int mark_index = get_mark_index(symbol);
     if (mark_index == -1) {
         return {};
     }
     return marks[mark_index];
-}
-
-Document::Document(fz_context* context, std::wstring file_name, DatabaseManager* db, CachedChecksummer* checksummer) :
-    db_manager(db),
-    context(context),
-    file_name(file_name),
-    checksummer(checksummer),
-    doc(nullptr) {
-    last_update_time = QDateTime::currentDateTime();
-    should_render_annotations = SHOULD_RENDER_PDF_ANNOTATIONS;
 }
 
 void Document::count_chapter_pages(std::vector<int>& page_counts) {
@@ -1009,18 +1034,16 @@ void Document::reload(std::string password) {
     clear_document_caches();
 
     doc = nullptr;
+    original_startxref = -1;
 
     open(invalid_flag_pointer, false, password);
 }
 
 bool Document::open(bool* invalid_flag, bool force_load_dimensions, std::string password, bool temp) {
-    load_extras();
-
     last_update_time = QDateTime::currentDateTime();
     if (doc == nullptr) {
         fz_try(context) {
-            //			doc = fz_open_document(context, utf8_encode(file_name).c_str());
-            doc = open_document_with_file_name(context, file_name);
+            doc = open_document_with_file_name(context, file_name, db_manager);
             document_needs_password = fz_needs_password(context, doc);
             if (password.size() > 0) {
                 int auth_res = fz_authenticate_password(context, doc, password.c_str());
@@ -1034,7 +1057,6 @@ bool Document::open(bool* invalid_flag, bool force_load_dimensions, std::string 
             LOG(std::wcerr << "could not open " << file_name << std::endl);
         }
         if ((doc != nullptr) && (!temp)) {
-            //load_document_metadata_from_db();
             load_document_caches(invalid_flag, force_load_dimensions);
             return true;
         }
@@ -1103,21 +1125,23 @@ void Document::load_page_dimensions(bool force_load_now) {
         }
     }
 
+    // the annotations are read from the file along with the page dimensions, since both need every page
     auto load_page_dimensions_function = [this, n, force_load_now]() {
         std::vector<float> accum_page_heights_;
         std::vector<float> page_heights_;
         std::vector<float> page_widths_;
         std::vector<std::wstring> page_labels_;
+        std::vector<Mark> marks_;
+        std::vector<BookMark> bookmarks_;
+        std::vector<Highlight> highlights_;
+        std::vector<Portal> portals_;
         const int N = 20;
         char label_buffer[N];
 
         // clone the main context for use in the background thread
         fz_context* context_ = fz_clone_context(context);
         fz_try(context_) {
-            //			fz_document* doc_ = fz_open_document(context_, utf8_encode(file_name).c_str());
-            fz_document* doc_ = open_document_with_file_name(context_, file_name);
-            //fz_layout_document(context_, doc, 600, 800, 20);
-            load_document_metadata_from_db();
+            fz_document* doc_ = open_document_with_file_name(context_, file_name, db_manager);
 
             float acc_height_ = 0.0f;
             for (int i = 0; i < n; i++) {
@@ -1132,6 +1156,8 @@ void Document::load_page_dimensions(bool force_load_now) {
                 float page_height = page_rect.y1 - page_rect.y0;
                 float page_width = page_rect.x1 - page_rect.x0;
 
+                read_page_annotations(context_, page, i, page_width, acc_height_, bookmarks_, highlights_, portals_);
+
                 accum_page_heights_.push_back(acc_height_);
                 page_heights_.push_back(page_height);
                 page_widths_.push_back(page_width);
@@ -1140,6 +1166,10 @@ void Document::load_page_dimensions(bool force_load_now) {
                 fz_drop_page(context_, page);
             }
 
+            pdf_document* pdf_ = pdf_specifics(context_, doc_);
+            if (pdf_) {
+                read_marks(context_, pdf_, page_widths_, accum_page_heights_, marks_);
+            }
 
             page_dims_mutex.lock();
 
@@ -1147,15 +1177,14 @@ void Document::load_page_dimensions(bool force_load_now) {
             accum_page_heights = std::move(accum_page_heights_);
             page_widths = std::move(page_widths_);
             page_labels = std::move(page_labels_);
+            set_annotations(marks_, bookmarks_, highlights_, portals_);
 
             if (invalid_flag_pointer) {
                 *invalid_flag_pointer = true;
             }
             page_dims_mutex.unlock();
 
-            fill_highlight_rects(context_, doc_);
             detected_paper_name = detect_paper_name(context_, doc_);
-            //db_manager->set_actual_document_name(get_checksum(), detected_paper_name);
 
             fz_drop_document(context_, doc_);
         }
@@ -1179,7 +1208,6 @@ void Document::load_page_dimensions(bool force_load_now) {
         auto background_page_dimensions_loading_thread = std::thread(load_page_dimensions_function);
         background_page_dimensions_loading_thread.detach();
     }
-    load_drawings_async();
 }
 
 
@@ -1216,32 +1244,9 @@ int Document::num_pages() {
     return pages;
 }
 
-DocumentManager::DocumentManager(fz_context* mupdf_context, DatabaseManager* db, CachedChecksummer* checksummer) :
-    mupdf_context(mupdf_context),
-    db_manager(db),
-    checksummer(checksummer)
-{
-    //get_prev_path_hash_pairs(database, const std::string& path, std::vector<std::pair<std::wstring, std::wstring>>& out_pairs);
-}
-
-
-Document* DocumentManager::get_document(const std::wstring& path) {
-    if (cached_documents.find(path) != cached_documents.end()) {
-        return cached_documents.at(path);
-    }
-    Document* new_doc = new Document(mupdf_context, path, db_manager, checksummer);
-    cached_documents[path] = new_doc;
-    return new_doc;
-}
 
 const std::unordered_map<std::wstring, Document*>& DocumentManager::get_cached_documents() {
     return cached_documents;
-}
-
-void DocumentManager::delete_global_mark(char symbol) {
-    for (auto [path, doc] : cached_documents) {
-        doc->remove_mark(symbol);
-    }
 }
 
 
@@ -1406,9 +1411,7 @@ void Document::index_document(bool* invalid_flag) {
 
         fz_context* context_ = fz_clone_context(context);
         fz_try(context_) {
-
-            //			fz_document* doc_ = fz_open_document(context_, utf8_encode(file_name).c_str());
-            fz_document* doc_ = open_document_with_file_name(context_, file_name);
+            fz_document* doc_ = open_document_with_file_name(context_, file_name, db_manager);
 
             if (document_needs_password) {
                 fz_authenticate_password(context_, doc_, correct_password.c_str());
@@ -2105,174 +2108,6 @@ void Document::get_text_selection(fz_context* ctx, AbsoluteDocumentPos selection
     }
 }
 
-void Document::get_pdf_annotations(std::vector<BookMark>& pdf_bookmarks, std::vector<Highlight>& pdf_highlights, std::vector<FreehandDrawing>& pdf_drawings) {
-    for (int p = 0; p < num_pages(); p++) {
-        fz_page* page = fz_load_page(context, doc, p);
-        pdf_page* pdf_page = pdf_page_from_fz_page(context, page);
-
-        pdf_annot* annot = pdf_first_annot(context, pdf_page);
-        while (annot) {
-            enum pdf_annot_type annot_type = pdf_annot_type(context, annot);
-
-            if (annot_type == pdf_annot_type::PDF_ANNOT_INK) {
-                int num_strokes = pdf_annot_ink_list_count(context, annot);
-                for (int stroke_index = 0; stroke_index < num_strokes; stroke_index++) {
-                    FreehandDrawing drawing;
-
-                    int vertex_count = pdf_annot_ink_list_stroke_count(context, annot, stroke_index);
-                    int n_channels;
-                    float color[4];
-                    pdf_annot_color(context, annot, &n_channels, color);
-                    char type = get_highlight_color_type(color);
-                    float thickness = pdf_annot_border(context, annot);
-                    drawing.type = type;
-
-                    for (int vertex_index = 0; vertex_index < vertex_count; vertex_index++) {
-                        fz_point vertex = pdf_annot_ink_list_stroke_vertex(context, annot, stroke_index, vertex_index);
-                        FreehandDrawingPoint point;
-                        DocumentPos docpos;
-                        docpos.page = p;
-                        docpos.x = vertex.x;
-                        docpos.y = vertex.y;
-                        point.pos = document_to_absolute_pos(docpos);
-                        point.thickness = thickness;
-                        drawing.points.push_back(point);
-                    }
-                    pdf_drawings.push_back(drawing);
-                }
-            }
-            if (annot_type == pdf_annot_type::PDF_ANNOT_TEXT) {
-                PagelessDocumentRect rect = pdf_bound_annot(context, annot);
-                AbsoluteRect absrect = to_absolute(p, rect);
-                // get text of annotation
-                const char* txt = pdf_annot_contents(context, annot);
-                //new_bookmark.description = utf8_decode(txt);
-                BookMark new_bookmark;
-                new_bookmark.description = utf8_decode(txt);
-                new_bookmark.y_offset_ = (absrect.y0 + absrect.y1) / 2;
-                new_bookmark.begin_x = (absrect.x0 + absrect.x1) / 2;
-                new_bookmark.begin_y = new_bookmark.y_offset_;
-                pdf_bookmarks.push_back(new_bookmark);
-
-            }
-
-            if (annot_type == pdf_annot_type::PDF_ANNOT_FREE_TEXT) {
-                PagelessDocumentRect rect = pdf_bound_annot(context, annot);
-                AbsoluteRect absrect = to_absolute(p, rect);
-                // get text of annotation
-                const char* txt = pdf_annot_contents(context, annot);
-                //new_bookmark.description = utf8_decode(txt);
-                BookMark new_bookmark;
-                new_bookmark.description = utf8_decode(txt);
-                new_bookmark.y_offset_ = absrect.y0;
-                new_bookmark.begin_x = absrect.x0;
-                new_bookmark.begin_y = absrect.y0;
-                new_bookmark.end_x = absrect.x1;
-                new_bookmark.end_y = absrect.y1;
-                char font_name[100] = { 0 };
-                const char* font_name_addr[] = { font_name };
-                float font_size;
-                float color[4];
-                int n_channels;
-
-                pdf_annot_default_appearance(context, annot, &font_name_addr[0], &font_size, &n_channels, color);
-                new_bookmark.font_face = utf8_decode(font_name);
-                new_bookmark.font_size = font_size;
-                new_bookmark.color[0] = color[0];
-                new_bookmark.color[1] = color[1];
-                new_bookmark.color[2] = color[2];
-
-                pdf_bookmarks.push_back(new_bookmark);
-
-            }
-
-            if ((annot_type == pdf_annot_type::PDF_ANNOT_HIGHLIGHT) || (annot_type == pdf_annot_type::PDF_ANNOT_UNDERLINE) || (annot_type == pdf_annot_type::PDF_ANNOT_STRIKE_OUT)) {
-                int num_quads = pdf_annot_quad_point_count(context, annot);
-
-                if (num_quads > 0) {
-                    fz_quad first_vertex = pdf_annot_quad_point(context, annot, 0);
-                    fz_quad last_vertex = pdf_annot_quad_point(context, annot, num_quads - 1);
-                    const char* txt = pdf_annot_contents(context, annot);
-                    float color[4];
-                    int n_channels = -1;
-                    pdf_annot_color(context, annot, &n_channels, color);
-
-                    DocumentPos begin_pos, end_pos;
-                    begin_pos.page = p;
-                    begin_pos.x = first_vertex.ul.x;
-                    begin_pos.y = (first_vertex.ul.y + first_vertex.ll.y) / 2;
-                    end_pos.page = p;
-                    end_pos.x = last_vertex.ur.x;
-                    end_pos.y = (last_vertex.ur.y + last_vertex.lr.y) / 2;
-
-                    AbsoluteDocumentPos begin_abspos = document_to_absolute_pos(begin_pos);
-                    AbsoluteDocumentPos end_abspos = document_to_absolute_pos(end_pos);
-
-                    Highlight new_highlight;
-                    new_highlight.selection_begin = begin_abspos;
-                    new_highlight.selection_end = end_abspos;
-                    new_highlight.text_annot = utf8_decode(txt);
-                    new_highlight.type = get_highlight_color_type(color);
-
-                    if (annot_type == pdf_annot_type::PDF_ANNOT_UNDERLINE) {
-                        new_highlight.type = new_highlight.type + 'A' - 'a';
-                    }
-                    if (annot_type == pdf_annot_type::PDF_ANNOT_STRIKE_OUT) {
-                        new_highlight.type = '_';
-                    }
-
-                    pdf_highlights.push_back(new_highlight);
-
-                }
-            }
-            annot = pdf_next_annot(context, annot);
-        }
-
-        fz_drop_page(context, page);
-    }
-}
-
-void Document::import_annotations() {
-    std::vector<BookMark> pdf_bookmarks;
-    std::vector<Highlight> pdf_highlights;
-    std::vector<FreehandDrawing> pdf_drawings;
-
-    get_pdf_annotations(pdf_bookmarks, pdf_highlights, pdf_drawings);
-
-
-    //           int count[1] = { static_cast<int>(points.size()) };
-       //		pdf_set_annot_border(context, drawing_annot, drawing.points[0].thickness);
-       //		pdf_set_annot_ink_list(context, drawing_annot, 1, count, &points[0]);
-       //		pdf_update_annot(context, drawing_annot);
-       //	}
-    for (auto bookmark : pdf_bookmarks) {
-        if (is_bookmark_new(bookmark)) {
-
-            if (bookmark.end_y > 0) { // it is a freetext bookmark
-                AbsoluteRect absrect;
-                absrect.x0 = bookmark.begin_x;
-                absrect.x1 = bookmark.end_x;
-                absrect.y0 = bookmark.begin_y;
-                absrect.y1 = bookmark.end_y;
-                add_freetext_bookmark_with_color(bookmark.description, absrect, bookmark.color, bookmark.font_size);
-            }
-            else {
-                add_marked_bookmark(bookmark.description, { bookmark.begin_x, bookmark.begin_y });
-            }
-        }
-    }
-    for (auto highlight : pdf_highlights) {
-        if (is_highlight_new(highlight)) {
-            add_highlight(highlight.text_annot, highlight.selection_begin, highlight.selection_end, highlight.type);
-        }
-    }
-    for (auto drawing : pdf_drawings) {
-        if (is_drawing_new(drawing)) {
-            add_freehand_drawing(drawing);
-        }
-    }
-}
-
 struct PdfOutlineResult {
     pdf_obj* first = nullptr;
     pdf_obj* last = nullptr;
@@ -2446,199 +2281,6 @@ void Document::embed_generated_toc(std::wstring new_file_path) {
     }
 }
 
-
-void Document::embed_annotations(std::wstring new_file_path) {
-
-    std::unordered_map<int, fz_page*> cached_pages;
-    std::vector<std::pair<pdf_page*, pdf_annot*>> created_annotations;
-
-    auto load_cached_page = [&](int page_number) {
-        if (cached_pages.find(page_number) != cached_pages.end()) {
-            return cached_pages[page_number];
-        }
-        else {
-            fz_page* page = fz_load_page(context, doc, page_number);
-            cached_pages[page_number] = page;
-            return page;
-        }
-    };
-
-    std::string new_file_path_utf8 = utf8_encode(new_file_path);
-    fz_output* output_file = nullptr;
-
-    fz_try(context) {
-        output_file = fz_new_output_with_path(context, new_file_path_utf8.c_str(), 0);
-    }
-    fz_catch(context) {
-        output_file = nullptr;
-    }
-
-    if (output_file == nullptr) {
-        show_error_message(L"Could not open the output file. Make sure the file is not opened in yaview or another application.");
-        return;
-    }
-
-    pdf_document* pdf_doc = pdf_specifics(context, doc);
-    std::vector<Highlight> pdf_highlights;
-    std::vector<BookMark> pdf_bookmarks;
-    std::vector<FreehandDrawing> pdf_drawings;
-
-    get_pdf_annotations(pdf_bookmarks, pdf_highlights, pdf_drawings);
-
-    const std::vector<Highlight>& doc_highlights = get_new_yaview_highlights(pdf_highlights);
-    const std::vector<BookMark>& doc_bookmarks = get_new_yaview_bookmarks(pdf_bookmarks);
-
-    for (auto highlight : doc_highlights) {
-        int page_number = get_offset_page_number(highlight.selection_begin.y);
-
-        std::deque<AbsoluteRect> selected_characters;
-        std::vector<AbsoluteRect> merged_characters;
-        std::vector<PagelessDocumentRect> selected_characters_page_rects;
-        std::wstring selected_text;
-
-        get_text_selection(highlight.selection_begin, highlight.selection_end, !EXACT_HIGHLIGHT_SELECT, selected_characters, selected_text);
-        merge_selected_character_rects(selected_characters, merged_characters, highlight.type != '_');
-
-        for (auto absrect : merged_characters) {
-            selected_characters_page_rects.push_back(absrect.to_document(this).rect);
-        }
-        //absolute_to_page_pos
-        std::vector<fz_quad> selected_character_quads = quads_from_rects(selected_characters_page_rects);
-
-        fz_page* page = load_cached_page(page_number);
-        pdf_page* pdf_page = pdf_page_from_fz_page(context, page);
-        pdf_annot* highlight_annot;
-        if (highlight.type == '_') {
-            highlight_annot = pdf_create_annot(context, pdf_page, PDF_ANNOT_STRIKE_OUT);
-        }
-        else if (std::isupper(highlight.type)) {
-            highlight_annot = pdf_create_annot(context, pdf_page, PDF_ANNOT_UNDERLINE);
-        }
-        else {
-            highlight_annot = pdf_create_annot(context, pdf_page, PDF_ANNOT_HIGHLIGHT);
-        }
-        float* color_ = get_highlight_type_color(highlight.type);
-        float color[3];
-        if (LIGHTEN_COLORS_WHEN_EMBEDDING_ANNOTATIONS) {
-            // lighten highlight colors before embedding (because we use alpha to make it lighter but
-            // the color doesn't take it into accout). Also see: https://github.com/ahrm/sioyek/issues/667
-            lighten_color(color_, color);
-        }
-        else {
-            color[0] = color_[0];
-            color[1] = color_[1];
-            color[2] = color_[2];
-        }
-
-        pdf_set_annot_color(context, highlight_annot, 3, color);
-        if (highlight.text_annot.size() > 0) {
-            std::string encoded_highlight_text = utf8_encode(highlight.text_annot);
-            pdf_set_annot_contents(context, highlight_annot, encoded_highlight_text.c_str());
-        }
-
-        pdf_set_annot_quad_points(context, highlight_annot, selected_character_quads.size(), &selected_character_quads[0]);
-        pdf_update_annot(context, highlight_annot);
-
-        created_annotations.push_back(std::make_pair(pdf_page, highlight_annot));
-
-    }
-
-    for (auto bookmark : doc_bookmarks) {
-        auto [page_number, doc_x, doc_y] = absolute_to_page_pos({ 0, bookmark.get_y_offset()});
-
-        fz_page* page = load_cached_page(page_number);
-        pdf_page* pdf_page = pdf_page_from_fz_page(context, page);
-        pdf_annot* bookmark_annot;
-        if (bookmark.is_freetext() && (!bookmark.is_box())) {
-            bookmark_annot = pdf_create_annot(context, pdf_page, PDF_ANNOT_FREE_TEXT);
-        }
-        else if (bookmark.is_box()) {
-            bookmark_annot = pdf_create_annot(context, pdf_page, PDF_ANNOT_SQUARE);
-
-            float default_color[3] = { 0, 0, 0 };
-            float* color = &default_color[0];
-            std::optional<char> bm_type = bookmark.get_type();
-            if (bm_type) {
-                color = get_highlight_type_color(bm_type.value());
-            }
-
-            pdf_set_annot_color(context, bookmark_annot, 3, color);
-        }
-        else {
-            bookmark_annot = pdf_create_annot(context, pdf_page, PDF_ANNOT_TEXT);
-        }
-
-        std::string encoded_bookmark_text = utf8_encode(bookmark.description);
-
-        PagelessDocumentRect annot_rect;
-        if (bookmark.is_freetext()) {
-            annot_rect = bookmark.rect().to_document(this).rect;
-
-            std::string encoded_font_face = utf8_encode(bookmark.font_face);
-            const char* font_face = bookmark.font_face.size() == 0 ? "Times New Roman" : encoded_font_face.c_str();
-            pdf_set_annot_default_appearance(context, bookmark_annot, font_face, bookmark.font_size, 3, bookmark.color);
-        }
-        else if (bookmark.is_marked()) {
-            //DocumentPos begin_page_pos = absolute_to_page_pos_uncentered({ bookmark.begin_x, bookmark.begin_y });
-            DocumentPos begin_page_pos = bookmark.begin_pos().to_document(this);
-
-            annot_rect.x0 = begin_page_pos.x - 6;
-            annot_rect.x1 = begin_page_pos.x + 6;
-            annot_rect.y0 = begin_page_pos.y - 6;
-            annot_rect.y1 = begin_page_pos.y + 6;
-        }
-        else {
-            annot_rect.x0 = 10;
-            annot_rect.x1 = 20;
-            annot_rect.y0 = doc_y;
-            annot_rect.y1 = doc_y + 10;
-        }
-
-        pdf_set_annot_rect(context, bookmark_annot, annot_rect);
-        pdf_set_annot_contents(context, bookmark_annot, encoded_bookmark_text.c_str());
-        pdf_update_annot(context, bookmark_annot);
-
-        created_annotations.push_back(std::make_pair(pdf_page, bookmark_annot));
-    }
-
-    for (auto [page_number, drawings] : page_freehand_drawings) {
-        for (auto drawing : drawings) {
-            fz_page* page = load_cached_page(page_number);
-            pdf_page* pdf_page = pdf_page_from_fz_page(context, page);
-            pdf_annot* drawing_annot = pdf_create_annot(context, pdf_page, PDF_ANNOT_INK);
-            std::vector<fz_point> points;
-
-            for (auto point : drawing.points) {
-                DocumentPos docpos = absolute_to_page_pos_uncentered(point.pos);
-                if (docpos.page == page_number) {
-                    points.push_back(fz_point{ docpos.x, docpos.y });
-                }
-            }
-
-            int count[1] = { static_cast<int>(points.size()) };
-            pdf_set_annot_border(context, drawing_annot, drawing.points[0].thickness);
-            pdf_set_annot_ink_list(context, drawing_annot, 1, count, &points[0]);
-            if (drawing.type >= 'a' && drawing.type <= 'z') {
-                pdf_set_annot_color(context, drawing_annot, 3, &HIGHLIGHT_COLORS[3 * (drawing.type - 'a')]);
-            }
-            pdf_update_annot(context, drawing_annot);
-        }
-    }
-
-
-    pdf_write_options pwo{};
-    pdf_write_document(context, pdf_doc, output_file, &pwo);
-    fz_close_output(context, output_file);
-    fz_drop_output(context, output_file);
-
-    for (auto [page, annot] : created_annotations) {
-        pdf_delete_annot(context, page, annot);
-        pdf_drop_annot(context, annot);
-    }
-    for (auto [num, page] : cached_pages) {
-        fz_drop_page(context, page);
-    }
-}
 
 std::optional<std::wstring> Document::get_text_at_position(DocumentPos position) {
     fz_stext_page* stext_page = get_stext_with_page_number(position.page);
@@ -3266,9 +2908,7 @@ void Document::load_document_caches(bool* invalid_flag, bool force_now) {
 
 int Document::reflow(int page) {
 
-    set_extra("epub_width", EPUB_WIDTH);
-    set_extra("epub_height", EPUB_HEIGHT);
-    persist_extras();
+    db_manager->set_layout_size(file_name, EPUB_WIDTH, EPUB_HEIGHT);
 
     fz_bookmark last_position_bookmark = fz_make_bookmark(context,
         doc, fz_location_from_page_number(context, doc, page));
@@ -3493,404 +3133,6 @@ std::optional<std::pair<std::wstring, PagelessDocumentRect>> Document::get_page_
     return {};
 }
 
-
-void Document::add_freehand_drawing(FreehandDrawing new_drawing) {
-    if (new_drawing.points.size() > 0) {
-        DocumentPos docpos = absolute_to_page_pos_uncentered(new_drawing.points[0].pos);
-        drawings_mutex.lock();
-        page_freehand_drawings[docpos.page].push_back(new_drawing);
-        drawings_mutex.unlock();
-        is_drawings_dirty = true;
-    }
-}
-
-void Document::undo_freehand_drawing() {
-    int most_recent_page_index = -1;
-    QDateTime most_recent_page_time;
-
-    drawings_mutex.lock();
-    for (auto& [page, drawings] : page_freehand_drawings) {
-        if (drawings.size() > 0) {
-            if (most_recent_page_index == -1) {
-                most_recent_page_index = page;
-                most_recent_page_time = drawings[drawings.size() - 1].creattion_time;
-            }
-            else {
-                if (drawings[drawings.size() - 1].creattion_time.secsTo(most_recent_page_time) > 0) {
-                    most_recent_page_index = page;
-                    most_recent_page_time = drawings[drawings.size() - 1].creattion_time;
-                }
-            }
-        }
-    }
-    if (most_recent_page_index >= 0) {
-        is_drawings_dirty = true;
-        page_freehand_drawings[most_recent_page_index].pop_back();
-    }
-    drawings_mutex.unlock();
-}
-
-const std::vector<FreehandDrawing>& Document::get_page_drawings(int page) {
-    return page_freehand_drawings[page];
-}
-
-std::vector<SelectedObjectIndex> Document::get_page_intersecting_drawing_indices(int page, AbsoluteRect absolute_rect, bool mask[26]) {
-    std::vector<SelectedObjectIndex> indices;
-    std::vector<FreehandDrawing>& page_drawings = page_freehand_drawings[page];
-
-    for (int i = 0; i < page_drawings.size(); i++) {
-        if (!mask[page_drawings[i].type - 'a']) {
-            continue;
-        }
-        for (auto point : page_drawings[i].points) {
-            fz_point absolute_point = fz_point{ point.pos.x, point.pos.y };
-            if (absolute_rect.contains(point.pos)) {
-                indices.push_back(SelectedObjectIndex{ i, SelectedObjectType::Drawing });
-                break;
-            }
-        }
-    }
-    return indices;
-
-}
-
-void Document::delete_all_page_drawings(int page) {
-    page_freehand_drawings[page].clear();
-    is_drawings_dirty = true;
-}
-
-void Document::delete_all_drawings() {
-    page_freehand_drawings.clear();
-    is_drawings_dirty = true;
-}
-
-void Document::delete_page_intersecting_drawings(int page, AbsoluteRect absolute_rect, bool mask[26]) {
-    std::vector<FreehandDrawing>& page_drawings = page_freehand_drawings[page];
-    std::vector<SelectedObjectIndex> indices_to_delete = get_page_intersecting_drawing_indices(page, absolute_rect, mask);
-
-    for (int j = indices_to_delete.size() - 1; j >= 0; j--) {
-        //page_freehand_drawings.erase(page_freehand_drawings.begin() + indices_to_delete[j]);
-        page_freehand_drawings[page].erase(page_freehand_drawings[page].begin() + indices_to_delete[j].index);
-    }
-    is_drawings_dirty = true;
-}
-
-std::wstring Document::get_addtional_yaview_file_path(QString type) {
-    if (ANNOTATIONS_DIR_PATH.size() == 0) {
-        Path path = Path(file_name);
-        QString filename = QString::fromStdWString(path.filename().value());
-        QString drawing_file_name = filename + ".yaview." + type;
-        return path.file_parent().slash(drawing_file_name.toStdWString()).get_path();
-    }
-    else {
-        Path parent_path(ANNOTATIONS_DIR_PATH);
-        std::wstring escaped_path = (QString::fromStdWString(file_name).replace("/", "_").replace("\\", "_").replace(":", "_") + ".yaview." + type).toStdWString();
-        return parent_path.slash(escaped_path).get_path();
-
-    }
-}
-
-std::wstring Document::get_drawings_file_path() {
-    Path path = Path(file_name);
-    return get_addtional_yaview_file_path("drawings");
-}
-
-std::wstring Document::get_scratchpad_file_path() {
-    Path path = Path(file_name);
-    return get_addtional_yaview_file_path("scratchpad");
-}
-
-std::wstring Document::get_extras_file_path() {
-    return get_path_extras_file_name(file_name);
-}
-
-bool Document::annotations_file_exists() {
-    std::wstring file_path = get_annotations_file_path();
-    return QFileInfo(QString::fromStdWString(file_path)).exists();
-}
-
-bool Document::annotations_file_is_newer_than_database() {
-    std::wstring file_path = get_annotations_file_path();
-    QFileInfo file_info(QString::fromStdWString(file_path));
-    QFileInfo database_file_info(QString::fromStdWString(SHARED_DATABASE_PATH));
-
-    if (file_info.exists() && database_file_info.exists()) {
-        return file_info.lastModified() > database_file_info.lastModified();
-    }
-
-    return false;
-}
-
-std::wstring Document::get_annotations_file_path() {
-    Path path = Path(file_name);
-    return get_addtional_yaview_file_path("annotations");
-}
-
-
-void Document::load_drawings_async() {
-    drawings_mutex.lock();
-    auto drawing_load_thread = std::thread([&]() {
-        load_drawings();
-        });
-    drawing_load_thread.detach();
-    drawings_mutex.unlock();
-}
-
-//void Document::persist_drawings_async() {
-//	if (!is_drawings_dirty) {
-//		return;
-//	}
-//
-//	drawings_mutex.lock();
-//	auto drawing_persist_thread = std::thread([&]() {
-//		persist_drawings();
-//		});
-//	drawing_persist_thread.detach();
-//	drawings_mutex.unlock();
-//}
-
-void Document::load_annotations(bool sync) {
-
-    //if (document_indexing_thread.has_value() && document_indexing_thread->)
-    should_reload_annotations = false;
-    if (highlights.size() > 0 && (highlights[0].highlight_rects.size() == 0)) {
-        fill_highlight_rects(context, doc);
-    }
-
-    if (!are_highlights_loaded || !get_checksum_fast().has_value()) {
-        return;
-    }
-
-    std::wstring annotation_fille_path = get_annotations_file_path();
-
-    QFile json_file(QString::fromStdWString(annotation_fille_path));
-    if (json_file.open(QFile::ReadOnly)) {
-        QJsonDocument json_document = QJsonDocument().fromJson(json_file.readAll());
-        json_file.close();
-
-        QJsonObject root = json_document.object();
-        std::vector<BookMark> file_bookmarks = load_from_json_array<BookMark>(root["bookmarks"].toArray());
-        std::vector<Highlight> file_highlights = load_from_json_array<Highlight>(root["highlights"].toArray());
-        std::vector<Mark> file_marks = load_from_json_array<Mark>(root["marks"].toArray());
-        std::vector<Portal> file_portals = load_from_json_array<Portal>(root["portals"].toArray());
-
-        std::string current_checksum = get_checksum();
-
-        auto portals_array = root["portals"].toArray();
-
-        // set the destination of self-referencing portals to be the current
-        // document and not the original doucment
-        for (int i = 0; i < portals_array.size(); i++) {
-            if (portals_array[i].toObject()["same"].toBool()) {
-                file_portals[i].dst.document_checksum = current_checksum;
-            }
-        }
-
-        std::vector<Annotation*> new_annotations;
-        std::vector<Annotation*> updated_annotations;
-        std::vector<Annotation*> deleted_annotations;
-
-        std::map<std::string, int> bookmark_index_map = annotation_prism(file_bookmarks, bookmarks, new_annotations, updated_annotations, deleted_annotations);
-        std::map<std::string, int> highlight_index_map = annotation_prism(file_highlights, highlights, new_annotations, updated_annotations, deleted_annotations);
-        std::map<std::string, int> mark_index_map = annotation_prism(file_marks, marks, new_annotations, updated_annotations, deleted_annotations);
-        std::map<std::string, int> portal_index_map = annotation_prism(file_portals, portals, new_annotations, updated_annotations, deleted_annotations);
-
-
-        for (int i = 0; i < updated_annotations.size(); i++) {
-            bool success = db_manager->update_annotation(updated_annotations[i]);
-            if (success) {
-                if (dynamic_cast<BookMark*>(updated_annotations[i])) {
-                    bookmarks[bookmark_index_map[updated_annotations[i]->uuid]] = *dynamic_cast<BookMark*>(updated_annotations[i]);
-                }
-
-                if (dynamic_cast<Highlight*>(updated_annotations[i])) {
-                    highlights[highlight_index_map[updated_annotations[i]->uuid]] = *dynamic_cast<Highlight*>(updated_annotations[i]);
-                    fill_index_highlight_rects(highlight_index_map[updated_annotations[i]->uuid]);
-                }
-
-                if (dynamic_cast<Mark*>(updated_annotations[i])) {
-                    marks[mark_index_map[updated_annotations[i]->uuid]] = *dynamic_cast<Mark*>(updated_annotations[i]);
-                }
-
-                if (dynamic_cast<Portal*>(updated_annotations[i])) {
-                    portals[portal_index_map[updated_annotations[i]->uuid]] = *dynamic_cast<Portal*>(updated_annotations[i]);
-                }
-
-            }
-        }
-
-        for (int i = 0; i < new_annotations.size(); i++) {
-            bool success = db_manager->insert_annotation(new_annotations[i], get_checksum());
-
-            if (success) {
-                if (dynamic_cast<BookMark*>(new_annotations[i])) {
-                    bookmarks.push_back(*dynamic_cast<BookMark*>(new_annotations[i]));
-                }
-
-                if (dynamic_cast<Highlight*>(new_annotations[i])) {
-                    highlights.push_back(*dynamic_cast<Highlight*>(new_annotations[i]));
-                    fill_index_highlight_rects(highlights.size() - 1);
-                }
-
-                if (dynamic_cast<Mark*>(new_annotations[i])) {
-                    marks.push_back(*dynamic_cast<Mark*>(new_annotations[i]));
-                }
-
-                if (dynamic_cast<Portal*>(new_annotations[i])) {
-                    portals.push_back(*dynamic_cast<Portal*>(new_annotations[i]));
-                }
-            }
-        }
-
-        if (sync) {
-            for (int i = 0; i < deleted_annotations.size(); i++) {
-                bool success = db_manager->delete_annotation(deleted_annotations[i]);
-            }
-            bookmarks = file_bookmarks;
-            highlights = file_highlights;
-            marks = file_marks;
-            portals = file_portals;
-
-            for (int i = 0; i < highlights.size(); i++) {
-                fill_index_highlight_rects(i);
-            }
-
-        }
-
-    }
-
-}
-
-void Document::load_drawings() {
-
-    std::wstring drawing_file_path = get_drawings_file_path();
-
-    QFile json_file(QString::fromStdWString(drawing_file_path));
-    if (json_file.open(QFile::ReadOnly)) {
-        QJsonDocument json_document = QJsonDocument().fromJson(json_file.readAll());
-        json_file.close();
-
-        QJsonObject root = json_document.object();
-        QJsonObject drawings_object = root["drawings"].toObject();
-        page_freehand_drawings.clear();
-        is_drawings_dirty = false;
-
-        for (auto& page_str : drawings_object.keys()) {
-            int page_number = page_str.toInt();
-            QJsonArray page_drawings_array = drawings_object[page_str].toArray();
-            for (auto val : page_drawings_array) {
-                QJsonObject drawing_object = val.toObject();
-                FreehandDrawing drawing;
-
-                drawing.creattion_time = QDateTime::fromString(drawing_object["creation_time"].toString(), Qt::ISODate);
-                drawing.type = drawing_object["type"].toInt();
-
-                if (drawing_object.contains("alpha")) {
-                    drawing.alpha = drawing_object["alpha"].toDouble();
-                }
-
-                QJsonArray x_array = drawing_object["point_xs"].toArray();
-                QJsonArray y_array = drawing_object["point_ys"].toArray();
-                QJsonArray t_array = drawing_object["point_thicknesses"].toArray();
-
-                for (int i = 0; i < x_array.size(); i++) {
-                    FreehandDrawingPoint point;
-                    point.pos.x = x_array.at(i).toDouble();
-                    point.pos.y = y_array.at(i).toDouble();
-                    point.thickness = t_array.at(i).toDouble();
-                    drawing.points.push_back(point);
-                }
-                page_freehand_drawings[page_number].push_back(drawing);
-            }
-        }
-
-    }
-
-}
-
-void Document::persist_annotations(bool force) {
-
-    if ((!is_annotations_dirty) && (!force)) {
-        return;
-    }
-
-    if (!annotations_file_exists() && (!force)) {
-        return;
-    }
-
-    std::string current_checksum = get_checksum();
-
-    QJsonArray json_bookmarks = export_array(bookmarks, current_checksum);
-    QJsonArray json_highlights = export_array(highlights, current_checksum);
-    QJsonArray json_marks = export_array(marks, current_checksum);
-    QJsonArray json_portals = export_array(portals, current_checksum);
-
-
-    QJsonObject book_object;
-    book_object["bookmarks"] = json_bookmarks;
-    book_object["marks"] = json_marks;
-    book_object["highlights"] = json_highlights;
-    book_object["portals"] = json_portals;
-
-    QJsonDocument json_document(book_object);
-
-    QFile output_file(QString::fromStdWString(get_annotations_file_path()));
-    output_file.open(QFile::WriteOnly);
-    output_file.write(json_document.toJson());
-    output_file.close();
-
-    is_annotations_dirty = false;
-}
-
-void Document::persist_drawings(bool force) {
-    if ((!force) && (!is_drawings_dirty)) {
-        return;
-    }
-
-    std::wstring drawing_file_path = get_drawings_file_path();
-    QJsonObject root_object;
-    QJsonObject drawings_object;
-
-    for (auto& [page, drawings] : page_freehand_drawings) {
-        QJsonArray page_drawings_array;
-
-        for (auto& drawing : drawings) {
-            QJsonObject drawing_object;
-            drawing_object["creation_time"] = drawing.creattion_time.toString(Qt::ISODate);
-            drawing_object["type"] = drawing.type;
-            drawing_object["alpha"] = drawing.alpha;
-            //QJsonArray points;
-            QJsonArray points_xs;
-            QJsonArray points_ys;
-            QJsonArray points_thicknesses;
-
-            for (auto& p : drawing.points) {
-                points_xs.append(p.pos.x);
-                points_ys.append(p.pos.y);
-                points_thicknesses.append(p.thickness);
-            }
-            drawing_object["point_xs"] = points_xs;
-            drawing_object["point_ys"] = points_ys;
-            drawing_object["point_thicknesses"] = points_thicknesses;
-
-            page_drawings_array.append(drawing_object);
-        }
-        drawings_object[QString::number(page)] = page_drawings_array;
-    }
-    root_object["drawings"] = drawings_object;
-
-
-    QJsonDocument json_doc;
-    json_doc.setObject(root_object);
-
-    QFile json_file(QString::fromStdWString(drawing_file_path));
-    json_file.open(QFile::WriteOnly);
-    json_file.write(json_doc.toJson());
-    json_file.close();
-
-    is_drawings_dirty = false;
-}
-
 std::vector<std::wstring> DocumentManager::get_loaded_document_paths() {
     std::vector<std::wstring> res;
 
@@ -3907,42 +3149,10 @@ std::optional<Document*> DocumentManager::get_cached_document(const std::wstring
     return {};
 }
 
-int Document::find_highlight_index_with_uuid(const std::string& uuid) {
-    for (int i = 0; i < highlights.size(); i++) {
-        if (highlights[i].uuid == uuid) return i;
-    }
-    return -1;
-}
-
-void Document::update_highlight_add_text_annotation(const std::string& uuid, const std::wstring& text_annot) {
-    int highlight_index = find_highlight_index_with_uuid(uuid);
-    if (highlight_index > -1) {
-        db_manager->update_highlight_add_annotation(uuid, text_annot);
-        is_annotations_dirty = true;
-        highlights[highlight_index].text_annot = text_annot;
-        highlights[highlight_index].update_modification_time();
-
-    }
-}
-
-void Document::update_highlight_type(const std::string& uuid, char new_type) {
-    db_manager->update_highlight_type(uuid, new_type);
-    is_annotations_dirty = true;
-}
-
-void Document::update_highlight_type(int index, char new_type) {
-    update_highlight_type(highlights[index].uuid, new_type);
-    highlights[index].type = new_type;
-    highlights[index].update_modification_time();
-}
-
 int Document::get_portal_index_at_pos(AbsoluteDocumentPos abspos) {
     for (int i = 0; i < portals.size(); i++) {
-        if (portals[i].src_offset_x.has_value()) {
-            //if (fz_is_point_inside_rect({abspos.x, abspos.y}, portals[i].get_rectangle())) {
-            if (portals[i].get_rectangle().contains(abspos)) {
-                return i;
-            }
+        if (portals[i].get_rectangle().contains(abspos)) {
+            return i;
         }
     }
     return -1;
@@ -3974,72 +3184,6 @@ int Document::get_bookmark_index_at_pos(AbsoluteDocumentPos abspos) {
     return -1;
 }
 
-void Document::update_bookmark_text(int index, const std::wstring& new_text, float new_font_size) {
-    if ((index >= 0) && (index < bookmarks.size())) {
-        if (db_manager->update_bookmark_change_text(bookmarks[index].uuid, new_text, new_font_size)) {
-            bookmarks[index].description = new_text;
-            bookmarks[index].update_modification_time();
-            is_annotations_dirty = true;
-        }
-    }
-}
-
-void Document::update_bookmark_position(int index, AbsoluteDocumentPos new_begin_position, AbsoluteDocumentPos new_end_position) {
-    if ((index >= 0) && (index < bookmarks.size())) {
-        if (db_manager->update_bookmark_change_position(bookmarks[index].uuid, new_begin_position, new_end_position)) {
-            bookmarks[index].y_offset_ = new_begin_position.y;
-            bookmarks[index].begin_x = new_begin_position.x;
-            bookmarks[index].begin_y = new_begin_position.y;
-            bookmarks[index].end_x = new_end_position.x;
-            bookmarks[index].end_y = new_end_position.y;
-            bookmarks[index].update_modification_time();
-            is_annotations_dirty = true;
-        }
-    }
-}
-
-void Document::update_portal_src_position(int index, AbsoluteDocumentPos new_position){
-    if ((index >= 0) && (index < portals.size())) {
-        if (db_manager->update_portal_change_src_position(portals[index].uuid, new_position)) {
-            portals[index].src_offset_x = new_position.x;
-            portals[index].src_offset_y = new_position.y;
-            portals[index].update_modification_time();
-            is_annotations_dirty = true;
-        }
-    }
-}
-
-bool Document::is_bookmark_new(const BookMark& new_bookmark) {
-    for (auto bookmark : bookmarks) {
-        if (are_same(bookmark, new_bookmark)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-
-bool Document::is_highlight_new(const Highlight& new_highlight) {
-    for (auto highlight : highlights) {
-        if (are_same(highlight, new_highlight)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool Document::is_drawing_new(const FreehandDrawing& drawing) {
-    if (drawing.points.size() == 0) return false;
-
-    int drawing_page = absolute_to_page_pos(drawing.points[0].pos).page;
-    for (auto page_drawing : page_freehand_drawings[drawing_page]) {
-        if (are_same(page_drawing, drawing)) {
-            return false;
-        }
-    }
-    return true;
-
-}
 
 bool Document::should_render_pdf_annotations() {
     return should_render_annotations;
@@ -4053,154 +3197,9 @@ bool Document::get_should_render_pdf_annotations() {
     return should_render_annotations;
 }
 
-std::vector<BookMark> Document::get_new_yaview_bookmarks(const std::vector<BookMark>& pdf_bookmarks) {
-    std::vector<BookMark> res;
 
-    for (auto bookmark : bookmarks) {
-        bool exists_in_pdf = false;
-
-        for (auto pdf_bookmark : pdf_bookmarks) {
-            if (are_same(bookmark, pdf_bookmark)) {
-                exists_in_pdf = true;
-                break;
-            }
-        }
-        if (!exists_in_pdf) {
-            res.push_back(bookmark);
-        }
-    }
-    return res;
-}
-
-std::vector<Highlight> Document::get_new_yaview_highlights(const std::vector<Highlight>& pdf_highlights) {
-    std::vector<Highlight> res;
-
-    for (auto highlight : highlights) {
-        bool exists_in_pdf = false;
-
-        for (auto pdf_highlight : pdf_highlights) {
-            if (are_same(highlight, pdf_highlight)) {
-                exists_in_pdf = true;
-                break;
-            }
-        }
-        if (!exists_in_pdf) {
-            res.push_back(highlight);
-        }
-    }
-    return res;
-}
-int Document::num_freehand_drawings() {
-    int res = 0;
-
-    for (auto [page, drawings] : page_freehand_drawings) {
-        res += drawings.size();
-    }
-    return res;
-}
-
-void Document::get_page_freehand_drawings_with_indices(int page, const std::vector<SelectedObjectIndex>& indices, std::vector<FreehandDrawing>&freehand_drawings, std::vector<PixmapDrawing>&pixmap_drawings){
-    //std::vector<FreehandDrawing> results;
-    const std::vector<FreehandDrawing>& page_drawings = page_freehand_drawings[page];
-    for (auto index : indices) {
-        freehand_drawings.push_back(page_drawings[index.index]);
-        //results.push_back(page_drawings[index]);
-    }
-    //return results;
-}
-int Document::get_highlight_index_with_uuid(std::string uuid) {
-    for (int i = 0; i < highlights.size(); i++) {
-        if (highlights[i].uuid == uuid) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-int Document::get_bookmark_index_with_uuid(std::string uuid) {
-    for (int i = 0; i < bookmarks.size(); i++) {
-        if (bookmarks[i].uuid == uuid) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-std::string Document::get_highlight_index_uuid(int index) {
-    if ((index >= 0) && (index < highlights.size())) {
-        return highlights[index].uuid;
-    }
-    return "";
-}
-
-std::string Document::get_bookmark_index_uuid(int index) {
-    if ((index >= 0) && (index < bookmarks.size())) {
-        return bookmarks[index].uuid;
-    }
-    return "";
-}
-
-bool Document::get_should_reload_annotations() {
-    return should_reload_annotations;
-}
-
-
-void Document::reload_annotations_on_new_checksum() {
-    if (annotations_file_exists()) {
-        load_annotations();
-    }
-    else {
-        load_document_metadata_from_db();
-        fill_highlight_rects(context, doc);
-    }
-}
 std::vector<Portal>& Document::get_portals() {
     return portals;
-}
-
-std::optional<std::wstring> DocumentManager::get_path_from_hash(const std::string& checksum) {
-    if (hash_to_path.find(checksum) != hash_to_path.end()) {
-        return hash_to_path[checksum];
-    }
-    std::vector<std::wstring> paths;
-
-    db_manager->get_path_from_hash(checksum, paths);
-
-    if (paths.size() > 0) {
-        hash_to_path[checksum] = paths[0];
-        return paths[0];
-    }
-
-    return {};
-}
-
-Document* DocumentManager::get_document_with_checksum(const std::string& checksum) {
-
-
-    std::optional<std::wstring> path = get_path_from_hash(checksum);
-    if (path) {
-        return get_document(path.value());
-    }
-    return nullptr;
-
-    //db_manager->get_path_from_hash();
-    //if (hash_to_path.find(checksum) != hash_to_path.end()) {
-    //    return get_document(hash_to_path[checksum]);
-    //}
-}
-
-std::vector<Portal> Document::get_intersecting_visible_portals(float absrange_begin, float absrange_end) {
-    std::vector<Portal> res;
-
-    for (auto portal : portals) {
-        if (portal.is_visible()) {
-            if (portal.src_offset_y >= absrange_begin && portal.src_offset_y <= absrange_end) {
-                res.push_back(portal);
-            }
-        }
-    }
-
-    return res;
 }
 
 std::optional<DocumentPos> Document::find_abbreviation(std::wstring abbr, std::vector<DocumentRect>& overview_highlight_rects){
@@ -4377,19 +3376,20 @@ int Document::find_reference_page_with_reference_text(std::wstring ref) {
 }
 
 QJsonArray Document::get_bookmarks_json() {
-    return export_array(bookmarks, get_checksum());
+    return export_array(bookmarks);
 }
 
 QJsonArray Document::get_highlights_json() {
-    return export_array(highlights, get_checksum());
+    load_highlight_texts();
+    return export_array(highlights);
 }
 
 QJsonArray Document::get_portals_json() {
-    return export_array(portals, get_checksum());
+    return export_array(portals);
 }
 
 QJsonArray Document::get_marks_json() {
-    return export_array(portals, get_checksum());
+    return export_array(marks);
 }
 
 int DocumentManager::get_tab_index(const std::wstring& path) {
@@ -4660,46 +3660,6 @@ int Document::get_page_from_character_offset(int offset){
         res++;
     }
     return res;
-}
-
-bool Document::load_extras() {
-    QString extras_file_path = QString::fromStdWString(get_extras_file_path());
-    QFileInfo extras_file_info = QFileInfo(extras_file_path);
-    if (extras_file_info.exists()) {
-        QFile extras_file = QFile(extras_file_path);
-        if (extras_file.open(QIODevice::ReadOnly)) {
-            QByteArray data = extras_file.readAll();
-            QJsonDocument json_doc = QJsonDocument::fromJson(data);
-            extras = json_doc.object();
-            extras_file.close();
-            return true;
-        }
-    }
-    return false;
-
-}
-
-bool Document::persist_extras() {
-    QString extras_file_path = QString::fromStdWString(get_extras_file_path());
-    QFile extras_file = QFile(extras_file_path);
-    if (!extras.isEmpty()) {
-        if (extras_file.open(QIODevice::WriteOnly)) {
-            QJsonDocument doc;
-            doc.setObject(extras);
-            QByteArray data = doc.toJson();
-            extras_file.write(data);
-            extras_file.close();
-            return true;
-        }
-    }
-
-    return false;
-}
-std::optional<QVariant> Document::get_extra(QString name) {
-    if (extras.find(name) != extras.end()) {
-        return extras[name].toVariant();
-    }
-    return {};
 }
 
 std::wstring Document::get_detected_paper_name_if_exists() {

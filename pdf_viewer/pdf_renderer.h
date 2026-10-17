@@ -19,6 +19,8 @@
 
 #include "book.h"
 
+class DatabaseManager;
+
 
 struct RenderRequest {
     std::wstring path;
@@ -66,6 +68,7 @@ class PdfRenderer : public QObject {
         // in the initializer and then clone the context when run() is called in the worker
         //thread.
         fz_context* context_to_clone;
+        DatabaseManager* db_manager = nullptr;
 
     std::vector<std::vector<fz_pixmap*>> pixmaps_to_drop;
     std::map<std::pair<int, std::wstring>, fz_document*> opened_documents;
@@ -109,7 +112,7 @@ class PdfRenderer : public QObject {
 public:
     bool no_rerender = false;
 
-    PdfRenderer(int num_threads, bool* should_quit_pointer, fz_context* context_to_clone);
+    PdfRenderer(int num_threads, bool* should_quit_pointer, fz_context* context_to_clone, DatabaseManager* db_manager);
     ~PdfRenderer();
     void clear_cache();
 

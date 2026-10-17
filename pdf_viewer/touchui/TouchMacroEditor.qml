@@ -237,9 +237,8 @@ Rectangle {
                     anchors.rightMargin: 10
 
 
-                    buttons: ["r", "x", "h", "q", "e", "d", "p", "o", "s", "t"]
-                    tips: ["Ruler", "Synxtex", "Highlight on select", "Freehand drawing", "Pen freehand drawing", "Mouse drag", "Presentation", "Overview", "Searching", "Text selected"]
-                    //modeList: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    buttons: ["r", "x", "h", "d", "p", "o", "f", "t"]
+                    tips: ["Ruler", "Synxtex", "Highlight on select", "Mouse drag", "Presentation", "Overview", "Searching", "Text selected"]
                     modeList: root.getModesFromMacroText(root.items[index])
 
                     modal: true
@@ -379,9 +378,8 @@ Rectangle {
     // 		id: mode_buttons
 
 
-    // 		buttons: ["r", "x", "h", "q", "e", "d", "p", "o", "s", "t"]
-    //         tips: ["Ruler", "Synxtex", "Highlight on select", "Freehand drawing", "Pen freehand drawing", "Mouse drag", "Presentation", "Overview", "Searching", "Text selected"]
-    //         //modeList: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // 		buttons: ["r", "x", "h", "d", "p", "o", "f", "t"]
+    //         tips: ["Ruler", "Synxtex", "Highlight on select", "Mouse drag", "Presentation", "Overview", "Searching", "Text selected"]
     //         modeList: list_view.getModesFromMacroText(root.items[index])
 
     //         modal: true

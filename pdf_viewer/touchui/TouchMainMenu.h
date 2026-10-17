@@ -31,12 +31,10 @@ public slots:
     void handleAddBookmark();
     void handlePortal();
     void handleDeletePortal();
-    void handleGlobalBookmarks();
     void handleGlobalHighlights();
     void handleTTS();
     void handleHorizontalLock();
     void handleFitToPageWidth();
-    void handleDrawingMode();
     void handleDownloadPaper();
     void handleHint();
 
@@ -59,12 +57,10 @@ signals:
     void addBookmarkClicked();
     void portalClicked();
     void deletePortalClicked();
-    void globalBookmarksClicked();
     void globalHighlightsClicked();
     void ttsClicked();
     void horizontalLockClicked();
     void fitToPageWidthClicked();
-    void drawingModeClicked();
     void downloadPaperClicked();
     void hintClicked();
 

@@ -36,8 +36,6 @@ float UI_LIGHT_SELECTED_TEXT_COLOR[3] = { 0.984f, 0.945f, 0.780f };
 float UI_LIGHT_BORDER_COLOR[3] = { 0.839f, 0.365f, 0.055f };
 float UNSELECTED_SEARCH_HIGHLIGHT_COLOR[3] = { 0.0f, 0.5f, 0.5f };
 float GAMMA = 1.0f;
-bool DEBUG_DISPLAY_FREEHAND_POINTS = false;
-bool DEBUG_SMOOTH_FREEHAND_DRAWINGS = true;
 bool ADD_NEWLINES_WHEN_COPYING_TEXT = false;
 bool ALWAYS_COPY_SELECTED_TEXT = false;
 bool SHOW_STATUSBAR_ONLY_WHEN_MOUSE_OVER = false;
@@ -45,7 +43,6 @@ float PERSISTANCE_PERIOD = -1.0f;
 float TEXT_SELECTION_MINIMUM_DISTANCE = 5;
 bool SCROLL_PAST_DOCUMENT_ENDS = true;
 bool HORIZONTAL_SCROLL_PAST_PAGE_ENDS = false;
-bool SIMPLIFY_FREEHAND_DRAWINGS = true;
 bool RECTO_VERSO_ADJUSTMENT = false;
 bool KEYBOARD_SELECT_INCLUSIVE = false;
 bool SHOW_COMMAND_HINTS = false;
@@ -86,7 +83,7 @@ std::wstring PERIODIC_COMMANDS = L"";
 std::wstring MIDDLE_CLICK_SEARCH_ENGINE = L"s";
 std::wstring SHIFT_MIDDLE_CLICK_SEARCH_ENGINE = L"l";
 std::wstring PAPERS_FOLDER_PATH = L"";
-std::wstring STATUS_BAR_FORMAT = L"[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{highlight}%{freehand_drawing}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}";
+std::wstring STATUS_BAR_FORMAT = L"[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}";
 std::wstring RIGHT_STATUS_BAR_FORMAT = L"";
 
 float BLACK_COLOR[3] = { 0.0f, 0.0f, 0.0f };
@@ -141,12 +138,9 @@ bool SORT_HIGHLIGHTS_BY_LOCATION = true;
 std::wstring LIBGEN_ADDRESS = L"";
 std::wstring GOOGLE_SCHOLAR_ADDRESS = L"";
 std::wstring INVERSE_SEARCH_COMMAND = L"";
-std::wstring SHARED_DATABASE_PATH = L"";
-std::wstring BOOK_SCAN_PATH = L"";
 std::wstring UI_FONT_FACE_NAME = L"Monaspace Neon";
 std::wstring STATUS_FONT_FACE_NAME = L"";
 std::wstring DEFAULT_OPEN_FILE_PATH = L"";
-std::wstring ANNOTATIONS_DIR_PATH = L"";
 bool OPEN_LAST_FILE_ON_STARTUP = true;
 bool FAIL_SAFE_AUTO_SAVE_SESSION = false;
 bool SHOULD_LAUNCH_NEW_INSTANCE = false;
@@ -211,7 +205,6 @@ bool USE_LEGACY_KEYBINDS = false;
 bool MULTILINE_MENUS = true;
 bool START_WITH_HELPER_WINDOW = false;
 std::map<std::wstring, std::wstring> ADDITIONAL_COMMANDS;
-bool LIGHTEN_COLORS_WHEN_EMBEDDING_ANNOTATIONS = true;
 
 
 std::map<std::wstring, JsCommandInfo> ADDITIONAL_JAVASCRIPT_COMMANDS;
@@ -235,6 +228,8 @@ std::wstring CONTEXT_MENU_ITEMS_FOR_OVERVIEW = L"";
 
 bool RIGHT_CLICK_CONTEXT_MENU = false;
 int NUM_CACHED_PAGES = 5;
+int RECENT_DOCUMENTS_IN_ANNOTATION_LISTS = 20;
+int HIGHLIGHT_LIST_TEXT_LENGTH = 100;
 
 float PAGE_SEPARATOR_WIDTH = 0.0f;
 float PAGE_SEPARATOR_COLOR[3] = { 0.9f, 0.9f, 0.9f };
@@ -985,6 +980,8 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_bool(L"align_link_dest_to_top", &ALIGN_LINK_DEST_TO_TOP);
     add_bool(L"check_for_updates_on_startup", &SHOULD_CHECK_FOR_LATEST_VERSION_ON_STARTUP);
     add_bool(L"sort_bookmarks_by_location", &SORT_BOOKMARKS_BY_LOCATION);
+    add_int(L"recent_documents_in_annotation_lists", &RECENT_DOCUMENTS_IN_ANNOTATION_LISTS, IntExtras{0, 1000});
+    add_int(L"highlight_list_text_length", &HIGHLIGHT_LIST_TEXT_LENGTH, IntExtras{0, 10000});
     add_bool(L"sort_highlights_by_location", &SORT_HIGHLIGHTS_BY_LOCATION);
     add_bool(L"hover_overview", &HOVER_OVERVIEW);
     add_bool(L"rerender_overview", &RERENDER_OVERVIEW);
@@ -1013,7 +1010,6 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_bool(L"use_legacy_keybinds", &USE_LEGACY_KEYBINDS);
     add_bool(L"multiline_menus", &MULTILINE_MENUS);
     add_bool(L"start_with_helper_window", &START_WITH_HELPER_WINDOW);
-    add_bool(L"lighten_colors_when_embedding_annotations", &LIGHTEN_COLORS_WHEN_EMBEDDING_ANNOTATIONS);
     add_bool(L"prerender_next_page_presentation", &PRERENDER_NEXT_PAGE);
     add_bool(L"highlight_middle_click", &HIGHLIGHT_MIDDLE_CLICK);
     add_bool(L"auto_rename_downloaded_papers", &AUTO_RENAME_DOWNLOADED_PAPERS);
@@ -1043,7 +1039,6 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_bool(L"scroll_past_document_ends", &SCROLL_PAST_DOCUMENT_ENDS);
     add_bool(L"horizontal_scroll_past_page_ends", &HORIZONTAL_SCROLL_PAST_PAGE_ENDS);
     add_bool(L"uniform_page_widths", &SAME_WIDTH);
-    add_bool(L"simplify_freehand_drawings", &SIMPLIFY_FREEHAND_DRAWINGS);
     add_bool(L"recto_verso_adjustment", &RECTO_VERSO_ADJUSTMENT);
     add_bool(L"keyboard_select_inclusive", &KEYBOARD_SELECT_INCLUSIVE);
     add_bool(L"show_command_hints", &SHOW_COMMAND_HINTS);
@@ -1055,7 +1050,6 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_string(L"item_list_prefix", &ITEM_LIST_PREFIX);
     add_string(L"inverse_search_command", &INVERSE_SEARCH_COMMAND);
     add_string(L"libgen_address", &LIBGEN_ADDRESS);
-    add_string(L"shared_database_path", &SHARED_DATABASE_PATH);
     add_string(L"ruler_display_mode", &RULER_DISPLAY_MODE);
     add_string(L"ui_font", &UI_FONT_FACE_NAME);
     add_string(L"ui_theme", &UI_THEME);
@@ -1065,7 +1059,6 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_string(L"text_summary_url", &TEXT_HIGHLIGHT_URL);
     add_string(L"paper_search_url", &PAPER_SEARCH_URL);
     add_string(L"papers_folder_path", &PAPERS_FOLDER_PATH);
-    add_string(L"scan_path", &BOOK_SCAN_PATH);
     add_string(L"context_menu_items", &CONTEXT_MENU_ITEMS);
     add_string(L"context_menu_items_for_links", &CONTEXT_MENU_ITEMS_FOR_LINKS);
     add_string(L"context_menu_items_for_selected_text", &CONTEXT_MENU_ITEMS_FOR_SELECTED_TEXT);
@@ -1077,7 +1070,6 @@ ConfigManager::ConfigManager(const Path& default_path, const Path& auto_path, co
     add_string(L"paper_download_contrib_path", &PAPER_SEARCH_CONTRIB_PATH);
     add_string(L"periodic_commands", &PERIODIC_COMMANDS);
     add_string(L"default_open_file_path", &DEFAULT_OPEN_FILE_PATH);
-    add_string(L"annotations_directory", &ANNOTATIONS_DIR_PATH);
     add_string(L"status_bar_format", &STATUS_BAR_FORMAT);
     add_string(L"right_status_bar_format", &RIGHT_STATUS_BAR_FORMAT);
     add_string(L"epub_css", &EPUB_CSS);

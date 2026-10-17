@@ -94,7 +94,6 @@
 #include "synctex/synctex_parser.h"
 #include "path.h"
 #include "touchui/TouchMarkSelector.h"
-#include "checksum.h"
 #include "touchui/TouchSettings.h"
 
 #include "main_widget.h"
@@ -118,6 +117,8 @@ extern bool SHOULD_USE_MULTIPLE_MONITORS;
 extern bool FAIL_SAFE_AUTO_SAVE_SESSION;
 extern bool MULTILINE_MENUS;
 extern bool SORT_BOOKMARKS_BY_LOCATION;
+extern int RECENT_DOCUMENTS_IN_ANNOTATION_LISTS;
+extern int HIGHLIGHT_LIST_TEXT_LENGTH;
 extern bool SORT_HIGHLIGHTS_BY_LOCATION;
 extern bool FLAT_TABLE_OF_CONTENTS;
 extern bool HOVER_OVERVIEW;
@@ -176,8 +177,6 @@ extern std::wstring SHIFT_RIGHT_CLICK_COMMAND;
 extern std::wstring CONTROL_RIGHT_CLICK_COMMAND;
 extern std::wstring ALT_CLICK_COMMAND;
 extern std::wstring ALT_RIGHT_CLICK_COMMAND;
-extern Path local_database_file_path;
-extern Path global_database_file_path;
 extern Path downloaded_papers_path;
 extern std::map<std::wstring, std::wstring> ADDITIONAL_COMMANDS;
 extern std::map<std::wstring, std::wstring> ADDITIONAL_MACROS;
@@ -212,10 +211,8 @@ extern std::wstring RIGHT_CLICK_SCROLL_DOWN_COMMAND;
 extern std::wstring LEFT_CLICK_SCROLL_UP_COMMAND;
 extern std::wstring LEFT_CLICK_SCROLL_DOWN_COMMAND;
 extern float FREETEXT_BOOKMARK_FONT_SIZE;
-extern std::wstring BOOK_SCAN_PATH;
 extern bool USE_RULER_TO_HIGHLIGHT_SYNCTEX_LINE;
 extern int DOCUMENTATION_FONT_SIZE;
-extern ScratchPad global_scratchpad;
 extern int NUM_CACHED_PAGES;
 extern bool IGNORE_SCROLL_EVENTS;
 extern bool DONT_FOCUS_IF_SYNCTEX_RECT_IS_VISIBLE;
@@ -228,7 +225,6 @@ extern bool SHOW_COMMAND_HINTS;
 extern bool RESTORE_ALL_WINDOWS_ON_STARTUP;
 
 extern bool FREE_TOUCHPAD_MOVEMENT;
-extern bool SIMPLIFY_FREEHAND_DRAWINGS;
 extern bool SHOW_RIGHT_CLICK_CONTEXT_MENU;
 extern std::wstring CONTEXT_MENU_ITEMS;
 extern std::wstring CONTEXT_MENU_ITEMS_FOR_SELECTED_TEXT;
@@ -492,10 +488,6 @@ void MainWidget::resizeEvent(QResizeEvent* resize_event) {
     main_window_width = size().width();
     main_window_height = size().height();
 
-    if (scratchpad) {
-        scratchpad->on_view_size_change(resize_event->size().width(), resize_event->size().height());
-        invalidate_render();
-    }
     if (main_document_view->get_is_auto_resize_mode()) {
         main_document_view->fit_to_page_width();
         main_document_view->set_offset_y(main_window_height / 2 / main_document_view->get_zoom_level());
@@ -539,9 +531,6 @@ void MainWidget::resizeEvent(QResizeEvent* resize_event) {
     }
     if (highlight_buttons_) {
         QCoreApplication::postEvent(get_highlight_buttons(), resize_event->clone());
-    }
-    if (draw_controls_) {
-        QCoreApplication::postEvent(get_draw_controls(), resize_event->clone());
     }
     if (RESIZE_COMMAND.size() > 0) {
         execute_macro_if_enabled(RESIZE_COMMAND);
@@ -620,12 +609,6 @@ void MainWidget::mouseMoveEvent(QMouseEvent* mouse_event) {
         handle_selection_mouse_edge_scrolling(mouse_event);
     }
 
-    if (should_draw(false) && is_drawing) {
-        handle_drawing_move(mouse_event->pos(), -1.0f);
-        validate_render();
-        return;
-    }
-
     if (SHOW_STATUSBAR_ONLY_WHEN_MOUSE_OVER) {
         if (should_show_status_label(false)) {
             if (!status_label->isVisible()) {
@@ -642,17 +625,6 @@ void MainWidget::mouseMoveEvent(QMouseEvent* mouse_event) {
     WindowPos mpos(mouse_event->pos());
     AbsoluteDocumentPos abs_mpos = get_window_abspos(mpos);
     NormalizedWindowPos normal_mpos = mpos.to_window_normalized(main_document_view);
-
-    if (freehand_drawing_move_data) {
-        // update temp drawings of opengl widget
-        //AbsoluteDocumentPos mouse_abspos = WindowPos(mouse_event->pos()).to_absolute(main_document_view);
-        AbsoluteDocumentPos mouse_abspos = get_window_abspos(WindowPos(mouse_event->pos()));
-        opengl_widget->moving_drawings.clear();
-        opengl_widget->moving_pixmaps.clear();
-        move_selected_drawings(mouse_abspos, opengl_widget->moving_drawings, opengl_widget->moving_pixmaps);
-        validate_render();
-        return;
-    }
 
     if (rect_select_mode) {
         if (rect_select_begin.has_value()) {
@@ -769,33 +741,31 @@ void MainWidget::mouseMoveEvent(QMouseEvent* mouse_event) {
 
     }
 
-    if (!is_scratchpad_mode()){
-        if (opengl_widget->is_window_point_in_overview(normal_mpos)) {
-            link = doc()->get_link_in_pos(opengl_widget->window_pos_to_overview_pos(normal_mpos));
-            if (link) {
-                setCursor(Qt::PointingHandCursor);
-            }
-            else {
-                setCursor(Qt::ArrowCursor);
-            }
-            return;
-        }
-
-        if (main_document_view && (link = main_document_view->get_link_in_pos(mpos))) {
-            // show hand cursor when hovering over links
+    if (opengl_widget->is_window_point_in_overview(normal_mpos)) {
+        link = doc()->get_link_in_pos(opengl_widget->window_pos_to_overview_pos(normal_mpos));
+        if (link) {
             setCursor(Qt::PointingHandCursor);
-
-            // if hover_overview config is set, we show an overview of links while hovering over them
-            if (HOVER_OVERVIEW) {
-                set_overview_link(link.value());
-            }
         }
         else {
             setCursor(Qt::ArrowCursor);
-            if (HOVER_OVERVIEW) {
-                set_overview_page({});
-                //            invalidate_render();
-            }
+        }
+        return;
+    }
+
+    if (main_document_view && (link = main_document_view->get_link_in_pos(mpos))) {
+        // show hand cursor when hovering over links
+        setCursor(Qt::PointingHandCursor);
+
+        // if hover_overview config is set, we show an overview of links while hovering over them
+        if (HOVER_OVERVIEW) {
+            set_overview_link(link.value());
+        }
+    }
+    else {
+        setCursor(Qt::ArrowCursor);
+        if (HOVER_OVERVIEW) {
+            set_overview_page({});
+            //            invalidate_render();
         }
     }
 
@@ -860,14 +830,14 @@ void MainWidget::update_text_selection(AbsoluteDocumentPos abs_mpos) {
     }
 }
 
-void MainWidget::persist(bool persist_drawings) {
-    main_document_view->persist(persist_drawings);
+void MainWidget::persist() {
+    main_document_view->persist();
 
     if (RESTORE_ALL_WINDOWS_ON_STARTUP) {
         std::ofstream last_path_file(last_opened_file_address_path.get_path_utf8());
         for (auto window : windows) {
             if (window->main_document_view->get_document()) {
-                window->main_document_view->persist(persist_drawings);
+                window->main_document_view->persist();
                 QByteArray geom = window->saveGeometry();
                 std::string geom_hex = geom.toHex().constData();
                 last_path_file << "[window] " << geom_hex << "\n";
@@ -959,7 +929,7 @@ private:
     std::function<void(bool)> on_empty_area_press; // argument: whether it was a double click
 };
 
-MainWidget::MainWidget(MainWidget* other) : MainWidget(other->mupdf_context, other->db_manager, other->document_manager, other->config_manager, other->command_manager, other->input_handler, other->checksummer, other->should_quit, other->pdf_renderer) {
+MainWidget::MainWidget(MainWidget* other) : MainWidget(other->mupdf_context, other->db_manager, other->document_manager, other->config_manager, other->command_manager, other->input_handler, other->should_quit, other->pdf_renderer) {
 
 }
 
@@ -969,7 +939,6 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     ConfigManager* config_manager,
     CommandManager* command_manager,
     InputHandler* input_handler,
-    CachedChecksummer* checksummer,
     bool* should_quit_ptr,
     PdfRenderer* pdf_renderer,
     QWidget* parent) :
@@ -979,7 +948,6 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     document_manager(document_manager),
     config_manager(config_manager),
     input_handler(input_handler),
-    checksummer(checksummer),
     should_quit(should_quit_ptr),
     command_manager(command_manager)
 {
@@ -1011,10 +979,7 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     this->pdf_renderer = pdf_renderer;
 
 
-    //scratchpad = new ScratchPad();
-    scratchpad = &global_scratchpad;
-
-    main_document_view = new DocumentView(db_manager, document_manager, checksummer);
+    main_document_view = new DocumentView(db_manager, document_manager);
     opengl_widget = new PdfViewOpenGLWidget(main_document_view, pdf_renderer, config_manager, false, this);
 
     QFont label_font = QFont(get_status_font_face_name());
@@ -1215,6 +1180,9 @@ MainWidget::MainWidget(fz_context* mupdf_context,
             }
             else {
                 std::unique_ptr<Command> command = this->command_manager->get_command_with_name(this, command_name);
+                if (command) {
+                    command->prompt_for_symbol = true;
+                }
                 this->command_manager->update_command_last_use(command_name);
                 handle_command_types(std::move(command), 0);
             }
@@ -1303,8 +1271,6 @@ MainWidget::MainWidget(fz_context* mupdf_context,
                 file.write(pdf_data);
                 file.close();
                 if (finish_action == PaperDownloadFinishedAction::Portal) {
-                    //std::string checksum = this->checksummer->get_checksum(path.toStdWString());
-
                     this->finish_pending_download_portal(
                         reply->property("yaview_paper_name").toString().toStdWString(),
                         path.toStdWString()
@@ -1430,10 +1396,6 @@ MainWidget::MainWidget(fz_context* mupdf_context,
         }
 
         if (doc()) {
-            if (doc()->get_should_reload_annotations()) {
-                doc()->reload_annotations_on_new_checksum();
-                validate_render();
-            }
             if (main_document_view->needs_refill && doc()->can_use_highlights()){
                 main_document_view->fill_cached_virtual_rects(true);
             }
@@ -1708,15 +1670,6 @@ std::wstring MainWidget::get_status_string(bool is_right) {
     }
 
     status_string.replace("%{highlight}", " [ h" + QString::fromStdWString(highlight_select_char) + ":" + select_highlight_type + " ]");
-    QString drawing_mode_string = "";
-    if (freehand_drawing_mode == DrawingMode::Drawing) {
-        drawing_mode_string = QString(" [ freehand:") + current_freehand_type + " ]";
-    }
-    if (freehand_drawing_mode == DrawingMode::PenDrawing) {
-        drawing_mode_string = QString(" [ pen:") + current_freehand_type + " ]";
-    }
-
-    status_string.replace("%{freehand_drawing}", drawing_mode_string);
     if (status_string.indexOf("%{mode_string}") != -1) {
         status_string.replace("%{mode_string}", QString::fromStdString(get_current_mode_string()));
     }
@@ -1792,10 +1745,6 @@ std::wstring MainWidget::get_status_string(bool is_right) {
     //    status_string += " [DEBUG MODE] ";
     //    status_string += QString::number(network_manager.findChildren<QNetworkReply*>().size());
     //}
-    if (opengl_widget->get_scratchpad()) {
-        status_string += QString("[ zoom: %1]").arg(QString::number(dv()->get_zoom_level()));
-    }
-
     //return ss.str();
     return status_string.toStdWString();
 }
@@ -2185,25 +2134,15 @@ void MainWidget::do_synctex_forward_search(const Path& pdf_file_path, const Path
 }
 
 
-void MainWidget::update_link_with_opened_book_state(Portal lnk, const OpenedBookState& new_state) {
-    std::wstring docpath = main_document_view->get_document()->get_path();
-    Document* link_owner = document_manager->get_document(docpath);
-
-    lnk.dst.book_state = new_state;
-
-    if (link_owner) {
-        link_owner->update_portal(lnk);
-    }
-
-    db_manager->update_portal(lnk.uuid, new_state.offset_x, new_state.offset_y, new_state.zoom_level);
-
-    portal_to_edit = {};
-}
-
+// The helper window shows the closest portal's destination; this moves the destination to the
+// state the helper window is in.
 void MainWidget::update_closest_link_with_opened_book_state(const OpenedBookState& new_state) {
     std::optional<Portal> closest_link = main_document_view->find_closest_portal();
-    if (closest_link) {
-        update_link_with_opened_book_state(closest_link.value(), new_state);
+    if (closest_link && helper_document_view_ && helper_document_view_->get_document()) {
+        Document* destination = helper_document_view_->get_document();
+        closest_link->dst = destination->portal_destination({ new_state.offset_x, new_state.offset_y }, new_state.zoom_level);
+        doc()->update_portal(closest_link.value());
+        portal_to_edit = {};
     }
 }
 
@@ -2216,21 +2155,14 @@ void MainWidget::invalidate_ui() {
     is_render_invalidated = true;
 }
 
-void MainWidget::open_document(const PortalViewState& lvs) {
-    DocumentViewState dvs;
-    auto path = checksummer->get_path(lvs.document_checksum);
-    if (path) {
-        dvs.book_state = lvs.book_state;
-        dvs.document_path = path.value();
-        open_document(dvs);
-    }
-}
-
-void MainWidget::open_document_with_hash(const std::string& path, std::optional<float> offset_x, std::optional<float> offset_y, std::optional<float> zoom_level) {
-    std::optional<std::wstring> maybe_path = checksummer->get_path(path);
-    if (maybe_path) {
-        Path path(maybe_path.value());
-        open_document(path, offset_x, offset_y, zoom_level);
+void MainWidget::open_document(const PortalViewState& destination) {
+    open_document(destination.document_path, nullptr);
+    if (doc()) {
+        OpenedBookState state = destination.book_state(doc());
+        if (state.zoom_level <= 0) {
+            state.zoom_level = main_document_view->get_zoom_level();
+        }
+        main_document_view->set_book_state(state);
     }
 }
 
@@ -2255,7 +2187,7 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
 
     //save the previous document state
     if (main_document_view) {
-        main_document_view->persist(true);
+        main_document_view->persist();
     }
 
     if (main_document_view->get_view_width() > main_window_width) {
@@ -2334,7 +2266,7 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
 
     // save current session
     if (FAIL_SAFE_AUTO_SAVE_SESSION) {
-        persist(true);
+        persist();
     }
 
     deselect_document_indices();
@@ -2490,6 +2422,7 @@ void MainWidget::key_event(bool released, QKeyEvent* kevent, bool is_auto_repeat
 
             char symb = get_symbol(kevent->key(), kevent->modifiers() & Qt::ShiftModifier, pending_command_instance->special_symbols());
             if (symb) {
+                hide_symbol_prompt();
                 pending_command_instance->set_symbol_requirement(symb);
                 advance_command(std::move(pending_command_instance));
             }
@@ -2609,10 +2542,6 @@ void MainWidget::show_command_hints(std::unordered_map<std::string, std::vector<
 
 void MainWidget::handle_right_click(WindowPos click_pos, bool down, bool is_shift_pressed, bool is_control_pressed, bool is_command_pressed, bool is_alt_pressed) {
 
-    if (is_scratchpad_mode()){
-        return;
-    }
-
     if (is_shift_pressed || is_control_pressed || is_command_pressed || is_alt_pressed) {
         return;
     }
@@ -2682,21 +2611,6 @@ void MainWidget::handle_left_click(WindowPos click_pos, bool down, bool is_shift
     if (is_shift_pressed || is_control_pressed || is_alt_pressed || is_command_pressed) {
         return;
     }
-    if (selected_freehand_drawings) {
-
-        //AbsoluteDocumentPos mpos_absolute = WindowPos(mapFromGlobal(QCursor::pos())).to_absolute(main_document_view);
-        AbsoluteDocumentPos mpos_absolute = get_window_abspos(WindowPos(mapFromGlobal(QCursor::pos())));
-
-        if (selected_freehand_drawings->selection_absrect.contains(mpos_absolute)) {
-            handle_freehand_drawing_selection_click(mpos_absolute);
-            return;
-        }
-        else {
-            selected_freehand_drawings = {};
-        }
-
-    }
-
     if (TOUCH_MODE) {
         was_last_mouse_down_in_ruler_next_rect = false;
         was_last_mouse_down_in_ruler_prev_rect = false;
@@ -2993,19 +2907,14 @@ void MainWidget::prev_state() {
         is being edited and if so, we should update its destination position
         */
         if (portal_to_edit) {
-
-            //std::wstring link_document_path = checksummer->get_path(link_to_edit.value().dst.document_checksum).value();
             std::wstring link_document_path = history[current_history_index].document_path;
             Document* link_owner = document_manager->get_document(link_document_path);
 
-            OpenedBookState state = main_document_view->get_state().book_state;
-            portal_to_edit.value().dst.book_state = state;
+            portal_to_edit.value().dst = main_document_view->get_portal_state();
 
             if (link_owner) {
                 link_owner->update_portal(portal_to_edit.value());
             }
-
-            db_manager->update_portal(portal_to_edit->uuid, state.offset_x, state.offset_y, state.zoom_level);
             portal_to_edit = {};
         }
 
@@ -3055,9 +2964,6 @@ void MainWidget::handle_click(WindowPos click_pos) {
 
 
     if (!main_document_view_has_document()) {
-        return;
-    }
-    if (is_scratchpad_mode()){
         return;
     }
 
@@ -3277,12 +3183,6 @@ void MainWidget::mouseReleaseEvent(QMouseEvent* mevent) {
     bool is_alt_pressed = QGuiApplication::keyboardModifiers().testFlag(Qt::KeyboardModifier::AltModifier);
 
 
-    if (is_drawing) {
-        finish_drawing(mevent->pos());
-        invalidate_render();
-        return;
-    }
-
     if (handle_annotation_move_finish()) {
         return;
     }
@@ -3446,11 +3346,6 @@ void MainWidget::mousePressEvent(QMouseEvent* mevent) {
     bool is_control_pressed = QGuiApplication::keyboardModifiers().testFlag(Qt::KeyboardModifier::ControlModifier);
     bool is_command_pressed = QGuiApplication::keyboardModifiers().testFlag(Qt::KeyboardModifier::MetaModifier);
     bool is_alt_pressed = QGuiApplication::keyboardModifiers().testFlag(Qt::KeyboardModifier::AltModifier);
-
-    if (should_draw(false) && (mevent->button() == Qt::MouseButton::LeftButton)) {
-        start_drawing();
-        return;
-    }
 
     if (!TOUCH_MODE && mevent->button() == Qt::MouseButton::LeftButton) {
         QPoint local_mpos = mapFromGlobal(QCursor::pos());
@@ -3788,6 +3683,7 @@ void MainWidget::show_textbar(const std::wstring& command_name, const std::wstri
         show_current_widget();
     }
     else {
+        text_command_line_edit->show();
         text_command_line_edit->clear();
         if (init.size() > 0) {
             text_command_line_edit->setText(init);
@@ -3926,10 +3822,9 @@ std::optional<std::wstring> MainWidget::get_paper_name_under_cursor(bool use_las
 }
 
 void MainWidget::smart_jump_under_pos(WindowPos pos) {
-    if ((!main_document_view_has_document()) || opengl_widget->get_scratchpad()) {
+    if (!main_document_view_has_document()) {
         return;
     }
-
 
     Qt::KeyboardModifiers modifiers = QGuiApplication::queryKeyboardModifiers();
     bool is_shift_pressed = modifiers.testFlag(Qt::ShiftModifier);
@@ -4010,7 +3905,7 @@ bool MainWidget::overview_under_pos(WindowPos pos) {
     int portal_index = -1;
     std::optional<Portal> portal = get_portal_under_window_pos(pos, &portal_index);
     if (portal) {
-        Document* dst_doc = document_manager->get_document_with_checksum(portal.value().dst.document_checksum);
+        Document* dst_doc = document_manager->get_document(portal.value().dst.document_path);
         if (dst_doc) {
             dst_doc->open(&is_render_invalidated, true);
 
@@ -4019,7 +3914,7 @@ bool MainWidget::overview_under_pos(WindowPos pos) {
             if (dst_doc) {
                 OverviewState overview;
                 overview.doc = dst_doc;
-                overview.absolute_offset_y = portal.value().dst.book_state.offset_y;
+                overview.absolute_offset_y = portal.value().dst.book_state(dst_doc).offset_y;
                 overview.overview_type = "portal";
                 set_overview_page(overview);
                 invalidate_render();
@@ -4074,12 +3969,7 @@ void MainWidget::toggle_synctex_mode() {
 void MainWidget::start_creating_rect_portal(AbsoluteDocumentPos location) {
 
     Portal new_portal;
-    new_portal.src_offset_y = location.y;
-    new_portal.src_offset_x = location.x;
-    //new_portal.src_rect_begin_x = rect.x0;
-    //new_portal.src_rect_begin_y = rect.y0;
-    //new_portal.src_rect_end_x = rect.x1;
-    //new_portal.src_rect_end_y = rect.y1;
+    new_portal.src_pos = location;
 
 
     set_pending_portal(main_document_view->get_document()->get_path(), new_portal);
@@ -4094,7 +3984,7 @@ void MainWidget::handle_portal() {
 
     if (is_pending_link_source_filled()) {
         auto [source_path, pl] = current_pending_portal.value();
-        pl.dst = main_document_view->get_checksum_state();
+        pl.dst = main_document_view->get_portal_state();
 
         if (source_path.has_value()) {
             add_portal(source_path.value(), pl);
@@ -4103,8 +3993,9 @@ void MainWidget::handle_portal() {
         set_pending_portal({});
     }
     else {
-        set_pending_portal(main_document_view->get_document()->get_path(),
-            Portal::with_src_offset(main_document_view->get_offset_y()));
+        Portal new_portal;
+        new_portal.src_pos = doc()->margin_pos(main_document_view->get_offset_y(), true);
+        set_pending_portal(doc()->get_path(), new_portal);
     }
 
     synchronize_pending_link();
@@ -4184,13 +4075,7 @@ void MainWidget::long_jump_to_destination(DocumentPos pos) {
         // link's destination
 
 
-        PortalViewState dest_state;
-        dest_state.document_checksum = main_document_view->get_document()->get_checksum();
-        dest_state.book_state.offset_x = abs_pos.x;
-        dest_state.book_state.offset_y = abs_pos.y;
-        dest_state.book_state.zoom_level = main_document_view->get_zoom_level();
-
-        complete_pending_link(dest_state);
+        complete_pending_link(doc()->portal_destination(abs_pos, main_document_view->get_zoom_level()));
     }
     invalidate_render();
 }
@@ -4392,8 +4277,7 @@ void MainWidget::execute_command(std::wstring command, std::wstring text, bool w
             }
 
             command_parts[i].replace("%{yaview_path}", QCoreApplication::applicationFilePath());
-            command_parts[i].replace("%{local_database}", QString::fromStdWString(local_database_file_path.get_path()));
-            command_parts[i].replace("%{shared_database}", QString::fromStdWString(global_database_file_path.get_path()));
+            command_parts[i].replace("%{database}", QString::fromStdWString(database_file_path.get_path()));
 
             int selected_rect_page = -1;
             std::optional<DocumentRect> selected_rect_document = get_selected_rect_document();
@@ -4496,28 +4380,6 @@ bool MainWidget::move_horizontal(float amount, bool force) {
     return true;
 }
 
-std::optional<std::string> MainWidget::get_last_opened_file_checksum() {
-
-    std::vector<std::wstring> opened_docs_hashes;
-    std::wstring current_checksum = L"";
-    if (main_document_view_has_document()) {
-        current_checksum = utf8_decode(main_document_view->get_document()->get_checksum());
-    }
-
-    db_manager->select_opened_books_path_values(opened_docs_hashes);
-
-    size_t index = 0;
-    while (index < opened_docs_hashes.size()) {
-        if (opened_docs_hashes[index] == current_checksum) {
-            index++;
-        }
-        else {
-            return utf8_encode(opened_docs_hashes[index]);
-        }
-    }
-
-    return {};
-}
 void MainWidget::get_window_params_for_one_window_mode(int* main_window_size, int* main_window_move) {
     if (SINGLE_MAIN_WINDOW_SIZE[0] >= 0) {
         main_window_size[0] = SINGLE_MAIN_WINDOW_SIZE[0];
@@ -4878,25 +4740,25 @@ void MainWidget::show_password_prompt_if_required() {
 
 void MainWidget::on_new_paper_added(const std::wstring& file_path) {
     if (is_pending_link_source_filled()) {
-        PortalViewState dst_view_state;
-
-        dst_view_state.book_state.offset_x = 0;
-        dst_view_state.book_state.offset_y = 0;
-        dst_view_state.book_state.zoom_level = 1;
         Document* new_doc = document_manager->get_document(file_path);
         new_doc->open(nullptr, false, "", true);
         PagelessDocumentRect first_page_rect = new_doc->get_page_rect_no_cache(0);
-        document_manager->free_document(new_doc);
 
-        dst_view_state.document_checksum = checksummer->get_checksum(file_path);
-
+        // the destination shows the top of the first page in the helper window
+        PortalViewState dst_view_state;
+        dst_view_state.document_path = file_path;
+        dst_view_state.zoom_level = 1;
+        float offset_y = 0;
         if (helper_document_view_) {
             float helper_view_width = helper_document_view_->get_view_width();
             float helper_view_height = helper_document_view_->get_view_height();
             float zoom_level = helper_view_width / first_page_rect.width();
-            dst_view_state.book_state.zoom_level = zoom_level;
-            dst_view_state.book_state.offset_y = -std::abs(-helper_view_height / zoom_level / 2 + first_page_rect.height() / 2);
+            dst_view_state.zoom_level = zoom_level;
+            offset_y = -std::abs(-helper_view_height / zoom_level / 2 + first_page_rect.height() / 2);
         }
+        dst_view_state.pos = new_doc->page_pos_to_pdf_space({ 0, first_page_rect.width() / 2, offset_y });
+        document_manager->free_document(new_doc);
+
         complete_pending_link(dst_view_state);
         invalidate_render();
     }
@@ -5023,7 +4885,7 @@ std::wstring MainWidget::get_window_configuration_string() {
 
 void MainWidget::handle_close_event() {
     save_auto_config();
-    persist(true);
+    persist();
 
     // we need to delete this here (instead of destructor) to ensure that application
     // closes immediately after the main window is closed
@@ -5505,40 +5367,6 @@ std::optional<DocumentPos> MainWidget::get_overview_position() {
     return {};
 }
 
-void MainWidget::add_portal(std::wstring source_path, Portal new_link) {
-    if (source_path == main_document_view->get_document()->get_path()) {
-        main_document_view->get_document()->add_portal(new_link);
-    }
-    else {
-        const std::unordered_map<std::wstring, Document*> cached_documents = document_manager->get_cached_documents();
-        for (auto [doc_path, doc] : cached_documents) {
-            if (source_path == doc_path) {
-                doc->add_portal(new_link, false);
-            }
-        }
-
-        if (new_link.is_visible()) {
-            db_manager->insert_visible_portal(checksummer->get_checksum(source_path),
-                new_link.dst.document_checksum,
-                new_link.dst.book_state.offset_x,
-                new_link.dst.book_state.offset_y,
-                new_link.dst.book_state.zoom_level,
-                new_link.src_offset_x.value(),
-                new_link.src_offset_y,
-                new_uuid());
-        }
-        else {
-            db_manager->insert_portal(checksummer->get_checksum(source_path),
-                new_link.dst.document_checksum,
-                new_link.dst.book_state.offset_x,
-                new_link.dst.book_state.offset_y,
-                new_link.dst.book_state.zoom_level,
-                new_link.src_offset_y,
-                new_uuid());
-        }
-    }
-}
-
 void MainWidget::handle_keyboard_select(const std::wstring& text) {
     if (text[0] == '#') {
         // we can select text using window-space coordinates.
@@ -5670,9 +5498,9 @@ void MainWidget::handle_portal_overview_update() {
             std::optional<Portal> link_ = get_target_portal(false);
             if (link_) {
                 Portal link = link_.value();
-                OpenedBookState link_new_state = link.dst.book_state;
-                link_new_state.offset_y = current_state.absolute_offset_y;
-                update_link_with_opened_book_state(link, link_new_state);
+                link.dst.pos = current_state.doc->page_pos_to_pdf_space(current_state.doc->absolute_to_page_pos({ current_state.absolute_offset_x, current_state.absolute_offset_y }));
+                doc()->update_portal(link);
+                portal_to_edit = {};
             }
         }
     }
@@ -5712,14 +5540,6 @@ void MainWidget::reset_highlight_links() {
 void MainWidget::set_rect_select_mode(bool mode) {
     if (!USE_KEYBOARD_POINT_SELECTION) {
         rect_select_mode = mode;
-    }
-    if (draw_controls_) {
-        if (mode) {
-            draw_controls_->hide();
-        }
-        else {
-            draw_controls_->show();
-        }
     }
     if (mode == true) {
         if (USE_KEYBOARD_POINT_SELECTION) {
@@ -5878,54 +5698,6 @@ bool MainWidget::is_rect_visible(DocumentRect rect) {
     }
 }
 
-void MainWidget::set_mark_in_current_location(char symbol) {
-    // it is a global mark, we delete other marks with the same symbol from database and add the new mark
-    if (isupper(symbol)) {
-        db_manager->delete_mark_with_symbol(symbol);
-        // we should also delete the cached marks
-        document_manager->delete_global_mark(symbol);
-        main_document_view->add_mark(symbol);
-    }
-    else {
-        main_document_view->add_mark(symbol);
-        validate_render();
-    }
-}
-
-void MainWidget::clear_document_marks() {
-    // includes the global (uppercase) marks that point into this document
-    db_manager->delete_document_marks(doc()->get_checksum());
-    doc()->clear_marks();
-    invalidate_render();
-}
-
-void MainWidget::clear_all_marks() {
-    db_manager->delete_all_marks();
-    for (auto [path, document] : document_manager->get_cached_documents()) {
-        document->clear_marks();
-    }
-    invalidate_render();
-}
-
-void MainWidget::goto_mark(char symbol) {
-    if (symbol == '`' || symbol == '\'') {
-        return_to_last_visual_mark();
-    }
-    else if (isupper(symbol)) { // global mark
-        std::vector<std::pair<std::string, float>> mark_vector;
-        db_manager->select_global_mark(symbol, mark_vector);
-        if (mark_vector.size() > 0) {
-            assert(mark_vector.size() == 1); // we can not have more than one global mark with the same name
-            std::wstring doc_path = checksummer->get_path(mark_vector[0].first).value();
-            open_document(doc_path, 0.0f, mark_vector[0].second);
-        }
-
-    }
-    else {
-        main_document_view->goto_mark(symbol);
-    }
-}
-
 void MainWidget::advance_command(std::unique_ptr<Command> new_command, std::wstring* result) {
     if (new_command) {
         std::string command_name = new_command->get_name();
@@ -5950,8 +5722,13 @@ void MainWidget::advance_command(std::unique_ptr<Command> new_command, std::wstr
 
             Requirement next_requirement = pending_command_instance->next_requirement(this).value();
             if (next_requirement.type == RequirementType::Text) {
-                show_textbar(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value(), false);
-                text_command_line_edit->setEchoMode(QLineEdit::EchoMode::Normal);
+                if (!TOUCH_MODE && pending_command_instance->uses_centered_text_prompt()) {
+                    show_centered_text_prompt(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value());
+                }
+                else {
+                    show_textbar(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value(), false);
+                    text_command_line_edit->setEchoMode(QLineEdit::EchoMode::Normal);
+                }
             }
             else if (next_requirement.type == RequirementType::Password) {
                 show_textbar(utf8_decode(next_requirement.name), pending_command_instance->get_text_default_value(), true);
@@ -5959,6 +5736,9 @@ void MainWidget::advance_command(std::unique_ptr<Command> new_command, std::wstr
             else if (next_requirement.type == RequirementType::Symbol) {
                 if (TOUCH_MODE) {
                     show_mark_selector();
+                }
+                else if (pending_command_instance->prompt_for_symbol) {
+                    show_symbol_prompt(utf8_decode(next_requirement.name));
                 }
             }
             else if (next_requirement.type == RequirementType::File || next_requirement.type == RequirementType::Folder) {
@@ -6080,12 +5860,9 @@ void MainWidget::portal_to_definition() {
         //AbsoluteDocumentPos abspos = doc()->document_to_absolute_pos(defpos[0].first, true);
         AbsoluteDocumentPos abspos = defpos[0].get_abspos(main_document_view);
         Portal link;
-        link.dst.document_checksum = doc()->get_checksum();
-        link.dst.book_state.offset_x = abspos.x;
-        link.dst.book_state.offset_y = abspos.y;
-        link.dst.book_state.zoom_level = main_document_view->get_zoom_level();
-        link.src_offset_y = main_document_view->get_ruler_pos();
-        doc()->add_portal(link, true);
+        link.dst = doc()->portal_destination(abspos, main_document_view->get_zoom_level());
+        link.src_pos = doc()->margin_pos(main_document_view->get_ruler_pos(), true);
+        doc()->add_portal(link);
     }
 }
 
@@ -6154,14 +5931,8 @@ void MainWidget::handle_goto_portal_list() {
     }
 
     for (auto portal : portals) {
-        std::wstring portal_type_string = L"[*]";
-        if (!portal.is_visible()) {
-            portal_type_string = L"[.]";
-        }
-
-        option_names.push_back(ITEM_LIST_PREFIX + L" " + portal_type_string + L" " +  checksummer->get_path(portal.dst.document_checksum).value_or(L"[ERROR]"));
-        //option_locations.push_back(bookmark.y_offset);
-        auto [page, _, __] = main_document_view->get_document()->absolute_to_page_pos({ 0, portal.src_offset_y });
+        option_names.push_back(ITEM_LIST_PREFIX + L" " + portal.dst.document_path);
+        auto [page, _, __] = main_document_view->get_document()->absolute_to_page_pos({ 0, portal.src_pos.y });
         option_location_strings.push_back(get_page_formatted_string(page + 1));
     }
 
@@ -6169,12 +5940,12 @@ void MainWidget::handle_goto_portal_list() {
 
     set_filtered_select_menu<Portal>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { option_names, option_location_strings }, portals, closest_portal_index,
         [&](Portal* portal) {
-            pending_command_instance->set_generic_requirement(portal->src_offset_y);
+            pending_command_instance->set_generic_requirement(portal->src_pos.y);
             advance_command(std::move(pending_command_instance));
 
         },
         [&](Portal* portal) {
-            doc()->delete_portal_with_uuid(portal->uuid);
+            doc()->delete_portal_with_object(portal->pdf_object);
         },
             [&](Portal* portal) {
                 portal_to_edit = *portal;
@@ -6184,43 +5955,6 @@ void MainWidget::handle_goto_portal_list() {
         }
         );
 
-    show_current_widget();
-}
-
-void MainWidget::handle_show_marks() {
-    std::vector<MarkInDatabase> marks;
-    db_manager->select_all_marks(marks);
-    std::vector<std::wstring> option_names;
-    std::vector<std::wstring> option_location_strings;
-
-    for (const auto& mark : marks) {
-        std::wstring mark_type_string = L"";
-        if (isupper(mark.symbol)) {
-            mark_type_string = L"[G]";
-        }
-        else {
-            mark_type_string = L"[L]";
-        }
-        option_names.push_back(ITEM_LIST_PREFIX + L" " + mark_type_string + L" " + static_cast<wchar_t>(mark.symbol));
-        // option_location_strings.push_back(checksummer->get_path(mark.document_checksum).value_or(L"[ERROR]"));
-        std::wstring doc_path = checksummer->get_path(mark.checksum).value_or(L"[ERROR]");
-        option_location_strings.push_back(doc_path);
-    }
-
-    set_filtered_select_menu<MarkInDatabase>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { option_names, option_location_strings }, marks, -1,
-        [&](MarkInDatabase* mark) {
-            if (mark->checksum == doc()->get_checksum()) {
-                main_document_view->goto_mark(mark->symbol);
-            }
-            else {
-                std::wstring doc_path = checksummer->get_path(mark->checksum).value_or(L"[ERROR]");
-                open_document(doc_path, 0.0f, mark->offset_y);
-            }
-        },
-        [&](MarkInDatabase* mark) {
-            db_manager->delete_mark_with_uuid(utf8_encode(mark->uuid));
-        }
-    );
     show_current_widget();
 }
 
@@ -6260,7 +5994,7 @@ void MainWidget::handle_goto_bookmark() {
             main_document_view->delete_closest_bookmark_to_offset(bm->get_y_offset());
         },
             [&](BookMark* bm) {
-            set_selected_bookmark_index(doc()->get_bookmark_index_with_uuid(bm->uuid));
+            set_selected_bookmark_index(doc()->get_bookmark_index_with_object(bm->pdf_object));
             pop_current_widget();
             handle_command_types(command_manager->get_command_with_name(this, "edit_selected_bookmark"), 0);
         }
@@ -6269,51 +6003,17 @@ void MainWidget::handle_goto_bookmark() {
     show_current_widget();
 }
 
-void MainWidget::handle_goto_bookmark_global() {
-    std::vector<std::pair<std::string, BookMark>> global_bookmarks;
-    db_manager->global_select_bookmark(global_bookmarks);
-    std::vector<std::wstring> descs;
-    std::vector<std::wstring> file_names;
-    std::vector<BookState> book_states;
-
-    for (const auto& desc_bm_pair : global_bookmarks) {
-        std::string checksum = desc_bm_pair.first;
-        std::optional<std::wstring> path = checksummer->get_path(checksum);
-        if (path) {
-            BookMark bm = desc_bm_pair.second;
-            std::wstring file_name = Path(path.value()).filename().value_or(L"");
-            descs.push_back(ITEM_LIST_PREFIX + L" " + bm.description);
-            file_names.push_back(file_name);
-            book_states.push_back({ path.value(), bm.get_y_offset(), bm.uuid});
-        }
-    }
-
-    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names }, book_states, -1,
-        [&](BookState* book_state) {
-            if (pending_command_instance) {
-                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
-            }
-            advance_command(std::move(pending_command_instance));
-        },
-        [&](BookState* book_state) {
-            db_manager->delete_bookmark(book_state->uuid);
-        },
-        nullptr,
-        true);
-    show_current_widget();
-}
-
 std::wstring MainWidget::handle_add_highlight(char symbol) {
     if (main_document_view->selected_character_rects.size() > 0) {
-        std::string uuid = main_document_view->add_highlight(selection_begin, selection_end, symbol);
+        if (!ensure_annotatable()) return L"";
+        selected_highlight_index = main_document_view->add_highlight(selection_begin, selection_end, symbol);
         clear_selected_text();
-        selected_highlight_index = doc()->get_highlight_index_with_uuid(uuid);
-        return utf8_decode(uuid);
     }
     else {
         change_selected_highlight_type(symbol);
-        return utf8_decode(doc()->get_highlight_index_uuid(selected_highlight_index));
     }
+    if (selected_highlight_index == -1) return L"";
+    return std::to_wstring(doc()->get_highlights()[selected_highlight_index].pdf_object);
 }
 
 void MainWidget::change_selected_highlight_type(char new_type) {
@@ -6330,6 +6030,15 @@ char MainWidget::get_current_selected_highlight_type() {
     return 'a';
 }
 
+// A highlight in the highlight lists: its type and its text on one line, cut to highlight_list_text_length characters.
+std::wstring highlight_list_text(const Highlight& highlight) {
+    QString text = QString::fromStdWString(highlight.description).simplified();
+    if (HIGHLIGHT_LIST_TEXT_LENGTH > 0 && text.size() > HIGHLIGHT_LIST_TEXT_LENGTH) {
+        text = text.left(HIGHLIGHT_LIST_TEXT_LENGTH).trimmed() + QChar(0x2026);
+    }
+    return L"[" + std::wstring(1, highlight.type) + L"] " + text.toStdWString();
+}
+
 void MainWidget::handle_goto_highlight() {
     std::vector<std::wstring> option_names;
     std::vector<std::wstring> option_text_annotations;
@@ -6337,6 +6046,8 @@ void MainWidget::handle_goto_highlight() {
     bool has_text_annotations = false;
     std::vector<Highlight> highlights;
 
+    // the texts of highlights read from the file are extracted on demand
+    doc()->load_highlight_texts();
     if (SORT_HIGHLIGHTS_BY_LOCATION) {
         highlights = doc()->get_highlights_sorted();
     }
@@ -6347,9 +6058,7 @@ void MainWidget::handle_goto_highlight() {
     int closest_highlight_index = doc()->find_closest_highlight_index(highlights, main_document_view->get_offset_y());
 
     for (auto highlight : highlights) {
-        std::wstring type_name = L"a";
-        type_name[0] = highlight.type;
-        option_names.push_back(L"[" + type_name + L"] " + highlight.description);
+        option_names.push_back(highlight_list_text(highlight));
         option_text_annotations.push_back(highlight.text_annot);
         if (highlight.text_annot.size() > 0) {
             has_text_annotations = true;
@@ -6377,74 +6086,10 @@ void MainWidget::handle_goto_highlight() {
             main_document_view->delete_highlight(*hl);
         },
             [&](Highlight* hl) {
-            set_selected_highlight_index(doc()->get_highlight_index_with_uuid(hl->uuid));
+            set_selected_highlight_index(doc()->get_highlight_index_with_object(hl->pdf_object));
             pop_current_widget();
             handle_command_types(command_manager->get_command_with_name(this, "edit_selected_highlight"), 0);
         });
-
-    show_current_widget();
-}
-
-void MainWidget::handle_goto_highlight_global() {
-    std::vector<std::pair<std::string, Highlight>> global_highlights;
-    db_manager->global_select_highlight(global_highlights);
-    std::vector<std::wstring> descs;
-    std::vector<std::wstring> text_annotations;
-    std::vector<std::wstring> file_names;
-    std::vector<BookState> book_states;
-    bool has_annots = false;
-
-    for (const auto& desc_hl_pair : global_highlights) {
-        std::string checksum = desc_hl_pair.first;
-        std::optional<std::wstring> path = checksummer->get_path(checksum);
-        if (path) {
-            Highlight hl = desc_hl_pair.second;
-
-            std::wstring file_name = Path(path.value()).filename().value_or(L"");
-
-            std::wstring highlight_type_string = L"a";
-            highlight_type_string[0] = hl.type;
-
-            //descs.push_back(L"[" + highlight_type_string + L"]" + hl.description + L" {" + file_name + L"}");
-            descs.push_back(L"[" + highlight_type_string + L"]" + hl.description);
-            text_annotations.push_back(hl.text_annot);
-
-            if (hl.text_annot.size() > 0) {
-                has_annots = true;
-            }
-
-            file_names.push_back(file_name);
-
-            book_states.push_back({ path.value(), hl.selection_begin.y, hl.uuid });
-
-        }
-    }
-
-    std::vector<std::vector<std::wstring>> table;
-    if (has_annots) {
-        table = { descs, text_annotations, file_names };
-    }
-    else {
-        table = { descs, file_names };
-    }
-
-    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, table, book_states, -1,
-
-        [&](BookState* book_state) {
-            if (book_state) {
-                if (pending_command_instance) {
-                    pending_command_instance->set_generic_requirement(
-                        QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
-                }
-                advance_command(std::move(pending_command_instance));
-                //validate_render();
-                //open_document(book_state->document_path, 0.0f, book_state->offset_y);
-            }
-        }, [&](BookState* state) {
-            db_manager->delete_highlight(state->uuid);
-        },
-        nullptr,
-        true);
 
     show_current_widget();
 }
@@ -6528,100 +6173,6 @@ void MainWidget::handle_goto_toc() {
     }
 }
 
-void MainWidget::handle_open_all_docs() {
-
-
-    std::vector<std::pair<std::wstring, std::wstring>> pairs;
-    db_manager->get_prev_path_hash_pairs(pairs);
-
-    // show the most recent files first 
-    std::reverse(pairs.begin(), pairs.end());
-
-    std::vector<std::string> hashes;
-    std::vector<std::wstring> paths;
-
-    for (auto [path, hash] : pairs) {
-        hashes.push_back(utf8_encode(hash));
-        paths.push_back(path);
-    }
-
-
-    set_filtered_select_menu<std::string>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { paths }, hashes, -1,
-        [&](std::string* doc_hash) {
-            if ((doc_hash->size() > 0) && (pending_command_instance)) {
-                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdString(*doc_hash));
-                advance_command(std::move(pending_command_instance));
-            }
-        },
-        [&](std::string* doc_hash) {
-            db_manager->delete_opened_book(*doc_hash);
-        }
-        );
-
-    show_current_widget();
-}
-
-void MainWidget::handle_open_prev_doc() {
-
-    std::vector<std::wstring> opened_docs_names;
-    std::vector<std::wstring> opened_docs_actual_names;
-    std::vector<std::pair<std::wstring, std::wstring>> opened_docs_hash_names;
-    std::vector<std::string> opened_docs_hashes;
-    std::wstring current_path = L"";
-
-    if (doc()) {
-        current_path = doc()->get_path();
-    }
-
-
-    db_manager->select_opened_books_path_and_doc_names(opened_docs_hash_names);
-
-    for (const auto& [doc_hash_, actual_doc_name] : opened_docs_hash_names) {
-        std::optional<std::wstring> path = checksummer->get_path(utf8_encode(doc_hash_));
-        if (path) {
-            if (path == current_path) continue;
-
-            if (SHOW_DOC_PATH) {
-                opened_docs_names.push_back(path.value_or(L"<ERROR>"));
-            }
-            else {
-                opened_docs_names.push_back(Path(path.value()).filename().value_or(L"<ERROR>"));
-            }
-            opened_docs_hashes.push_back(utf8_encode(doc_hash_));
-            opened_docs_actual_names.push_back(actual_doc_name);
-        }
-    }
-
-
-    set_filtered_select_menu<std::string>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { opened_docs_names, opened_docs_actual_names }, opened_docs_hashes, -1,
-        [&](std::string* doc_hash) {
-            if ((doc_hash->size() > 0) && (pending_command_instance)) {
-                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdString(*doc_hash));
-                advance_command(std::move(pending_command_instance));
-            }
-        },
-        [&](std::string* doc_hash) {
-            db_manager->delete_opened_book(*doc_hash);
-        }
-        );
-
-    make_current_menu_columns_equal();
-    show_current_widget();
-}
-
-void MainWidget::clear_document_history() {
-    // An entry also holds the document's reading position, so documents open in tabs keep theirs.
-    std::vector<std::wstring> tabs = document_manager->get_tabs();
-    std::vector<std::wstring> opened_docs_hashes;
-    db_manager->select_opened_books_path_values(opened_docs_hashes);
-
-    for (const auto& doc_hash : opened_docs_hashes) {
-        std::optional<std::wstring> path = checksummer->get_path(utf8_encode(doc_hash));
-        if (path && std::find(tabs.begin(), tabs.end(), path.value()) != tabs.end()) continue;
-        db_manager->delete_opened_book(utf8_encode(doc_hash));
-    }
-}
-
 void MainWidget::handle_move_screen(int amount) {
     if (!main_document_view->is_presentation_mode()) {
         move_document_screens(amount);
@@ -6675,7 +6226,6 @@ MainWidget* MainWidget::handle_new_window() {
         config_manager,
         command_manager,
         input_handler,
-        checksummer,
         should_quit,
         pdf_renderer);
    	new_widget->open_document(main_document_view->get_state().document_path, std::nullopt, main_document_view->get_offset_y());
@@ -6741,12 +6291,9 @@ void MainWidget::handle_portal_to_link(const std::wstring& text) {
         AbsoluteDocumentPos dst_abspos = DocumentPos {parsed_uri.page-1, parsed_uri.x, parsed_uri.y}.to_absolute(doc());
 
         Portal portal;
-        portal.dst.document_checksum = doc()->get_checksum();
-        portal.dst.book_state.offset_x = dst_abspos.x;
-        portal.dst.book_state.offset_y = dst_abspos.y;
-        portal.dst.book_state.zoom_level = main_document_view->get_zoom_level();
-        portal.src_offset_y = src_abspos.y;
-        doc()->add_portal(portal, true);
+        portal.dst = doc()->portal_destination(dst_abspos, main_document_view->get_zoom_level());
+        portal.src_pos = doc()->margin_pos(src_abspos.y, true);
+        doc()->add_portal(portal);
     }
     reset_highlight_links();
 }
@@ -6783,15 +6330,10 @@ void MainWidget::handle_portal_to_overview() {
     std::optional<DocumentPos> maybe_overview_position = get_overview_position();
     if (maybe_overview_position.has_value()) {
         AbsoluteDocumentPos abs_pos = maybe_overview_position->to_absolute(doc());
-        std::string document_checksum = main_document_view->get_document()->get_checksum();
         Portal new_portal;
-        new_portal.dst.document_checksum = document_checksum;
-        new_portal.dst.book_state.offset_x = abs_pos.x;
-        new_portal.dst.book_state.offset_y = abs_pos.y;
-        new_portal.dst.book_state.zoom_level = main_document_view->get_zoom_level();
-        new_portal.src_offset_y = main_document_view->get_offset_y();
-        //new_portal.dst.book_state.
-        add_portal(main_document_view->get_document()->get_path(), new_portal);
+        new_portal.dst = doc()->portal_destination(abs_pos, main_document_view->get_zoom_level());
+        new_portal.src_pos = doc()->margin_pos(main_document_view->get_offset_y(), true);
+        doc()->add_portal(new_portal);
     }
 }
 
@@ -6860,15 +6402,12 @@ void MainWidget::handle_overview_to_portal() {
         std::optional<Portal> portal_ = get_target_portal(false);
         if (portal_) {
             Portal portal = portal_.value();
-            auto destination_path = checksummer->get_path(portal.dst.document_checksum);
-            if (destination_path) {
-                Document* doc = document_manager->get_document(destination_path.value());
-                if (doc) {
-                    doc->open(&is_render_invalidated, true);
-                    overview_state.absolute_offset_y = portal.dst.book_state.offset_y;
-                    overview_state.doc = doc;
-                    set_overview_page(overview_state);
-                }
+            Document* doc = document_manager->get_document(portal.dst.document_path);
+            if (doc) {
+                doc->open(&is_render_invalidated, true);
+                overview_state.absolute_offset_y = portal.dst.book_state(doc).offset_y;
+                overview_state.doc = doc;
+                set_overview_page(overview_state);
             }
         }
     }
@@ -6942,7 +6481,6 @@ int MainWidget::num_visible_links() {
 
 bool MainWidget::event(QEvent* event) {
 
-    QTabletEvent* te = dynamic_cast<QTabletEvent*>(event);
     QKeyEvent* ke = dynamic_cast<QKeyEvent*>(event);
     if (ke && (ke->type() == QEvent::KeyPress)) {
         // Apparently Qt doesn't send keyPressEvent for tab and backtab anymore, so we have to
@@ -6953,17 +6491,6 @@ bool MainWidget::event(QEvent* event) {
         //        key_event(false, ke);
         //    }
         //}
-    }
-
-    if (event->type() == QEvent::WindowActivate) {
-        if (is_scratchpad_mode()) {
-            scratchpad->on_view_size_change(width(), height());
-        }
-    }
-    if ((should_draw(true)) && te) {
-        handle_pen_drawing_event(te);
-        event->accept();
-        return true;
     }
 
     //if (event->type() == QEvent::TabletEVe)
@@ -7035,7 +6562,7 @@ bool MainWidget::event(QEvent* event) {
                         selected_portal_index = portal_index;
                         show_touch_buttons({ L"Delete" }, {}, [this](int index, std::wstring name) {
                             if (selected_portal_index > -1) {
-                                doc()->delete_portal_with_uuid(doc()->get_portals()[selected_portal_index].uuid);
+                                doc()->delete_portal_with_object(doc()->get_portals()[selected_portal_index].pdf_object);
                                 selected_portal_index = -1;
                                 pop_current_widget();
                                 invalidate_render();
@@ -7803,50 +7330,6 @@ void MainWidget::export_default_config_file(std::wstring file_path){
     }
 }
 
-std::vector<std::wstring> MainWidget::get_new_files_from_scan_directory() {
-    std::vector<std::pair<std::wstring, std::wstring>> path_hash;
-    db_manager->get_prev_path_hash_pairs(path_hash);
-    std::vector<std::wstring> prev_paths;
-
-    for (auto [path, hash] : path_hash) {
-        prev_paths.push_back(path);
-    }
-
-    std::sort(prev_paths.begin(), prev_paths.end());
-
-    QDir parent(QString::fromStdWString(BOOK_SCAN_PATH));
-    parent.setFilter(QDir::Files | QDir::NoSymLinks);
-    parent.setSorting(QDir::Time);
-    QFileInfoList list = parent.entryInfoList();
-
-    std::vector<std::wstring> paths;
-
-    for (int i = 0; i < list.size(); i++) {
-        paths.push_back(list.at(i).absoluteFilePath().toStdWString());
-    }
-
-    std::sort(paths.begin(), paths.end());
-
-    std::vector<std::wstring> new_paths;
-
-    std::set_difference(
-        paths.begin(), paths.end(),
-        prev_paths.begin(), prev_paths.end(),
-        std::back_inserter(new_paths)
-    );
-
-    return new_paths;
-}
-
-void MainWidget::scan_new_files_from_scan_directory() {
-    std::vector<std::wstring> new_file_paths = get_new_files_from_scan_directory();
-
-    for (auto new_file : new_file_paths) {
-        std::string checksum = checksummer->get_checksum(new_file);
-        db_manager->insert_document_hash(new_file, checksum);
-    }
-}
-
 
 QNetworkReply* MainWidget::download_paper_with_name(const std::wstring& name, PaperDownloadFinishedAction action) {
     std::wstring download_name = name;
@@ -7871,9 +7354,6 @@ QNetworkReply* MainWidget::download_paper_with_name(const std::wstring& name, Pa
 
 
 void MainWidget::download_paper_under_cursor(bool use_last_touch_pos) {
-    if (is_scratchpad_mode()){
-        return;
-    }
     ensure_internet_permission();
 
     QPoint mouse_pos;
@@ -8293,8 +7773,8 @@ void MainWidget::handle_export_marked_data() {
     get_flat_chars_from_stext_page(stext_page, flat_chars);
     auto export_path = qgetenv("YAVIEW_DATA_EXPORT").toStdString();
     QDir export_dir = QDir(QString::fromStdString(export_path));
-    std::string checksum = checksummer->get_checksum_fast(doc()->get_path()).value();
-    QString file_name = QString("%1_%2.json").arg(QString::fromStdString(checksum), QString::number(get_current_page_number()));
+    QString document_name = QFileInfo(QString::fromStdWString(doc()->get_path())).completeBaseName();
+    QString file_name = QString("%1_%2.json").arg(document_name, QString::number(get_current_page_number()));
     auto file_path = export_dir.filePath(file_name);
 
     QJsonObject json;
@@ -8427,211 +7907,15 @@ bool MainWidget::is_network_manager_running(bool* is_downloading) {
     return false;
 }
 
-void MainWidget::exit_freehand_drawing_mode() {
-    freehand_drawing_mode = DrawingMode::None;
-    handle_drawing_ui_visibilty();
-}
-
-void MainWidget::toggle_freehand_drawing_mode() {
-    set_hand_drawing_mode(freehand_drawing_mode != DrawingMode::Drawing);
-}
-
-void MainWidget::set_pen_drawing_mode(bool enabled) {
-    if (enabled) {
-        freehand_drawing_mode = DrawingMode::PenDrawing;
-    }
-    else {
-        freehand_drawing_mode = DrawingMode::None;
-    }
-    handle_drawing_ui_visibilty();
-}
-
-void MainWidget::set_hand_drawing_mode(bool enabled) {
-    if (enabled) {
-        freehand_drawing_mode = DrawingMode::Drawing;
-    }
-    else {
-        freehand_drawing_mode = DrawingMode::None;
-    }
-    handle_drawing_ui_visibilty();
-}
-
-void MainWidget::toggle_pen_drawing_mode() {
-    set_pen_drawing_mode(freehand_drawing_mode != DrawingMode::PenDrawing);
-}
-
-void MainWidget::handle_undo_drawing() {
-    doc()->undo_freehand_drawing();
-    invalidate_render();
-}
-
-void MainWidget::set_freehand_thickness(float val) {
-    freehand_thickness = val;
-}
-
-void MainWidget::handle_pen_drawing_event(QTabletEvent* te) {
-
-    if (te->type() == QEvent::TabletPress) {
-        start_drawing();
-    }
-
-    if (te->type() == QEvent::TabletRelease) {
-        finish_drawing(te->pos());
-        invalidate_render();
-    }
-
-    if (te->type() == QEvent::TabletMove) {
-        if (is_drawing) {
-            handle_drawing_move(te->pos(), te->pressure());
-            validate_render();
-        }
-
-    }
-}
-
-void MainWidget::handle_drawing_move(QPoint pos, float pressure) {
-    pressure = 0;
-    WindowPos current_window_pos = { pos.x(), pos.y() };
-    AbsoluteDocumentPos mouse_abspos = get_window_abspos(current_window_pos);
-    FreehandDrawingPoint fdp;
-    fdp.pos = mouse_abspos;
-    float thickness_zoom_factor = 1.0f;
-
-    if (opengl_widget->get_scratchpad()) {
-        thickness_zoom_factor = 1.0f / dv()->get_zoom_level() * 3;
-    }
-
-    if (pressure > 0) {
-        fdp.thickness = freehand_thickness * (0.5f + pressure * 3) * thickness_zoom_factor;
-    }
-    else {
-        fdp.thickness = freehand_thickness * thickness_zoom_factor;
-    }
-    opengl_widget->current_drawing.points.push_back(fdp);
-}
-
-void MainWidget::start_drawing() {
-    is_drawing = true;
-    opengl_widget->current_drawing.points.clear();
-    opengl_widget->current_drawing.type = current_freehand_type;
-    opengl_widget->current_drawing.alpha = freehand_alpha;
-}
-
-void MainWidget::finish_drawing(QPoint pos) {
-    is_drawing = false;
-
-    if (opengl_widget->current_drawing.points.size() == 0) {
-        handle_drawing_move(pos, -1.0f);
-    }
-
-
-    std::vector<FreehandDrawingPoint> pruned_points;
-    if (SIMPLIFY_FREEHAND_DRAWINGS) {
-        pruned_points = prune_freehand_drawing_points(opengl_widget->current_drawing.points);
-    }
-    else {
-        pruned_points = opengl_widget->current_drawing.points;
-    }
-
-    opengl_widget->current_drawing.points.clear();
-
-    FreehandDrawing pruned_drawing;
-    pruned_drawing.points = pruned_points;
-    pruned_drawing.type = opengl_widget->current_drawing.type;
-    pruned_drawing.alpha = opengl_widget->current_drawing.alpha;
-    pruned_drawing.creattion_time = QDateTime::currentDateTime();
-
-    if (opengl_widget->get_scratchpad()) {
-        scratchpad->add_drawing(pruned_drawing);
-        /* opengl_widget->update_framebuffer_cache(); */
-    }
-    else {
-        doc()->add_freehand_drawing(pruned_drawing);
-    }
-    
-}
-
-
-void MainWidget::delete_freehand_drawings(AbsoluteRect rect) {
-    if (opengl_widget->get_scratchpad()) {
-        scratchpad->delete_intersecting_objects(rect);
-        set_rect_select_mode(false);
-        clear_selected_rect();
-        invalidate_render();
-    }
-    else {
-        DocumentRect page_rect = rect.to_document(doc());
-        doc()->delete_page_intersecting_drawings(page_rect.page, rect, opengl_widget->visible_drawing_mask);
-        set_rect_select_mode(false);
-        clear_selected_rect();
-        invalidate_render();
-    }
-}
-
-void MainWidget::select_freehand_drawings(AbsoluteRect rect) {
-    DocumentRect page_rect = rect.to_document(doc());
-    SelectedDrawings selected_drawings;
-    std::vector<SelectedObjectIndex> selected_indices;
-    if (opengl_widget->get_scratchpad()) {
-        selected_indices = scratchpad->get_intersecting_objects(rect);
-    }
-    else {
-        selected_indices = doc()->get_page_intersecting_drawing_indices(page_rect.page, rect, opengl_widget->visible_drawing_mask);;
-    }
-
-    selected_drawings.page = page_rect.page;
-    selected_drawings.selected_indices = selected_indices;
-    selected_drawings.selection_absrect = rect;
-    selected_freehand_drawings = selected_drawings;
-    set_rect_select_mode(false);
-    clear_selected_rect();
-    opengl_widget->moving_drawings.clear();
-    opengl_widget->moving_pixmaps.clear();
-
-    if (opengl_widget->get_scratchpad()) {
-        scratchpad->get_selected_objects_with_indices(selected_indices, opengl_widget->moving_drawings, opengl_widget->moving_pixmaps);
-    }
-    else {
-        doc()->get_page_freehand_drawings_with_indices(
-            selected_freehand_drawings->page,
-            selected_freehand_drawings->selected_indices,
-            opengl_widget->moving_drawings,
-            opengl_widget->moving_pixmaps);
-    }
-
-    invalidate_render();
-}
-
-void MainWidget::hande_turn_on_all_drawings() {
-    for (int i = 0; i < 26; i++) {
-        opengl_widget->visible_drawing_mask[i] = true;
-    }
-}
-
-void MainWidget::hande_turn_off_all_drawings() {
-    for (int i = 0; i < 26; i++) {
-        opengl_widget->visible_drawing_mask[i] = false;
-    }
-}
-
-void MainWidget::handle_toggle_drawing_mask(char symbol) {
-
-    if (symbol >= 'a' && symbol <= 'z') {
-        opengl_widget->visible_drawing_mask[symbol - 'a'] = !opengl_widget->visible_drawing_mask[symbol - 'a'];
-    }
-}
 
 std::string MainWidget::get_current_mode_string() {
     std::string res;
     res += (is_visual_mark_mode()) ? "r" : "R";
     res += (synctex_mode) ? "x" : "X";
     res += (is_select_highlight_mode) ? "h" : "H";
-    res += (freehand_drawing_mode == DrawingMode::Drawing) ? "q" : "Q";
-    res += (freehand_drawing_mode == DrawingMode::PenDrawing) ? "e" : "E";
     res += (mouse_drag_mode) ? "d" : "D";
     res += (main_document_view->is_presentation_mode()) ? "p" : "P";
     res += (opengl_widget->get_overview_page()) ? "o" : "O";
-    res += opengl_widget->get_scratchpad() ? "s" : "S";
     res += (opengl_widget->get_is_searching(nullptr)) ? "f" : "F";
     res += (is_menu_focused()) ? "m" : "M";
 
@@ -8643,20 +7927,6 @@ std::string MainWidget::get_current_mode_string() {
     }
     return res;
 
-}
-
-void MainWidget::handle_drawing_ui_visibilty() {
-    if (!TOUCH_MODE && (draw_controls_ == nullptr)) {
-        return;
-    }
-
-    if (freehand_drawing_mode == DrawingMode::None) {
-        get_draw_controls()->hide();
-    }
-    else {
-        get_draw_controls()->show();
-        get_draw_controls()->controls_ui->set_pen_size(freehand_thickness);
-    }
 }
 
 void MainWidget::move_selection_end(bool expand, bool word) {
@@ -9131,8 +8401,7 @@ bool MainWidget::ensure_internet_permission() {
 
 void MainWidget::add_text_annotation_to_selected_highlight(const std::wstring& annot_text) {
     if (selected_highlight_index > -1) {
-        Highlight hl = main_document_view->get_highlight_with_index(selected_highlight_index);
-        doc()->update_highlight_add_text_annotation(hl.uuid, annot_text);
+        doc()->update_highlight_add_text_annotation(selected_highlight_index, annot_text);
     }
 }
 
@@ -9151,7 +8420,7 @@ void MainWidget::change_selected_bookmark_text(const std::wstring& new_text) {
 void MainWidget::change_selected_highlight_text_annot(const std::wstring& new_text) {
 
     if (selected_highlight_index != -1) {
-        doc()->update_highlight_add_text_annotation(doc()->get_highlight_index_uuid(selected_highlight_index), new_text);
+        doc()->update_highlight_add_text_annotation(selected_highlight_index, new_text);
     }
 }
 
@@ -9340,7 +8609,7 @@ void MainWidget::handle_bookmark_move_finish() {
 void MainWidget::handle_portal_move_finish() {
     if (!portal_move_data->is_pending) {
         Portal& portal = doc()->get_portals()[portal_move_data->index];
-        doc()->update_portal_src_position(portal_move_data->index, { portal.src_offset_x.value(), portal.src_offset_y });
+        doc()->update_portal_src_position(portal_move_data->index, portal.src_pos);
     }
 }
 
@@ -9369,16 +8638,16 @@ void MainWidget::handle_portal_move() {
 
     if (portal_move_data->is_pending) {
         if (pending_download_portals.size() > portal_move_data->index) {
-            pending_download_portals[portal_move_data->index].pending_portal.src_offset_x = portal_move_data->initial_position.x + diff_x;
-            pending_download_portals[portal_move_data->index].pending_portal.src_offset_y = portal_move_data->initial_position.y + diff_y;
+            pending_download_portals[portal_move_data->index].pending_portal.src_pos.x = portal_move_data->initial_position.x + diff_x;
+            pending_download_portals[portal_move_data->index].pending_portal.src_pos.y = portal_move_data->initial_position.y + diff_y;
             update_opengl_pending_download_portals();
         }
     }
     else {
         Portal& portal = doc()->get_portals()[portal_move_data->index];
 
-        portal.src_offset_x = portal_move_data->initial_position.x + diff_x;
-        portal.src_offset_y = portal_move_data->initial_position.y + diff_y;
+        portal.src_pos.x = portal_move_data->initial_position.x + diff_x;
+        portal.src_pos.y = portal_move_data->initial_position.y + diff_y;
     }
 }
 
@@ -9406,8 +8675,7 @@ void MainWidget::begin_portal_move(int index, AbsoluteDocumentPos begin_cursor_p
 
     if (is_pending) {
         if (index < pending_download_portals.size()) {
-            move_data.initial_position.x = pending_download_portals[index].pending_portal.src_offset_x.value();
-            move_data.initial_position.y = pending_download_portals[index].pending_portal.src_offset_y;
+            move_data.initial_position = pending_download_portals[index].pending_portal.src_pos;
 
             move_data.initial_mouse_position = begin_cursor_pos;
             move_data.is_pending = is_pending;
@@ -9415,82 +8683,16 @@ void MainWidget::begin_portal_move(int index, AbsoluteDocumentPos begin_cursor_p
         }
     }
     else {
+        move_data.initial_position = doc()->get_portals()[index].src_pos;
 
-        if (doc()->get_portals()[index].src_offset_x) {
-            move_data.initial_position.x = doc()->get_portals()[index].src_offset_x.value();
-            move_data.initial_position.y = doc()->get_portals()[index].src_offset_y;
-
-            move_data.initial_mouse_position = begin_cursor_pos;
-            move_data.is_pending = is_pending;
-            portal_move_data = move_data;
-        }
+        move_data.initial_mouse_position = begin_cursor_pos;
+        move_data.is_pending = is_pending;
+        portal_move_data = move_data;
     }
 }
 
 bool MainWidget::should_drag() {
     return is_dragging && (!bookmark_move_data.has_value()) && (!portal_move_data.has_value());
-}
-
-void MainWidget::handle_freehand_drawing_move_finish() {
-    QPoint p = last_press_point = mapFromGlobal(QCursor::pos());
-    //AbsoluteDocumentPos mpos_absolute = main_document_view->window_to_absolute_document_pos({ p.x(), p.y() });
-    AbsoluteDocumentPos mpos_absolute = get_window_abspos({ p.x(), p.y() });
-    std::vector<FreehandDrawing> moved_drawings;
-    std::vector<PixmapDrawing> moved_pixmaps;
-
-    move_selected_drawings(mpos_absolute, moved_drawings, moved_pixmaps);
-
-    if (opengl_widget->get_scratchpad()) {
-
-        for (auto drawing : moved_drawings) {
-            scratchpad->add_drawing(drawing);
-        }
-        for (auto pixmap_drawing : moved_pixmaps) {
-            scratchpad->pixmaps.push_back(pixmap_drawing);
-        }
-    }
-    else {
-        for (auto drawing : moved_drawings) {
-            doc()->add_freehand_drawing(drawing);
-        }
-    }
-
-    //for (auto drawing : moved_drawings) {
-    //    if (opengl_widget->get_scratchpad()) {
-    //        scratchpad->drawings.push_back(drawing);
-    //    }
-    //    else {
-    //        doc()->add_freehand_drawing(drawing);
-    //    }
-    //}
-
-    freehand_drawing_move_data = {};
-    opengl_widget->moving_drawings.clear();
-    opengl_widget->moving_pixmaps.clear();
-
-}
-
-void MainWidget::move_selected_drawings(AbsoluteDocumentPos new_pos, std::vector<FreehandDrawing>& moved_drawings, std::vector<PixmapDrawing>& moved_pixmaps) {
-    float diff_x = -freehand_drawing_move_data->initial_mouse_position.x + new_pos.x;
-    float diff_y = -freehand_drawing_move_data->initial_mouse_position.y + new_pos.y;
-
-    for (auto drawing : freehand_drawing_move_data->initial_drawings) {
-        FreehandDrawing new_drawing = drawing;
-        for (int i = 0; i < new_drawing.points.size(); i++) {
-            new_drawing.points[i].pos.x += diff_x;
-            new_drawing.points[i].pos.y += diff_y;
-        }
-        moved_drawings.push_back(new_drawing);
-    }
-
-    for (auto pixmap_drawing : freehand_drawing_move_data->initial_pixmaps) {
-        PixmapDrawing new_pixmap = pixmap_drawing;
-        new_pixmap.rect.x0 += diff_x;
-        new_pixmap.rect.x1 += diff_x;
-        new_pixmap.rect.y0 += diff_y;
-        new_pixmap.rect.y1 += diff_y;
-        moved_pixmaps.push_back(new_pixmap);
-    }
 }
 
 void MainWidget::show_command_palette() {
@@ -9526,17 +8728,6 @@ TouchTextSelectionButtons* MainWidget::get_text_selection_buttons() {
     }
 
     return text_selection_buttons_;
-}
-
-DrawControlsUI* MainWidget::get_draw_controls() {
-
-    if (draw_controls_ == nullptr) {
-        draw_controls_ = new DrawControlsUI(this);
-        draw_controls_->hide();
-    }
-
-    draw_controls_->controls_ui->set_scratchpad_mode(is_scratchpad_mode());
-    return draw_controls_;
 }
 
 SearchButtons* MainWidget::get_search_buttons() {
@@ -9632,7 +8823,6 @@ std::optional<std::wstring> MainWidget::get_overview_paper_name() {
 }
 
 void MainWidget::finish_pending_download_portal(std::wstring download_paper_name, std::wstring downloaded_file_path) {
-    std::string checksum = checksummer->get_checksum(downloaded_file_path);
     int pending_index = -1;
     for (int i = 0; i < pending_download_portals.size(); i++) {
 
@@ -9641,18 +8831,21 @@ void MainWidget::finish_pending_download_portal(std::wstring download_paper_name
 
         if (pending_paper_name == download_paper_name) {
             pending_index = i;
-            pending_portal.dst.document_checksum = checksum;
             Document* src_doc = document_manager->get_document(pending_download_portals[i].source_document_path);
             PagelessDocumentRect downloaded_page_size = get_first_page_size(mupdf_context, downloaded_file_path);
 
+            // the destination shows the top of the first page in the helper window
             float zoom_level = static_cast<float>(main_document_view->get_view_width()) / (downloaded_page_size.x1 - downloaded_page_size.x0);
             float offset_y = (static_cast<float>(main_document_view->get_view_height()) / 2) / zoom_level;
-            pending_portal.dst.book_state.zoom_level = zoom_level;
-            pending_portal.dst.book_state.offset_y = offset_y;
+            Document* downloaded_doc = document_manager->get_document(downloaded_file_path);
+            downloaded_doc->open(nullptr, false, "", true);
+            pending_portal.dst.document_path = downloaded_file_path;
+            pending_portal.dst.pos = downloaded_doc->page_pos_to_pdf_space({ 0, (downloaded_page_size.x1 - downloaded_page_size.x0) / 2, offset_y });
+            pending_portal.dst.zoom_level = zoom_level;
+            document_manager->free_document(downloaded_doc);
 
             if (src_doc) {
-                db_manager->insert_document_hash(downloaded_file_path, checksum);
-                int portal_index = src_doc->add_portal(pending_portal, true);
+                int portal_index = src_doc->add_portal(pending_portal);
                 // when a download is finished while we are moving the pending portal, convert the
                 // pending portal move to the actual portal move
                 if (portal_move_data && portal_move_data->is_pending && portal_move_data->index == i) {
@@ -9797,7 +8990,7 @@ std::vector<Portal> MainWidget::get_ruler_portals() {
     std::optional<AbsoluteRect> ruler_rect_ = main_document_view->get_ruler_rect();
     if (ruler_rect_) {
         AbsoluteRect ruler_rect = ruler_rect_.value();
-        return doc()->get_intersecting_visible_portals(ruler_rect.y0, ruler_rect.y1);
+        return doc()->get_intersecting_portals(ruler_rect.y0, ruler_rect.y1);
     }
     return res;
 }
@@ -9809,10 +9002,10 @@ void MainWidget::handle_overview_to_ruler_portal() {
         smart_view_candidates.clear();
         for (auto candid : candidates) {
             SmartViewCandidate smc;
-            smc.doc = document_manager->get_document_with_checksum(candid.dst.document_checksum);
+            smc.doc = document_manager->get_document(candid.dst.document_path);
             smc.doc->open(&is_render_invalidated, true);
             smc.source_rect = candid.get_rectangle();
-            smc.target_pos = AbsoluteDocumentPos{ 0, candid.dst.book_state.offset_y };
+            smc.target_pos = AbsoluteDocumentPos{ 0, candid.dst.book_state(smc.doc).offset_y };
             smart_view_candidates.push_back(smc);
         }
         index_into_candidates = 0;
@@ -9820,7 +9013,7 @@ void MainWidget::handle_overview_to_ruler_portal() {
 
         OverviewState state;
         state.doc = smart_view_candidates[0].doc;
-        state.absolute_offset_y = candidates[0].dst.book_state.offset_y;
+        state.absolute_offset_y = std::get<AbsoluteDocumentPos>(smart_view_candidates[0].target_pos).y;
         set_overview_page(state);
         invalidate_render();
     }
@@ -9915,12 +9108,7 @@ void MainWidget::download_and_portal(std::wstring unclean_paper_name, AbsoluteDo
 
 void MainWidget::create_pending_download_portal(AbsoluteDocumentPos source_position, std::wstring paper_name) {
     Portal pending_portal;
-    pending_portal.src_offset_x = source_position.x;
-    pending_portal.src_offset_y = source_position.y;
-
-    pending_portal.dst.book_state.offset_x = 0;
-    pending_portal.dst.book_state.offset_y = 0;
-    pending_portal.dst.book_state.zoom_level = -1;
+    pending_portal.src_pos = source_position;
     PendingDownloadPortal pending_download_portal;
     pending_download_portal.pending_portal = pending_portal;
     pending_download_portal.source_document_path = doc()->get_path();
@@ -10196,7 +9384,6 @@ QJsonObject MainWidget::get_json_state() {
     QJsonObject result;
     if (doc()) {
         result["document_path"] = QString::fromStdWString(doc()->get_path());
-        result["document_checksum"] = QString::fromStdString(doc()->get_checksum());
 
         int current_page = get_current_page_number();
         result["page_number"] = get_current_page_number();
@@ -10679,7 +9866,7 @@ void MainWidget::handle_rename(std::wstring new_name) {
     QString new_file_path = file_info.dir().filePath(new_file_name);
 
     if (old_qfile.rename(QString::fromStdWString(path_to_be_freed), new_file_path)) {
-        db_manager->update_file_name(path_to_be_freed, new_file_path.toStdWString());
+        db_manager->rename_document(path_to_be_freed, new_file_path.toStdWString());
         document_views_open_path(document_views_referencing_doc, document_views_referencing_doc_widgets, document_view_is_helper, new_file_path.toStdWString());
         update_renamed_document_in_history(path_to_be_freed, new_file_path.toStdWString());
         restore_document_view_states(document_views_referencing_doc, view_states);
@@ -10800,6 +9987,20 @@ void MainWidget::goto_page_with_page_number(int page_number) {
     main_document_view->goto_page(page_number);
 }
 
+// Shows the page num_pages after (negative: before) the page at the top of the window, from its top.
+// Presentation and two page modes keep moving by whole pages from the current position.
+void MainWidget::turn_pages(int num_pages) {
+    if (!doc()) return;
+    if (main_document_view->is_presentation_mode() || main_document_view->is_two_page_mode()) {
+        main_document_view->move_pages(num_pages);
+        return;
+    }
+    float view_top = main_document_view->get_offset_y() - main_document_view->view_height_in_document_space() / 2;
+    // a page's top edge belongs to the page before it in get_offset_page_number
+    int page = std::max(0, doc()->get_offset_page_number(view_top + 1));
+    main_document_view->goto_page(std::clamp(page + num_pages, 0, doc()->num_pages() - 1));
+}
+
 void MainWidget::goto_search_result(int nth_next_result, bool overview) {
     opengl_widget->goto_search_result(nth_next_result, overview);
 }
@@ -10828,14 +10029,6 @@ void MainWidget::toggle_fastread() {
     opengl_widget->toggle_fastread_mode();
 }
 
-void MainWidget::export_json(std::wstring json_file_path){
-    db_manager->export_json(json_file_path, checksummer);
-}
-
-void MainWidget::import_json(std::wstring json_file_path){
-    db_manager->import_json(json_file_path, checksummer);
-}
-
 bool MainWidget::does_current_widget_consume_quicktap_event(){
     if (current_widget_stack.size() > 0){
         /* return true; */
@@ -10849,14 +10042,14 @@ bool MainWidget::does_current_widget_consume_quicktap_event(){
 }
 
 bool MainWidget::is_moving_annotations(){
-    if (bookmark_move_data || portal_move_data || freehand_drawing_move_data) {
+    if (bookmark_move_data || portal_move_data) {
         return true;
     }
     return false;
 }
 
 void MainWidget::initialize_helper(){
-    helper_document_view_ = new DocumentView(db_manager, document_manager, checksummer);
+    helper_document_view_ = new DocumentView(db_manager, document_manager);
     helper_opengl_widget_ = new PdfViewOpenGLWidget(helper_document_view_, pdf_renderer, config_manager, true);
 #ifdef Q_OS_WIN
     // seems to be required only on windows though. TODO: test this on macos.
@@ -10962,9 +10155,26 @@ DocumentView* MainWidget::helper_document_view(){
     return helper_document_view_;
 }
 
+// The prompt bar of text input, without the text field, while a command waits for a letter. The key
+// goes to the window (key_event), which keeps the focus.
+void MainWidget::show_symbol_prompt(const std::wstring& requirement_name) {
+    text_command_line_edit_label->setText(QString::fromStdWString(requirement_name) + " (press a letter)");
+    text_command_line_edit->hide();
+    text_command_line_edit_container->show();
+    setFocus();
+}
+
+void MainWidget::hide_symbol_prompt() {
+    if (!text_command_line_edit->isVisible()) {
+        text_command_line_edit_container->hide();
+        text_command_line_edit->show();
+    }
+}
+
 void MainWidget::hide_command_line_edit(){
     text_command_line_edit->setText("");
     text_command_line_edit_container->hide();
+    text_command_line_edit->show();
     hide_command_hints();
     text_suggestion_index = 0;
     pending_command_instance = {};
@@ -11237,218 +10447,11 @@ void MainWidget::set_text_prompt_text(QString text) {
 }
 
 AbsoluteDocumentPos MainWidget::get_window_abspos(WindowPos window_pos) {
-    if (opengl_widget->get_scratchpad()) {
-        return scratchpad->window_to_absolute_document_pos(window_pos);
-    }
-    else {
-        return window_pos.to_absolute(main_document_view);
-    }
+    return window_pos.to_absolute(main_document_view);
 }
 
 DocumentView* MainWidget::dv() {
-    if (opengl_widget->get_scratchpad()) {
-        return scratchpad;
-    }
-    else{
-        return main_document_view;
-    }
-}
-
-bool MainWidget::should_draw(bool originated_from_pen) {
-
-    if (rect_select_mode) return false;
-    if (freehand_drawing_move_data || selected_freehand_drawings) return false;
-
-    if (TOUCH_MODE){
-        if (opengl_widget && opengl_widget->get_scratchpad()) {
-            return originated_from_pen;
-        }
-
-        if (freehand_drawing_mode == DrawingMode::Drawing) {
-            return true;
-        }
-
-        if (freehand_drawing_mode == DrawingMode::PenDrawing && originated_from_pen) {
-            return true;
-        }
-    }
-    else{
-        if (opengl_widget && opengl_widget->get_scratchpad()) {
-            return true;
-        }
-
-        if (freehand_drawing_mode == DrawingMode::Drawing) {
-            return true;
-        }
-
-        if (freehand_drawing_mode == DrawingMode::PenDrawing && originated_from_pen) {
-            return true;
-        }
-    }
-
-
-    return false;
-}
-
-void MainWidget::handle_freehand_drawing_selection_click(AbsoluteDocumentPos click_pos) {
-    std::vector<FreehandDrawing> moving_drawings;
-    std::vector<PixmapDrawing> moving_pixmaps;
-
-    if (opengl_widget->get_scratchpad()) {
-        scratchpad->get_selected_objects_with_indices(
-            selected_freehand_drawings->selected_indices,
-            moving_drawings,
-            moving_pixmaps);
-        scratchpad->delete_intersecting_objects(selected_freehand_drawings->selection_absrect);
-    }
-    else {
-        doc()->get_page_freehand_drawings_with_indices(
-            selected_freehand_drawings->page,
-            selected_freehand_drawings->selected_indices,
-            moving_drawings,
-            moving_pixmaps);
-        doc()->delete_page_intersecting_drawings(
-            selected_freehand_drawings->page,
-            selected_freehand_drawings->selection_absrect,
-            opengl_widget->visible_drawing_mask);
-    }
-
-    FreehandDrawingMoveData md;
-    md.initial_drawings = moving_drawings;
-    md.initial_pixmaps = moving_pixmaps;
-    md.initial_mouse_position = click_pos;
-    freehand_drawing_move_data = md;
-    selected_freehand_drawings = {};
-}
-
-bool MainWidget::is_scratchpad_mode(){
-    return opengl_widget->get_scratchpad() != nullptr;
-}
-
-void MainWidget::toggle_scratchpad_mode(){
-    if (opengl_widget->get_scratchpad()) {
-        opengl_widget->set_scratchpad(nullptr);
-    }
-    else {
-        scratchpad->on_view_size_change(width(), height());
-        opengl_widget->set_scratchpad(scratchpad);
-    }
-
-    if (draw_controls_) {
-        if (opengl_widget->get_scratchpad()) {
-            draw_controls_->controls_ui->set_scratchpad_mode(true);
-        }
-        else {
-            draw_controls_->controls_ui->set_scratchpad_mode(false);
-        }
-    }
-}
-
-void MainWidget::add_pixmap_to_scratchpad(QPixmap pixmap) {
-    scratchpad->add_pixmap(pixmap);
-}
-
-void MainWidget::save_scratchpad() {
-    auto scratchpad_file_name = doc()->get_scratchpad_file_path();
-
-    QJsonObject root_object;
-    QJsonObject drawings_object;
-
-    QJsonArray page_drawings_array;
-
-    for (auto& drawing : scratchpad->get_all_drawings()) {
-        QJsonObject drawing_object;
-        drawing_object["creation_time"] = drawing.creattion_time.toString(Qt::ISODate);
-        drawing_object["type"] = drawing.type;
-        //QJsonArray points;
-        QJsonArray points_xs;
-        QJsonArray points_ys;
-        QJsonArray points_thicknesses;
-
-        for (auto& p : drawing.points) {
-            points_xs.append(p.pos.x);
-            points_ys.append(p.pos.y);
-            points_thicknesses.append(p.thickness);
-        }
-        drawing_object["point_xs"] = points_xs;
-        drawing_object["point_ys"] = points_ys;
-        drawing_object["point_thicknesses"] = points_thicknesses;
-
-        page_drawings_array.append(drawing_object);
-    }
-    //drawings_object[QString::number(page)] = page_drawings_array;
-    //handle_drawing_ui_visibilty
-
-    root_object["drawings"] = page_drawings_array;
-
-
-    QJsonDocument json_doc;
-    json_doc.setObject(root_object);
-
-    QFile json_file(QString::fromStdWString(scratchpad_file_name));
-    json_file.open(QFile::WriteOnly);
-    json_file.write(json_doc.toJson());
-    json_file.close();
-}
-
-void MainWidget::load_scratchpad() {
-    auto scratchpad_file_name = doc()->get_scratchpad_file_path();
-
-
-    QFile json_file(QString::fromStdWString(scratchpad_file_name));
-    if (json_file.open(QFile::ReadOnly)) {
-        QJsonDocument json_document = QJsonDocument().fromJson(json_file.readAll());
-        json_file.close();
-
-        QJsonObject root = json_document.object();
-        QJsonArray drawings_object = root["drawings"].toArray();
-        scratchpad->clear();
-
-        //for (auto& drawing_json_object : drawings_object)) {
-        for (int i = 0; i < drawings_object.size(); i++){
-
-            QJsonObject drawing_object = drawings_object[i].toObject();
-            FreehandDrawing drawing;
-
-            drawing.creattion_time = QDateTime::fromString(drawing_object["creation_time"].toString(), Qt::ISODate);
-            drawing.type = drawing_object["type"].toInt();
-            QJsonArray x_array = drawing_object["point_xs"].toArray();
-            QJsonArray y_array = drawing_object["point_ys"].toArray();
-            QJsonArray t_array = drawing_object["point_thicknesses"].toArray();
-
-            for (int i = 0; i < x_array.size(); i++) {
-                FreehandDrawingPoint point;
-                point.pos.x = x_array.at(i).toDouble();
-                point.pos.y = y_array.at(i).toDouble();
-                point.thickness = t_array.at(i).toDouble();
-                drawing.points.push_back(point);
-            }
-            scratchpad->add_drawing(drawing);
-        }
-
-    }
-
-}
-
-void MainWidget::clear_scratchpad() {
-    scratchpad->clear();
-    invalidate_render();
-}
-
-char MainWidget::get_current_freehand_type() {
-    return current_freehand_type;
-}
-
-float MainWidget::get_current_freehand_alpha() {
-    return freehand_alpha;
-}
-
-void MainWidget::set_current_freehand_alpha(float alpha) {
-    freehand_alpha = alpha;
-}
-
-void MainWidget::show_draw_controls() {
-    get_draw_controls()->show();
+    return main_document_view;
 }
 
 PaperDownloadFinishedAction MainWidget::get_default_paper_download_finish_action() {
@@ -11491,15 +10494,6 @@ QPoint MainWidget::cursor_pos() {
     return QCursor::pos();
 }
 
-
-void MainWidget::clear_current_page_drawings() {
-    int page_number = get_current_page_number();
-    doc()->delete_all_page_drawings(page_number);
-}
-
-void MainWidget::clear_current_document_drawings() {
-    doc()->delete_all_drawings();
-}
 
 void MainWidget::set_selected_highlight_index(int index) {
     selected_highlight_index = index;
@@ -11887,12 +10881,6 @@ bool MainWidget::handle_annotation_move_finish(){
         is_selecting = false;
         return true;
     }
-    if (freehand_drawing_move_data) {
-        handle_freehand_drawing_move_finish();
-        invalidate_render();
-        is_selecting = false;
-        return true;
-    }
 
     return false;
 }
@@ -12001,18 +10989,6 @@ QMenuBar* MainWidget::create_main_menu_bar(){
             new MenuNode{ "-", "", {}},
             new MenuNode{ "download_clipboard_url", "", {}},
             new MenuNode{ "rename", "", {}},
-        }
-    };
-
-    MenuNode* scratchpad_menu = new MenuNode{
-        "Scratchpad",
-        "",
-        {
-            new MenuNode{ "toggle_scratchpad_mode", "", {}},
-            new MenuNode{ "save_scratchpad", "", {}},
-            new MenuNode{ "load_scratchpad", "", {}},
-            new MenuNode{ "copy_screenshot_to_scratchpad", "", {}},
-            new MenuNode{ "clear_scratchpad", "", {}},
         }
     };
 
@@ -12155,18 +11131,6 @@ QMenuBar* MainWidget::create_main_menu_bar(){
         }
     };
 
-    MenuNode* drawing_menu = new MenuNode{
-        "Drawings",
-        "",
-        {
-            new MenuNode{ "toggle_freehand_drawing_mode", "", {} },
-            new MenuNode{ "delete_freehand_drawings", "", {} },
-            new MenuNode{ "set_freehand_thickness", "", {} },
-            new MenuNode{ "set_freehand_type", "", {} },
-            new MenuNode{ "toggle_drawing_mask", "", {} },
-        }
-    };
-
     MenuNode* annotation_menu = new MenuNode{
         "Annotations",
         "",
@@ -12175,9 +11139,6 @@ QMenuBar* MainWidget::create_main_menu_bar(){
             bookmark_menu,
             highlight_menu,
             portal_menu,
-            drawing_menu,
-            new MenuNode{ "embed_annotations", "", {} },
-            new MenuNode{ "import_annotations", "", {} },
         }
     };
 
@@ -12190,7 +11151,6 @@ QMenuBar* MainWidget::create_main_menu_bar(){
             new MenuNode{ "toggle_reading", "", {} },
             new MenuNode{ "setconfig_tts_rate", "Set reading speed", {} },
             new MenuNode{ "toggle_synctex", "", {} },
-            scratchpad_menu,
             ruler_menu,
         }
     };
@@ -12255,10 +11215,7 @@ void MainWidget::set_pending_portal(std::optional<std::pair<std::optional<std::w
     current_pending_portal = pending_portal;
 
     if (pending_portal) {
-        if (pending_portal->second.src_offset_x.has_value()){
-            // show pending portal icon for visible portals only
-            opengl_widget->set_pending_portal_position(pending_portal->second.get_rectangle());
-        }
+        opengl_widget->set_pending_portal_position(pending_portal->second.get_rectangle());
     }
     else {
         opengl_widget->set_pending_portal_position({});
@@ -12290,13 +11247,6 @@ void MainWidget::set_state(QJsonObject state) {
 
     if (state.contains("document_path")) {
         main_document_view->open_document(state["document_path"].toString().toStdWString(), &this->is_render_invalidated);
-    }
-
-    if (state.contains("document_checksum")) {
-        std::optional<std::wstring> path = document_manager->get_path_from_hash(state["document_checksum"].toString().toStdString());
-        if (path.has_value()) {
-            main_document_view->open_document(path.value(), &this->is_render_invalidated);
-        }
     }
 
     if (state.contains("x_offset")) {
@@ -12548,4 +11498,316 @@ void MainWidget::select_word_under_cursor() {
         true,
         main_document_view->selected_character_rects,
         selected_text);
+}
+
+std::wstring MainWidget::bookmark_result_string(int bookmark_index) {
+    if (bookmark_index < 0 || !doc()) return L"";
+    return std::to_wstring(doc()->get_bookmarks()[bookmark_index].pdf_object);
+}
+
+bool MainWidget::ensure_annotatable() {
+    if (doc() && doc()->can_annotate()) return true;
+    set_status_message(L"Annotations are stored in the PDF file; this document is not a PDF");
+    return false;
+}
+
+std::optional<std::wstring> MainWidget::get_last_opened_file_path() {
+    std::wstring current_path = doc() ? doc()->get_path() : L"";
+    std::vector<std::pair<std::wstring, std::wstring>> documents;
+    db_manager->select_documents(documents);
+    for (const auto& [path, name] : documents) {
+        if (path != current_path) return path;
+    }
+    return {};
+}
+
+void MainWidget::set_mark_in_current_location(char symbol) {
+    if (!ensure_annotatable()) return;
+    main_document_view->add_mark(symbol);
+    validate_render();
+}
+
+void MainWidget::clear_document_marks() {
+    doc()->clear_marks();
+    invalidate_render();
+}
+
+void MainWidget::goto_mark(char symbol) {
+    if (symbol == '`' || symbol == '\'') {
+        return_to_last_visual_mark();
+    }
+    else {
+        main_document_view->goto_mark(symbol);
+    }
+}
+
+void MainWidget::convert_mark_to_bookmark(char symbol, const std::wstring& text) {
+    std::optional<Mark> mark = doc()->get_mark_if_exists(symbol);
+    if (!mark) return;
+    if (doc()->add_marked_bookmark(text, doc()->margin_pos(mark->y_offset, false)) != -1) {
+        doc()->remove_mark(symbol);
+    }
+    invalidate_render();
+}
+
+void MainWidget::handle_show_marks() {
+    show_mark_list([this](Mark* mark) { main_document_view->goto_mark(mark->symbol); }, true);
+}
+
+// The menu of the document's marks for the commands that act on one (edit_mark, mark_to_bookmark):
+// picking a mark gives the pending command its letter.
+void MainWidget::show_mark_picker() {
+    bool has_marks = std::any_of(doc()->get_marks().begin(), doc()->get_marks().end(), [](const Mark& mark) {
+        return std::isalpha(static_cast<unsigned char>(mark.symbol));
+        });
+    if (!has_marks) {
+        set_status_message(L"No marks in this document");
+        pending_command_instance = nullptr;
+        return;
+    }
+    show_mark_list([this](Mark* mark) {
+        if (pending_command_instance) {
+            pending_command_instance->set_generic_requirement(QString(QChar(mark->symbol)));
+            advance_command(std::move(pending_command_instance));
+        }
+        }, false);
+}
+
+void MainWidget::show_centered_text_prompt(const std::wstring& title, const std::wstring& initial_value) {
+    TextPromptWidget* prompt = new TextPromptWidget(QString::fromStdWString(title), QString::fromStdWString(initial_value), this,
+        [this](QString text) {
+            pop_current_widget();
+            setFocus();
+            handle_pending_text_command(text.toStdWString());
+        });
+    set_current_widget(prompt);
+    show_current_widget();
+    prompt->focus_input();
+}
+
+// The document's marks (letter, description, page); `can_edit` lets Ctrl+R edit the highlighted mark's description.
+void MainWidget::show_mark_list(std::function<void(Mark*)> on_select, bool can_edit) {
+    std::vector<Mark> marks;
+    std::vector<std::wstring> letters;
+    std::vector<std::wstring> descriptions;
+    std::vector<std::wstring> pages;
+
+    for (const Mark& mark : doc()->get_marks()) {
+        // the '/' mark, which a search sets, is not one of the user's marks
+        if (std::isalpha(static_cast<unsigned char>(mark.symbol))) {
+            marks.push_back(mark);
+        }
+    }
+    std::sort(marks.begin(), marks.end(), [](const Mark& lhs, const Mark& rhs) { return lhs.symbol < rhs.symbol; });
+
+    for (const Mark& mark : marks) {
+        letters.push_back(ITEM_LIST_PREFIX + L" [" + static_cast<wchar_t>(mark.symbol) + L"]");
+        descriptions.push_back(mark.description);
+        auto [page, _, __] = doc()->absolute_to_page_pos({ 0, mark.y_offset });
+        pages.push_back(get_page_formatted_string(page + 1));
+    }
+
+    std::function<void(Mark*)> on_edit = nullptr;
+    if (can_edit) {
+        on_edit = [this](Mark* mark) {
+            std::unique_ptr<Command> edit_command = command_manager->get_command_with_name(this, "edit_mark");
+            edit_command->set_generic_requirement(QString(QChar(mark->symbol)));
+            pop_current_widget();
+            handle_command_types(std::move(edit_command), 0);
+            };
+    }
+
+    set_filtered_select_menu<Mark>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { letters, descriptions, pages }, marks, -1,
+        on_select,
+        [this](Mark* mark) {
+            doc()->remove_mark(mark->symbol);
+        },
+        on_edit
+    );
+    // the letters in their own bold column, set apart from the descriptions
+    if (!TOUCH_MODE && current_widget_stack.size() > 0) {
+        if (auto* table = dynamic_cast<FilteredSelectTableWindowClass<Mark>*>(current_widget_stack.back())) {
+            table->emphasize_column(0, 16);
+        }
+    }
+    show_current_widget();
+}
+
+// The documents the bookmark and highlight lists of several documents show: the open ones (the tabs)
+// and the recent_documents_in_annotation_lists most recently opened ones, from the database.
+std::vector<std::wstring> MainWidget::get_open_and_recent_document_paths() {
+    std::vector<std::wstring> paths = document_manager->get_tabs();
+    std::vector<std::pair<std::wstring, std::wstring>> documents;
+    db_manager->select_documents(documents);
+    int num_recent = 0;
+    for (const auto& [path, name] : documents) {
+        if (num_recent >= RECENT_DOCUMENTS_IN_ANNOTATION_LISTS) break;
+        num_recent++;
+        if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+            paths.push_back(path);
+        }
+    }
+    return paths;
+}
+
+// Bookmark lists for a document that may not be open: the changes need it loaded with its annotations.
+Document* MainWidget::get_loaded_document(const std::wstring& path) {
+    Document* document = document_manager->get_document(path);
+    if (document->doc == nullptr) {
+        document->open(nullptr, true);
+    }
+    return document;
+}
+
+void MainWidget::edit_bookmark_text(const std::wstring& path, int pdf_object, const std::wstring& text) {
+    Document* document = get_loaded_document(path);
+    int index = document->get_bookmark_index_with_object(pdf_object);
+    if (index != -1) {
+        document->update_bookmark_text(index, text, document->get_bookmarks()[index].font_size);
+        invalidate_render();
+    }
+}
+
+void MainWidget::handle_goto_bookmark_global() {
+    std::vector<std::wstring> descs;
+    std::vector<std::wstring> file_names;
+    std::vector<BookState> book_states;
+
+    for (const std::wstring& path : get_open_and_recent_document_paths()) {
+        std::vector<BookMark> bookmarks;
+        std::vector<Highlight> highlights;
+        if (!document_manager->get_document(path)->read_annotations_from_file(bookmarks, highlights)) continue;
+        std::wstring file_name = Path(path).filename().value_or(L"");
+        for (const BookMark& bm : bookmarks) {
+            descs.push_back(ITEM_LIST_PREFIX + L" " + bm.description);
+            file_names.push_back(file_name);
+            book_states.push_back({ path, bm.get_y_offset(), bm.pdf_object });
+        }
+    }
+
+    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names }, book_states, -1,
+        [&](BookState* book_state) {
+            if (pending_command_instance) {
+                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
+            }
+            advance_command(std::move(pending_command_instance));
+        },
+        [&](BookState* book_state) {
+            Document* document = get_loaded_document(book_state->document_path);
+            document->delete_bookmark(document->get_bookmark_index_with_object(book_state->pdf_object));
+            invalidate_render();
+        },
+        [&](BookState* book_state) {
+            std::unique_ptr<Command> edit_command = command_manager->get_command_with_name(this, "edit_bookmark_text");
+            edit_command->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->pdf_object);
+            pop_current_widget();
+            handle_command_types(std::move(edit_command), 0);
+        });
+
+    show_current_widget();
+}
+
+void MainWidget::handle_goto_highlight_global() {
+    std::vector<std::wstring> descs;
+    std::vector<std::wstring> file_names;
+    std::vector<BookState> book_states;
+
+    std::vector<std::wstring> pages;
+    for (const std::wstring& path : get_open_and_recent_document_paths()) {
+        std::vector<BookMark> bookmarks;
+        std::vector<Highlight> highlights;
+        std::vector<int> highlight_pages;
+        Document* document = document_manager->get_document(path);
+        if (!document->read_annotations_from_file(bookmarks, highlights, &highlight_pages)) continue;
+        std::wstring file_name = Path(path).filename().value_or(L"");
+        for (int i = 0; i < highlights.size(); i++) {
+            descs.push_back(highlight_list_text(highlights[i]));
+            file_names.push_back(file_name);
+            pages.push_back(get_page_formatted_string(highlight_pages[i] + 1));
+            book_states.push_back({ path, highlights[i].selection_begin.y, highlights[i].pdf_object });
+        }
+    }
+
+    set_filtered_select_menu<BookState>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { descs, file_names, pages }, book_states, -1,
+        [&](BookState* book_state) {
+            if (pending_command_instance) {
+                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(book_state->document_path) << book_state->offset_y);
+            }
+            advance_command(std::move(pending_command_instance));
+        },
+        [&](BookState* book_state) {
+            Document* document = get_loaded_document(book_state->document_path);
+            document->delete_highlight_with_index(document->get_highlight_index_with_object(book_state->pdf_object));
+            invalidate_render();
+        });
+    // the text takes the remaining width; the file name column is as wide as the names
+    if (!TOUCH_MODE && current_widget_stack.size() > 0) {
+        if (auto* table = dynamic_cast<FilteredSelectTableWindowClass<BookState>*>(current_widget_stack.back())) {
+            table->fit_column_to_contents(1);
+        }
+    }
+
+    show_current_widget();
+}
+
+// The list of opened documents, most recent first; `include_current` keeps the current document in it.
+void MainWidget::show_opened_documents(bool include_current) {
+    std::vector<std::wstring> opened_docs_names;
+    std::vector<std::wstring> opened_docs_actual_names;
+    std::vector<std::wstring> opened_docs_paths;
+
+    std::wstring current_path = doc() ? doc()->get_path() : L"";
+
+    std::vector<std::pair<std::wstring, std::wstring>> documents;
+    db_manager->select_documents(documents);
+    for (const auto& [path, actual_name] : documents) {
+        if (!include_current && path == current_path) continue;
+        opened_docs_names.push_back(SHOW_DOC_PATH ? path : Path(path).filename().value_or(L"<ERROR>"));
+        opened_docs_paths.push_back(path);
+        opened_docs_actual_names.push_back(actual_name);
+    }
+
+    set_filtered_select_menu<std::wstring>(this, FUZZY_SEARCHING, MULTILINE_MENUS, { opened_docs_names, opened_docs_actual_names }, opened_docs_paths, -1,
+        [&](std::wstring* path) {
+            if ((path->size() > 0) && (pending_command_instance)) {
+                pending_command_instance->set_generic_requirement(QList<QVariant>() << QString::fromStdWString(*path));
+                advance_command(std::move(pending_command_instance));
+            }
+        },
+        [&](std::wstring* path) {
+            db_manager->delete_document(*path);
+        }
+        );
+
+    make_current_menu_columns_equal();
+    show_current_widget();
+}
+
+void MainWidget::handle_open_prev_doc() {
+    show_opened_documents(false);
+}
+
+void MainWidget::handle_open_all_docs() {
+    show_opened_documents(true);
+}
+
+void MainWidget::clear_document_history() {
+    // An entry also holds the document's reading position, so documents open in tabs keep theirs.
+    std::vector<std::wstring> tabs = document_manager->get_tabs();
+    std::vector<std::pair<std::wstring, std::wstring>> documents;
+    db_manager->select_documents(documents);
+
+    for (const auto& [path, name] : documents) {
+        if (std::find(tabs.begin(), tabs.end(), path) != tabs.end()) continue;
+        db_manager->delete_document(path);
+    }
+}
+
+// Adds a portal to the document at source_path, which is not necessarily the current one.
+void MainWidget::add_portal(std::wstring source_path, Portal new_link) {
+    Document* source = document_manager->get_document(source_path);
+    if (source->doc == nullptr) {
+        source->open(nullptr, true);
+    }
+    source->add_portal(new_link);
 }

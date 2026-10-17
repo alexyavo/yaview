@@ -28,7 +28,6 @@
 class DocumentView;
 class PdfRenderer;
 class ConfigManager;
-class ScratchPad;
 
 struct MarkedDataRect {
     DocumentRect rect;
@@ -49,7 +48,6 @@ enum HighlightRenderFlags
 struct OpenGLSharedResources {
     GLuint vertex_buffer_object = 0;
     GLuint uv_buffer_object = 0;
-    GLuint line_points_buffer_object = 0;
     GLuint rendered_program = 0;
     GLuint rendered_dark_program = 0;
     GLuint custom_color_program = 0;
@@ -59,9 +57,6 @@ struct OpenGLSharedResources {
     GLuint vertical_line_dark_program = 0;
     GLuint separator_program = 0;
     GLuint stencil_program = 0;
-    GLuint line_program = 0;
-    GLuint compiled_drawing_program = 0;
-    GLuint compiled_dots_program = 0;
 
     GLint dark_mode_contrast_uniform_location = 0;
     GLint highlight_color_uniform_location = 0;
@@ -69,26 +64,11 @@ struct OpenGLSharedResources {
     GLint line_color_uniform_location = 0;
     GLint line_time_uniform_location = 0;
 
-    GLint compiled_drawing_offset_uniform_location = 0;
-    GLint compiled_drawing_scale_uniform_location = 0;
-    GLint compiled_drawing_colors_uniform_location = 0;
-    GLint compiled_dot_color_uniform_location = 0;
-    GLint compiled_dot_offset_uniform_location = 0;
-    GLint compiled_dot_scale_uniform_location = 0;
-
     //GLint gamma_uniform_location = 0;
 
     GLint custom_color_transform_uniform_location = 0;
 
     GLint separator_background_color_uniform_location = 0;
-    GLint freehand_line_color_uniform_location = 0;
-
-    GLuint compiled_points_vertex_buffer_object = 0;
-    GLuint compiled_points_index_buffer_object = 0;
-
-    //GLuint test_vao;
-    //GLuint test_vbo;
-    //GLuint test_ibo;
 
     bool is_initialized = false;
 };
@@ -112,7 +92,6 @@ private:
     bool is_opengl_initialized = false;
     GLuint vertex_array_object;
     DocumentView* document_view = nullptr;
-    ScratchPad* scratchpad = nullptr;
     PdfRenderer* pdf_renderer = nullptr;
     ConfigManager* config_manager = nullptr;
     std::vector<SearchResult> search_results;
@@ -132,9 +111,7 @@ private:
 
     std::optional<AbsoluteRect> pending_portal_rect = {};
 
-    QIcon bookmark_icon;
     QIcon portal_icon;
-    QIcon bookmark_icon_white;
     QIcon portal_icon_white;
     QIcon hourglass_icon;
 
@@ -183,11 +160,6 @@ protected:
     void render_highlight_document(GLuint program, DocumentRect doc_rect, int flags=HRF_FILL | HRF_BORDER);
     void paintGL() override;
     void my_render(QPainter* painter);
-    void render_scratchpad(QPainter* painter);
-    void add_coordinates_for_window_point(DocumentView* dv, float window_x, float window_y, float r, int point_polygon_vertices, std::vector<float>& out_coordinates);
-    void render_drawings(DocumentView* dv, const std::vector<FreehandDrawing>& drawings, bool highlighted = false);
-    void render_compiled_drawings();
-    void render_line(DocumentView* dv, FreehandDrawing drawing);
     std::vector<std::pair<QRect, QString>> get_hint_rect_and_texts();
 
     void enable_stencil();
@@ -201,17 +173,6 @@ protected:
 
 public:
     bool is_helper_waiting_for_render = false;
-    std::optional<QImage> cached_framebuffer;
-    int last_cache_num_drawings = -1;
-    float last_cache_offset_x = -1;
-    float last_cache_offset_y = -1;
-    float last_cache_zoom_level = -1;
-    QDateTime last_scratchpad_update_datetime;
-
-    bool visible_drawing_mask[26];
-    FreehandDrawing current_drawing;
-    std::vector<FreehandDrawing> moving_drawings;
-    std::vector<PixmapDrawing> moving_pixmaps;
 
 #ifndef NDEBUG
     // properties for visualizing selected blocks, used only for debug
@@ -319,7 +280,6 @@ public:
     void get_background_color(float out_background[3]);
     void set_underline(AbsoluteDocumentPos abspos);
     void clear_underline();
-    void bind_points(const std::vector<float>& points);
     void bind_default();
     bool is_normalized_y_in_window(float y);
     bool is_normalized_y_range_in_window(float y0, float y1);
@@ -330,6 +290,7 @@ public:
     bool is_showing_rect_hints();
     void get_color_for_current_mode(const float* input_color, float* output_color);
     void render_ui_icon_for_current_color_mode(QPainter* painter, const QIcon& icon_black, const QIcon& icon_white, QRect rect, bool is_highlighted=false);
+    void render_bookmark_tag(QPainter* painter, QRect window_qrect, int bookmark_id, bool is_highlighted);
     void render_text_highlights();
     void render_highlight_annotations();
     std::array<float, 3> cc3(const float* input_color);
@@ -345,18 +306,7 @@ public:
     void zoom_in_overview();
     void zoom_out_overview();
     void render_selected_rectangle();
-    void set_scratchpad(ScratchPad* pad);
-    ScratchPad* get_scratchpad();
-    bool can_use_cached_scratchpad_framebuffer();
-    //void update_framebuffer_cache();
-    void compile_drawings(DocumentView* dv, const std::vector<FreehandDrawing>& drawings);
     void clear_background_color();
-    CompiledDrawingData compile_drawings_into_vertex_and_index_buffers(const std::vector<float>& line_coordinates,
-        const std::vector<unsigned int>& indices,
-        const std::vector<GLint>& line_type_indices,
-        const std::vector<float>& dot_coordinates,
-        const std::vector<unsigned int>& dot_indices,
-        const std::vector<GLint>& dot_type_indices);
     void set_tag_prefix(std::wstring prefix);
     void clear_tag_prefix();
     void set_selected_highlight_index(int index);

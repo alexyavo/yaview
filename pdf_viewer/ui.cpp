@@ -239,21 +239,11 @@ AndroidSelector::AndroidSelector(QWidget* parent) : QWidget(parent) {
         });
 
     QObject::connect(main_menu, &TouchMainMenu::hintClicked, [&]() {
-        //main_widget->run_command_with_name("toggle_rect_hints", true);
-
-        main_widget->toggle_scratchpad_mode();
-        main_widget->pop_current_widget();
-
-        main_widget->invalidate_render();
-
+        main_widget->run_command_with_name("toggle_rect_hints", true);
         });
 
     QObject::connect(main_menu, &TouchMainMenu::commandsClicked, [&]() {
         main_widget->run_command_with_name("command", true);
-        });
-
-    QObject::connect(main_menu, &TouchMainMenu::drawingModeClicked, [&]() {
-        main_widget->run_command_with_name("toggle_freehand_drawing_mode", true);
         });
 
     QObject::connect(main_menu, &TouchMainMenu::settingsClicked, [&]() {
@@ -292,10 +282,6 @@ AndroidSelector::AndroidSelector(QWidget* parent) : QWidget(parent) {
 
     QObject::connect(main_menu, &TouchMainMenu::deletePortalClicked, [&]() {
         main_widget->run_command_with_name("delete_portal", true);
-        });
-
-    QObject::connect(main_menu, &TouchMainMenu::globalBookmarksClicked, [&]() {
-        main_widget->run_command_with_name("goto_bookmark_g", true);
         });
 
     QObject::connect(main_menu, &TouchMainMenu::globalHighlightsClicked, [&]() {
@@ -552,80 +538,6 @@ TouchTextSelectionButtons::TouchTextSelectionButtons(MainWidget* parent) : QWidg
         main_widget->smart_jump_to_selected_text();
         main_widget->clear_selection_indicators();
         });
-}
-
-DrawControlsUI::DrawControlsUI(MainWidget* parent) : QWidget(parent) {
-    main_widget = parent;
-    controls_ui = new TouchDrawControls(parent->freehand_thickness, parent->get_current_freehand_type(), this);
-    this->setAttribute(Qt::WA_NoMousePropagation);
-
-    QObject::connect(controls_ui, &TouchDrawControls::exitDrawModePressed, [&]() {
-        main_widget->exit_freehand_drawing_mode();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::changeColorPressed, [&](int color_index) {
-        main_widget->current_freehand_type = 'a' + color_index;
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::enablePenDrawModePressed, [&]() {
-        main_widget->set_pen_drawing_mode(true);
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::screenshotPressed, [&]() {
-        if (main_widget->is_scratchpad_mode()) {
-            main_widget->run_command_with_name("copy_drawings_from_scratchpad");
-        }
-        else {
-            main_widget->run_command_with_name("copy_screenshot_to_scratchpad");
-        }
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::saveScratchpadPressed, [&]() {
-        main_widget->run_command_with_name("save_scratchpad");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::loadScratchpadPressed, [&]() {
-        main_widget->run_command_with_name("load_scratchpad");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::movePressed, [&]() {
-        main_widget->run_command_with_name("select_freehand_drawings");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::toggleScratchpadPressed, [&]() {
-        main_widget->run_command_with_name("toggle_scratchpad_mode");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::disablePenDrawModePressed, [&]() {
-        main_widget->set_hand_drawing_mode(true);
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::eraserPressed, [&]() {
-        main_widget->run_command_with_name("delete_freehand_drawings");
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::penSizeChanged, [&](qreal val) {
-        main_widget->set_freehand_thickness(val);
-        });
-
-
-}
-void DrawControlsUI::resizeEvent(QResizeEvent* resize_event) {
-    QWidget::resizeEvent(resize_event);
-
-    int pwidth = parentWidget()->width();
-    int width = parentWidget()->width() * 3 / 4;
-    int height = std::max(parentWidget()->height() / 16, 50);
-
-    controls_ui->move(0, 0);
-    controls_ui->resize(width, height);
-    move((pwidth - width) / 2, height);
-    setFixedSize(width, height);
-
 }
 
 void TouchTextSelectionButtons::resizeEvent(QResizeEvent* resize_event) {
@@ -1618,6 +1530,7 @@ bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
     // down / up (physical Ctrl key, also on macOS). Handled for both the search box and the list,
     // because focus moves to the list once it is navigated; the list ignores these keys and would
     // pass them on to the main window, which would move the document behind the popup instead.
+    // Ctrl+R edits (renames) the highlighted entry, like Insert, which Mac keyboards don't have.
     if ((obj == line_edit || obj == get_view()) && event->type() == QEvent::KeyPress) {
         QKeyEvent* key_event = static_cast<QKeyEvent*>(event);
         if (is_platform_control_pressed(key_event) && !key_event->modifiers().testFlag(Qt::ShiftModifier)) {
@@ -1632,6 +1545,10 @@ bool BaseSelectorWidget::eventFilter(QObject* obj, QEvent* event) {
             if (move_key) {
                 // Forwarded without modifiers: Ctrl+arrow in an item view moves focus without selecting.
                 QCoreApplication::postEvent(get_view(), new QKeyEvent(QEvent::KeyPress, move_key.value(), Qt::NoModifier));
+                return true;
+            }
+            if (key_event->key() == Qt::Key_R) {
+                handle_edit();
                 return true;
             }
         }
@@ -1894,7 +1811,8 @@ void BaseSelectorWidget::handle_edit() {
     }
 #endif
 
-void BaseSelectorWidget::on_config_file_changed() {
+// The style of the popup menus (and of the text prompts shown in their place), in the popup theme colors.
+QString get_menu_stylesheet() {
     QString font_size_stylesheet = "";
     if (FONT_SIZE > 0) {
         font_size_stylesheet = QString("font-size: %1px;").arg(FONT_SIZE);
@@ -1915,7 +1833,7 @@ void BaseSelectorWidget::on_config_file_changed() {
         font_family_stylesheet = QString("font-family: \"%1\";").arg(font_face);
     }
 
-    setStyleSheet(QString(
+    return QString(
         "* { %1 %2 }"
         "#yaview_menu { border: 2px solid %3; border-radius: 8px; }"
         "QLineEdit { background-color: %4; border: 1px solid %3; border-radius: 4px; padding: 4px 8px;"
@@ -1935,7 +1853,74 @@ void BaseSelectorWidget::on_config_file_changed() {
         color(colors.selected_text),
         get_selected_stylesheet(true),
         shade(0.3f)
-    ));
+    );
+}
+
+void BaseSelectorWidget::on_config_file_changed() {
+    setStyleSheet(get_menu_stylesheet());
+}
+
+TextPromptWidget::TextPromptWidget(const QString& title, const QString& initial_text, MainWidget* parent, std::function<void(QString)> on_done) : QWidget(parent) {
+    setObjectName("yaview_menu");
+    setAttribute(Qt::WA_StyledBackground);
+
+    title_label = new QLabel(title, this);
+    line_edit = new MyLineEdit(parent);
+    line_edit->setParent(this);
+    line_edit->setAttribute(Qt::WA_MacShowFocusRect, false);
+    line_edit->setText(initial_text);
+
+    QString font_face = get_ui_font_face_name();
+    if (font_face.size() > 0) {
+        title_label->setFont(font_face);
+        line_edit->setFont(font_face);
+    }
+    setStyleSheet(get_menu_stylesheet());
+
+    QObject::connect(line_edit, &QLineEdit::returnPressed, [this, on_done]() {
+        on_done(line_edit->text());
+        });
+}
+
+void TextPromptWidget::focus_input() {
+    line_edit->setFocus();
+    line_edit->selectAll();
+}
+
+// As wide as the popup menus and centered where they are, as tall as the title and the input; the children
+// are placed here rather than by a layout. Runs once shown (when the stylesheet's font applies) and when the
+// window resizes (MainWidget forwards its resize events to the popups).
+void TextPromptWidget::place() {
+    if (is_placing) return;
+    is_placing = true;
+    const int margin = 12;
+    const int spacing = 8;
+    int parent_width = parentWidget()->width();
+    int parent_height = parentWidget()->height();
+    int prompt_width = parent_width * MENU_SCREEN_WDITH_RATIO;
+    int label_height = title_label->sizeHint().height();
+    int edit_height = line_edit->sizeHint().height();
+    int prompt_height = margin + label_height + spacing + edit_height + margin;
+    title_label->setGeometry(margin, margin, prompt_width - 2 * margin, label_height);
+    line_edit->setGeometry(margin, margin + label_height + spacing, prompt_width - 2 * margin, edit_height);
+    setFixedSize(prompt_width, prompt_height);
+    int prompt_x = std::clamp(static_cast<int>(parent_width * MENU_SCREEN_CENTER_X) - prompt_width / 2, 0, parent_width - prompt_width);
+    int prompt_y = std::clamp(static_cast<int>(parent_height * MENU_SCREEN_CENTER_Y) - prompt_height / 2, 0, parent_height - prompt_height);
+    move(prompt_x, prompt_y);
+    is_placing = false;
+}
+
+void TextPromptWidget::resizeEvent(QResizeEvent* resize_event) {
+    QWidget::resizeEvent(resize_event);
+    place();
+}
+
+void TextPromptWidget::showEvent(QShowEvent* show_event) {
+    QWidget::showEvent(show_event);
+    ensurePolished();
+    title_label->ensurePolished();
+    line_edit->ensurePolished();
+    place();
 }
 
 void BaseSelectorWidget::resizeEvent(QResizeEvent* resize_event) {

@@ -19,7 +19,6 @@
 extern float ZOOM_INC_FACTOR;
 extern float SCROLL_ZOOM_INC_FACTOR;
 
-class CachedChecksummer;
 class Document;
 class DatabaseManager;
 class DocumentManager;
@@ -31,7 +30,6 @@ protected:
 
     DatabaseManager* db_manager = nullptr;
     DocumentManager* document_manager = nullptr;
-    CachedChecksummer* checksummer;
     Document* current_document = nullptr;
 
     float zoom_level = 0.0f;
@@ -84,11 +82,12 @@ public:
     // the page dimensions are loaded
     bool needs_refill = false;
 
-    DocumentView(DatabaseManager* db_manager, DocumentManager* document_manager, CachedChecksummer* checksummer);
+    DocumentView(DatabaseManager* db_manager, DocumentManager* document_manager);
     ~DocumentView();
     float get_zoom_level();
     DocumentViewState get_state();
-    PortalViewState get_checksum_state();
+    // the current position as a portal destination
+    PortalViewState get_portal_state();
     //void set_opened_book_state(const OpenedBookState& state);
     void handle_escape();
     void set_book_state(OpenedBookState state);
@@ -125,8 +124,9 @@ public:
     void get_text_selection(AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, bool is_word_selection, std::deque<AbsoluteRect>& selected_characters, std::wstring& text_selection);
     void get_line_selection(AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, std::deque<AbsoluteRect>& selected_characters, std::wstring& text_selection);
     void add_mark(char symbol);
-    std::string add_bookmark(std::wstring desc);
-    std::string add_highlight(AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type);
+    // both return the index of the new annotation, -1 when none was added
+    int add_bookmark(std::wstring desc);
+    int add_highlight(AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type);
     void on_view_size_change(int new_width, int new_height);
     //void absolute_to_window_pos(float absolute_x, float absolute_y, float* window_x, float* window_y);
     NormalizedWindowPos absolute_to_window_pos(AbsoluteDocumentPos absolute_pos);
@@ -180,7 +180,7 @@ public:
     void fit_to_page_height(bool smart = false);
     void fit_to_page_height_and_width_smart();
     void fit_to_page_height_width_minimum(int statusbar_height);
-    void persist(bool persist_drawings = false);
+    void persist();
     std::wstring get_current_chapter_name();
     std::optional<AbsoluteRect> get_control_rect();
     std::optional<std::pair<int, int>> get_current_page_range();
@@ -245,42 +245,5 @@ public:
     float get_page_space_x();
     float get_page_space_y();
     bool fast_coordinates();
-
-};
-
-
-class ScratchPad : public DocumentView {
-private:
-    std::vector<FreehandDrawing> all_drawings;
-    std::vector<FreehandDrawing> non_compiled_drawings;
-    bool is_compile_valid = false;
-public:
-
-    std::vector<PixmapDrawing> pixmaps;
-    std::optional<CompiledDrawingData> cached_compiled_drawing_data = {};
-
-    ScratchPad();
-    bool set_offsets(float new_offset_x, float new_offset_y, bool force = false);
-    float set_zoom_level(float zl, bool should_exit_auto_resize_mode, bool readjust=true);
-    float zoom_in(float zoom_factor = ZOOM_INC_FACTOR, bool readjust=true);
-    float zoom_out(float zoom_factor = ZOOM_INC_FACTOR, bool readjust=true);
-
-    std::vector<int> get_intersecting_drawing_indices(AbsoluteRect selection);
-    std::vector<int> get_intersecting_pixmap_indices(AbsoluteRect selection);
-    std::vector<SelectedObjectIndex> get_intersecting_objects(AbsoluteRect selection);
-    void delete_intersecting_drawings(AbsoluteRect selection);
-    void delete_intersecting_pixmaps(AbsoluteRect selection);
-    void delete_intersecting_objects(AbsoluteRect selection);
-    void get_selected_objects_with_indices(const std::vector<SelectedObjectIndex>& indices, std::vector<FreehandDrawing>& freehand_drawings, std::vector<PixmapDrawing>& pixmap_drawings);
-    void add_pixmap(QPixmap pixmap);
-    AbsoluteRect get_bounding_box();
-
-    const std::vector<FreehandDrawing>& get_all_drawings();
-    const std::vector<FreehandDrawing>& get_non_compiled_drawings();
-    void on_compile();
-    void invalidate_compile(bool force=false);
-    void add_drawing(FreehandDrawing drawing);
-    void clear();
-    bool is_compile_invalid();
 
 };

@@ -222,7 +222,9 @@ void convert_color4(const float* in_color, int* out_color);
 QColor convert_float3_to_qcolor(const float* floats);
 QColor convert_float4_to_qcolor(const float* floats);
 std::string get_aplph_tag(int n, int max_n);
-fz_document* open_document_with_file_name(fz_context* context, std::wstring file_name);
+class DatabaseManager;
+// opens a document; a reflowable one (EPUB) is laid out with the size stored in the database
+fz_document* open_document_with_file_name(fz_context* context, std::wstring file_name, DatabaseManager* db_manager);
 
 QString get_list_item_stylesheet();
 
@@ -250,7 +252,6 @@ float* get_highlight_type_color(char type);
 void lighten_color(float input[3], float output[3]);
 std::wstring clean_bib_item(std::wstring bib_item);
 std::wstring clean_link_source_text(std::wstring link_source_text);
-std::vector<FreehandDrawingPoint> prune_freehand_drawing_points(const std::vector<FreehandDrawingPoint>& points);
 std::optional<DocumentRect> find_expanding_rect(bool before, fz_stext_page* page, DocumentRect page_rect);
 std::vector<DocumentRect> find_expanding_rect_word(bool before, fz_stext_page* page, DocumentRect page_rect);
 std::optional<DocumentRect> find_shrinking_rect_word(bool before, fz_stext_page* page, DocumentRect page_rect);
@@ -264,14 +265,13 @@ std::wstring new_uuid();
 std::string new_uuid_utf8();
 bool is_text_rtl(const std::wstring& text);
 bool are_same(float f1, float f2);
-bool are_same(const FreehandDrawing& lhs, const FreehandDrawing& rhs);
 
 template<typename T>
-QJsonArray export_array(std::vector<T> objects, std::string checksum) {
+QJsonArray export_array(const std::vector<T>& objects) {
     QJsonArray res;
 
     for (const T& obj : objects) {
-        res.append(obj.to_json(checksum));
+        res.append(obj.to_json());
     }
     return res;
 }
@@ -492,7 +492,6 @@ public:
 };
 
 
-std::wstring get_path_extras_file_name(const std::wstring& path);
 QString translate_key_mapping_to_macos(QString mapping);
 
 bool is_platform_meta_pressed(QKeyEvent* kevent);

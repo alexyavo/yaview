@@ -53,7 +53,6 @@
 #include "touchui/TouchDeleteButton.h"
 #include "touchui/TouchHighlightButtons.h"
 #include "touchui/TouchAudioButtons.h"
-#include "touchui/TouchDrawControls.h"
 #include "touchui/TouchMacroEditor.h"
 #include "touchui/TouchGenericButtons.h"
 
@@ -110,6 +109,24 @@ public:
     void keyPressEvent(QKeyEvent* event) override;
     int get_next_word_position();
     int get_prev_word_position();
+};
+
+QString get_menu_stylesheet();
+
+// A text input in the style and place of the popup menus, for commands that ask for a text after a pick
+// from a menu (edit_mark, mark_to_bookmark). Enter confirms; Escape reaches the main window, which cancels.
+class TextPromptWidget : public QWidget {
+public:
+    TextPromptWidget(const QString& title, const QString& initial_text, MainWidget* parent, std::function<void(QString)> on_done);
+    void focus_input();
+    void resizeEvent(QResizeEvent* resize_event) override;
+    void showEvent(QShowEvent* show_event) override;
+
+private:
+    QLabel* title_label = nullptr;
+    QLineEdit* line_edit = nullptr;
+    bool is_placing = false;
+    void place();
 };
 
 class BaseSelectorWidget : public QWidget {
@@ -337,6 +354,31 @@ public:
                 table_view->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
             }
         }
+    }
+
+    void fit_column_to_contents(int column) {
+        QTableView* table_view = dynamic_cast<QTableView*>(get_view());
+        if (table_view && column < n_cols) {
+            table_view->horizontalHeader()->setSectionResizeMode(column, QHeaderView::ResizeToContents);
+        }
+    }
+
+    // Draws `column` in bold, as wide as its contents plus `padding` pixels, to set it apart from the next one.
+    void emphasize_column(int column, int padding) {
+        QTableView* table_view = dynamic_cast<QTableView*>(get_view());
+        QStandardItemModel* model = dynamic_cast<QStandardItemModel*>(proxy_model->sourceModel());
+        if (!table_view || !model || column >= n_cols) return;
+        // only the weight is set: the item delegate takes the family and size from the view's font
+        QFont bold;
+        bold.setBold(true);
+        for (int row = 0; row < model->rowCount(); row++) {
+            if (QStandardItem* item = model->item(row, column)) {
+                item->setFont(bold);
+            }
+        }
+        table_view->resizeColumnToContents(column);
+        table_view->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Fixed);
+        table_view->setColumnWidth(column, table_view->columnWidth(column) + padding);
     }
 
     void set_on_edit_function(std::function<void(T*)> edit_func) {
@@ -819,16 +861,6 @@ private:
 
 //};
 
-
-class DrawControlsUI : public QWidget {
-public:
-    DrawControlsUI(MainWidget* parent);
-    void resizeEvent(QResizeEvent* resize_event) override;
-    TouchDrawControls* controls_ui;
-private:
-    MainWidget* main_widget;
-
-};
 
 class TouchTextSelectionButtons : public QWidget {
 public:

@@ -64,7 +64,6 @@
 #include "main_widget.h"
 #include "path.h"
 #include "RunGuard.h"
-#include "checksum.h"
 #include "OpenWithApplication.h"
 #include "new_file_checker.h"
 
@@ -91,14 +90,11 @@ Path default_keys_path(L"");
 // the single user configuration file (see configure_paths); a vector because ConfigManager takes a list
 std::vector<Path> user_config_paths = {};
 Path database_file_path(L"");
-Path local_database_file_path(L"");
-Path global_database_file_path(L"");
 
 Path last_opened_file_address_path(L"");
 Path shader_path(L"");
 Path auto_config_path(L"");
 Path downloaded_papers_path(L"");
-ScratchPad global_scratchpad;
 
 int next_window_id = 0;
 std::vector<MainWidget*> windows;
@@ -117,7 +113,6 @@ extern std::wstring STARTUP_COMMANDS;
 extern bool SHOULD_LAUNCH_NEW_WINDOW;
 extern bool SHOULD_LAUNCH_NEW_INSTANCE;
 extern bool SHOULD_CHECK_FOR_LATEST_VERSION_ON_STARTUP;
-extern std::wstring SHARED_DATABASE_PATH;
 extern std::wstring SEARCH_URLS[26];
 extern std::wstring PAPERS_FOLDER_PATH;
 extern bool NO_AUTO_CONFIG;
@@ -208,9 +203,7 @@ void configure_paths() {
     default_config_path = read_only_data_path.slash(L"prefs.config");
     default_keys_path = read_only_data_path.slash(L"keys.config");
 
-    database_file_path = standard_data_path.slash(L"test.db");
-    local_database_file_path = standard_data_path.slash(L"local.db");
-    global_database_file_path = standard_data_path.slash(L"shared.db");
+    database_file_path = standard_data_path.slash(L"yaview.db");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
     shader_path = read_only_data_path.slash(L"shaders");
 #else
@@ -229,9 +222,7 @@ void configure_paths() {
 
     default_config_path = parent_path.slash(L"prefs.config");
     default_keys_path = parent_path.slash(L"keys.config");
-    database_file_path = standard_data_path.slash(L"test.db");
-    local_database_file_path = standard_data_path.slash(L"local.db");
-    global_database_file_path = standard_data_path.slash(L"shared.db");
+    database_file_path = standard_data_path.slash(L"yaview.db");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
 #endif
 #else //windows
@@ -248,14 +239,10 @@ void configure_paths() {
 #endif
 
 #if defined(NON_PORTABLE) || defined(Q_OS_MACOS)
-    database_file_path = standard_data_path.slash(L"test.db");
-    local_database_file_path = standard_data_path.slash(L"local.db");
-    global_database_file_path = standard_data_path.slash(L"shared.db");
+    database_file_path = standard_data_path.slash(L"yaview.db");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
 #else
-    database_file_path = parent_path.slash(L"test.db");
-    local_database_file_path = parent_path.slash(L"local.db");
-    global_database_file_path = parent_path.slash(L"shared.db");
+    database_file_path = parent_path.slash(L"yaview.db");
     last_opened_file_address_path = parent_path.slash(L"last_document_path.txt");
 #endif
 
@@ -301,8 +288,6 @@ void create_user_config_file() {
 
 void verify_paths() {
     LOG(std::wcout << L"database_file_path: " << database_file_path << L"\n");
-    LOG(std::wcout << L"local_database_file_path: " << local_database_file_path << L"\n");
-    LOG(std::wcout << L"global_database_file_path: " << global_database_file_path << L"\n");
     LOG(std::wcout << L"last_opened_file_address_path: " << last_opened_file_address_path << L"\n");
     LOG(std::wcout << L"shader_path: " << shader_path << L"\n");
     CHECK_DIR_EXIST(shader_path);
@@ -662,14 +647,6 @@ int main(int argc, char* args[]) {
         downloaded_papers_path = PAPERS_FOLDER_PATH;
     }
 
-    if (SHARED_DATABASE_PATH.size() > 0) {
-        global_database_file_path = SHARED_DATABASE_PATH;
-    }
-    char* shared_database_path_arg = get_argv_value(argc, args, "--shared-database-path");
-    if (shared_database_path_arg) {
-        global_database_file_path = utf8_decode(std::string(shared_database_path_arg));
-    }
-
     verify_paths();
 
     // should we launche a new instance each time the user opens a PDF or should we reuse the previous instance
@@ -713,14 +690,7 @@ int main(int argc, char* args[]) {
     delete parser;
 
     DatabaseManager db_manager;
-    if (local_database_file_path.file_exists() && global_database_file_path.file_exists()) {
-        db_manager.open(local_database_file_path.get_path(), global_database_file_path.get_path());
-    }
-    else {
-        db_manager.open(database_file_path.get_path(), database_file_path.get_path());
-    }
-    db_manager.ensure_database_compatibility(local_database_file_path.get_path(), global_database_file_path.get_path());
-    db_manager.ensure_schema_compatibility();
+    db_manager.open(database_file_path.get_path());
 
 
     fz_locks_context locks;
@@ -754,7 +724,7 @@ int main(int argc, char* args[]) {
 
     bool quit = false;
 
-    PdfRenderer* pdf_renderer = new PdfRenderer(4, &quit, mupdf_context);
+    PdfRenderer* pdf_renderer = new PdfRenderer(4, &quit, mupdf_context, &db_manager);
     pdf_renderer->set_num_cached_pages(NUM_CACHED_PAGES);
     pdf_renderer->start_threads();
 
@@ -762,12 +732,7 @@ int main(int argc, char* args[]) {
     // key bindings in the user configuration file are `keymap` lines, read by the ConfigManager
     InputHandler input_handler(default_keys_path, {}, command_manager);
 
-    std::vector<std::pair<std::wstring, std::wstring>> prev_path_hash_pairs;
-    db_manager.get_prev_path_hash_pairs(prev_path_hash_pairs);
-
-    CachedChecksummer checksummer(&prev_path_hash_pairs);
-
-    DocumentManager document_manager(mupdf_context, &db_manager, &checksummer);
+    DocumentManager document_manager(mupdf_context, &db_manager);
 
     QFileSystemWatcher pref_file_watcher;
     add_paths_to_file_system_watcher(pref_file_watcher, default_config_path, user_config_paths);
@@ -777,7 +742,7 @@ int main(int argc, char* args[]) {
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
 
-    MainWidget* main_widget = new MainWidget(mupdf_context, &db_manager, &document_manager, &config_manager, command_manager, &input_handler, &checksummer, &quit, pdf_renderer);
+    MainWidget* main_widget = new MainWidget(mupdf_context, &db_manager, &document_manager, &config_manager, command_manager, &input_handler, &quit, pdf_renderer);
     windows.push_back(main_widget);
 
     guard.on_delete = std::move([&](QLocalSocket* deleted_socket) {

@@ -9,12 +9,14 @@
 #include <unordered_map>
 #include <deque>
 #include <regex>
+#include <functional>
 
 //#include <Windows.h>
 #include <qstandarditemmodel.h>
 #include <qdatetime.h>
 
 #include <mupdf/fitz.h>
+#include <mupdf/pdf.h>
 #include <qobject.h>
 #include <qnetworkreply.h>
 #include <qjsondocument.h>
@@ -23,7 +25,6 @@
 #include "book.h"
 #include "coordinates.h"
 
-class CachedChecksummer;
 class DatabaseManager;
 
 class CharacterIterator {
@@ -64,17 +65,14 @@ class Document {
 
 private:
 
-    std::mutex drawings_mutex;
-    std::map<int, std::vector<FreehandDrawing>> page_freehand_drawings;
-    // it means we have modified freehand drawings since the document was loaded
-    // which means that when we exit, we must write the modified drawings to the drawings file
-    bool is_drawings_dirty = false;
-    bool is_annotations_dirty = false;
-
+    // Marks, bookmarks, highlights and portals are stored in the PDF file itself (marks in a private
+    // dictionary of the document catalog, the others as PDF annotations). These are the copies in memory;
+    // every change is written to the file right away. See document_annotations.cpp.
     std::vector<Mark> marks;
     std::vector<BookMark> bookmarks;
     std::vector<Highlight> highlights;
     std::vector<Portal> portals;
+    // the layout size of reflowable documents is kept in the database
     DatabaseManager* db_manager = nullptr;
     std::vector<TocNode*> top_level_toc_nodes;
     //bool only_for_portal = true;
@@ -91,13 +89,11 @@ private:
 
     bool super_fast_search_index_ready = false;
     // super fast index is the concatenated text of all pages along with two lists which map the
-    // characters to pages and rects of those characters this index is built only if the 
+    // characters to pages and rects of those characters this index is built only if the
     // super_fast_search config option is enabled
 
     std::wstring super_fast_search_index;
     std::vector<int> super_fast_page_begin_indices;
-
-    QJsonObject extras;
 
     // DEPRECATED a page offset which could manually be set to make the page numbers correct
     // on PDF files with page numbers that start at a number other than 1. This is now
@@ -146,10 +142,10 @@ private:
     bool is_indexing = false;
     bool are_highlights_loaded = false;
     bool should_render_annotations = true;
-    bool should_reload_annotations = false;
 
     QDateTime last_update_time;
-    CachedChecksummer* checksummer;
+    // the offset of the file's own last xref section, for the incremental saves (see save_annotations)
+    int64_t original_startxref = -1;
 
     // we do some of the document processing in a background thread (for example indexing all the
     // figures/indices and computing page heights. we use this pointer to notify the main thread when
@@ -159,16 +155,39 @@ private:
     int get_mark_index(char symbol);
     fz_outline* get_toc_outline();
 
-    // load marks, bookmarks, links, etc.
-
     // convetr the fz_outline structure to our own TocNode structure
     void create_toc_tree(std::vector<TocNode*>& toc);
 
-    Document(fz_context* context, std::wstring file_name, DatabaseManager* db_manager, CachedChecksummer* checksummer);
+    Document(fz_context* context, std::wstring file_name, DatabaseManager* db_manager);
     void clear_toc_nodes();
     void clear_toc_node(TocNode* node);
-    int find_highlight_index_with_uuid(const std::string& uuid);
+
+    // the PDF storage of the annotations (document_annotations.cpp)
+    pdf_document* pdf();
+    bool save_annotations();
+    fz_page* load_pdf_page(int page_number, pdf_page** out_pdf_page);
+    void read_page_annotations(fz_context* ctx, fz_page* page, int page_number, float page_width, float page_y_offset,
+        std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights, std::vector<Portal>& out_portals);
+    void read_marks(fz_context* ctx, pdf_document* pdf_doc, const std::vector<float>& widths, const std::vector<float>& y_offsets, std::vector<Mark>& out_marks);
+    pdf_obj* new_destination(DocumentPos pos, std::optional<float> x, std::optional<float> zoom_level, bool remote);
+    int write_annotation(int page_number, enum pdf_annot_type type, const Annotation& annotation, std::function<void(pdf_annot*)> fill);
+    bool update_annotation(int page_number, int pdf_object, std::function<void(pdf_annot*)> change);
+    bool delete_annotation(int page_number, int pdf_object);
+    int write_highlight(const Highlight& highlight);
+    int write_bookmark(const BookMark& bookmark);
+    int write_portal(const Portal& portal);
+    bool update_portal_link(int pdf_object, std::function<void(pdf_obj*)> change);
+    void write_portal_action(pdf_obj* link, const Portal& portal);
+    bool write_mark(const Mark& mark);
+    bool erase_marks(std::optional<char> symbol);
+    std::wstring portal_destination_path(const std::string& file_spec);
+    std::string portal_destination_file_spec(const std::wstring& document_path);
+    // merges the annotations read from the file with the ones added since the reading started
+    void set_annotations(std::vector<Mark>& new_marks, std::vector<BookMark>& new_bookmarks, std::vector<Highlight>& new_highlights, std::vector<Portal>& new_portals);
 public:
+    // conversion between PDF user space (positions in the file, used by portal destinations) and page coordinates
+    DocumentPos pdf_space_to_page_pos(DocumentPos pos);
+    DocumentPos page_pos_to_pdf_space(DocumentPos pos);
     fz_document* doc = nullptr;
     std::wstring detected_paper_name = L"";
 
@@ -179,16 +198,27 @@ public:
         std::vector<PagelessDocumentRect>& line_rects,
         std::vector<PagelessDocumentRect>& char_rects);
 
-    void load_document_metadata_from_db();
-    std::string add_bookmark(const std::wstring& desc, float y_offset);
-    std::string add_marked_bookmark(const std::wstring& desc, AbsoluteDocumentPos pos);
+    // whether annotations can be stored in this document (it is a PDF file)
+    bool can_annotate();
+    // a position at the left (bookmarks) or right (portals) margin of the page at y_offset, for the
+    // markers of bookmarks and portals made from the keyboard, which have no position of their own
+    AbsoluteDocumentPos margin_pos(float y_offset, bool right);
+    // a portal destination at a position in this document
+    PortalViewState portal_destination(AbsoluteDocumentPos pos, float zoom_level);
+    // the bookmarks and highlights of a document that is not open, read from its file (or copied when it is open)
+    // out_highlight_pages, when given, gets the page of each highlight
+    bool read_annotations_from_file(std::vector<BookMark>& out_bookmarks, std::vector<Highlight>& out_highlights, std::vector<int>* out_highlight_pages = nullptr);
+    const std::wstring& get_highlight_text_of(Highlight& highlight);
+    int add_bookmark(const std::wstring& desc, float y_offset);
+    int add_marked_bookmark(const std::wstring& desc, AbsoluteDocumentPos pos);
     int add_incomplete_bookmark(BookMark incomplete_bookmark);
-    std::string add_pending_bookmark(int index, const std::wstring& desc);
+    int add_pending_bookmark(int index, const std::wstring& desc);
     void undo_pending_bookmark(int index);
     void add_freetext_bookmark(const std::wstring& desc, AbsoluteRect absrect);
     void add_freetext_bookmark_with_color(const std::wstring& desc, AbsoluteRect absrect, float* color, float font_size = -1);
-    std::string add_highlight(const std::wstring& desc, const std::vector<AbsoluteRect>& highlight_rects, AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type);
-    std::string add_highlight(const std::wstring& annot, AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type);
+    int add_highlight(const std::wstring& desc, const std::vector<AbsoluteRect>& highlight_rects, AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type);
+    int add_highlight(const std::wstring& annot, AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type);
+    int add_highlight(Highlight highlight);
     void delete_highlight_with_index(int index);
     void delete_bookmark_with_index(int index);
     void delete_highlight(Highlight hl);
@@ -197,25 +227,21 @@ public:
     bool should_render_pdf_annotations();
     void set_should_render_pdf_annotations(bool val);
     bool get_should_render_pdf_annotations();
-    std::vector<Portal> get_intersecting_visible_portals(float absrange_begin, float absrange_end);
+    std::vector<Portal> get_intersecting_portals(float absrange_begin, float absrange_end);
     CachedPageIndex& get_page_index(int page);
     void fill_search_result(SearchResult* result);
     QString get_rest_of_document_pages_text(int from);
     int get_page_offset_into_super_fast_index(int from);
     int get_page_from_character_offset(int offset);
 
-    void fill_highlight_rects(fz_context* ctx, fz_document* doc);
-    void fill_index_highlight_rects(int highlight_index, fz_context* thread_context = nullptr, fz_document* thread_document = nullptr);
     void count_chapter_pages(std::vector<int>& page_counts);
     void convert_toc_tree(fz_outline* root, std::vector<TocNode*>& output);
     void count_chapter_pages_accum(std::vector<int>& page_counts);
     bool get_is_indexing();
     fz_stext_page* get_stext_with_page_number(fz_context* ctx, int page_number, fz_document* doc = nullptr);
     fz_stext_page* get_stext_with_page_number(int page_number);
-    int add_portal(Portal link, bool insert_into_database = true);
+    int add_portal(Portal link);
     std::wstring get_path();
-    std::string get_checksum();
-    std::optional<std::string> get_checksum_fast();
     //int find_closest_bookmark_index(float to_offset_y);
 
     int find_closest_bookmark_index(const std::vector<BookMark>& sorted_bookmarks, float to_offset_y) const;
@@ -227,17 +253,21 @@ public:
     void delete_closest_bookmark(float to_y_offset);
     void delete_bookmark(int index);
     void delete_closest_portal(float to_offset_y);
-    int get_portal_index_with_uuid(const std::string& uuid);
-    void delete_portal_with_uuid(const std::string& uuid);
+    int get_portal_index_with_object(int pdf_object);
+    void delete_portal_with_object(int pdf_object);
     std::vector<BookMark>& get_bookmarks();
     std::vector<Portal>& get_portals();
     std::vector<BookMark> get_sorted_bookmarks() const;
     std::vector<Portal> get_sorted_portals() const;
     const std::vector<Highlight>& get_highlights() const;
-    int get_highlight_index_with_uuid(std::string uuid);
-    int get_bookmark_index_with_uuid(std::string uuid);
+    const std::vector<Mark>& get_marks() const;
+    int get_highlight_index_with_object(int pdf_object);
+    int get_bookmark_index_with_object(int pdf_object);
     const std::vector<Highlight> get_highlights_of_type(char type) const;
     const std::vector<Highlight> get_highlights_sorted(char type = 0) const;
+    // the highlighted text of a highlight (its description), extracted from the page on the first call
+    const std::wstring& get_highlight_text(int index);
+    void load_highlight_texts();
 
     std::optional<Highlight> get_next_highlight(float abs_y, char type = 0, int offset = 0) const;
     std::optional<Highlight> get_prev_highlight(float abs_y, char type = 0, int offset = 0) const;
@@ -247,6 +277,7 @@ public:
     PdfLink pdf_link_from_fz_link(int page, fz_link* link);
     void add_mark(char symbol, float y_offset, std::optional<float> x_offset, std::optional<float> zoom_level);
     bool remove_mark(char symbol);
+    bool set_mark_description(char symbol, const std::wstring& description);
     void clear_marks();
     std::optional<Mark> get_mark_if_exists(char symbol);
     ~Document();
@@ -281,10 +312,6 @@ public:
     int get_offset_page_number(float y_offset);
     void index_document(bool* invalid_flag);
     void stop_indexing();
-    void delete_page_intersecting_drawings(int page, AbsoluteRect absolute_rect, bool mask[26]);
-    void delete_all_page_drawings(int page);
-    void delete_all_drawings();
-    std::vector<SelectedObjectIndex> get_page_intersecting_drawing_indices(int page, AbsoluteRect absolute_rect, bool mask[26]);
 
     std::vector<IndexedData> find_reference_with_string(std::wstring reference_name, int page_number);
     std::vector<IndexedData> find_equation_with_string(std::wstring equation_name, int page_number);
@@ -304,15 +331,6 @@ public:
     std::optional<std::wstring> get_regex_match_at_position(const std::wregex& regex, DocumentPos position, std::pair<int, int>* out_range);
     std::vector<DocumentPos> find_generic_locations(const std::wstring& type, const std::wstring& name);
     bool can_use_highlights();
-
-    bool load_extras();
-    bool persist_extras();
-    std::optional<QVariant> get_extra(QString name);
-
-    template<typename T>
-    void set_extra(QString name, T value) {
-        extras[name] = value;
-    }
 
     std::vector<std::wstring> get_page_bib_candidates(int page_number, std::vector<PagelessDocumentRect>* out_end_rects = nullptr);
     std::optional<std::pair<std::wstring, PagelessDocumentRect>> get_page_bib_with_reference(int page_number, std::wstring reference_text);
@@ -336,28 +354,18 @@ public:
 
     std::wstring get_raw_text_selection(AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end);
 
-    bool is_bookmark_new(const BookMark& bookmark);
-    bool is_highlight_new(const Highlight& highlight);
-    bool is_drawing_new(const FreehandDrawing& drawing);
-    int num_freehand_drawings();
-    std::vector<BookMark> get_new_yaview_bookmarks(const std::vector<BookMark>& pdf_bookmarks);
-    std::vector<Highlight> get_new_yaview_highlights(const std::vector<Highlight>& pdf_highlights);
     fz_context* get_mupdf_context();
 
     int get_page_offset();
     void set_page_offset(int new_offset);
-    void embed_annotations(std::wstring new_file_path);
     void embed_generated_toc(std::wstring new_file_path);
     void export_generated_toc(std::wstring new_file_path);
-    void get_pdf_annotations(std::vector<BookMark>& pdf_bookmarks, std::vector<Highlight>& pdf_highlights, std::vector<FreehandDrawing>& pdf_drawings);
-    void import_annotations();
     std::vector<PagelessDocumentRect> get_page_flat_words(int page);
     std::vector<std::vector<PagelessDocumentRect>> get_page_flat_word_chars(int page);
     void clear_document_caches();
     void load_document_caches(bool* invalid_flag, bool force_now);
     int reflow(int page);
-    void update_highlight_add_text_annotation(const std::string& uuid, const std::wstring& text_annot);
-    void update_highlight_type(const std::string& uuid, char new_type);
+    void update_highlight_add_text_annotation(int index, const std::wstring& text_annot);
     void update_highlight_type(int index, char new_type);
     void update_bookmark_text(int index, const std::wstring& new_text, float new_font_size);
     void update_bookmark_position(int index, AbsoluteDocumentPos new_begin_position, AbsoluteDocumentPos new_end_position);
@@ -373,8 +381,6 @@ public:
     std::optional<PdfLink> get_link_in_pos(const DocumentPos& pos);
     std::vector<PdfLink> get_links_in_page_rect(int page, AbsoluteRect rect);
     std::wstring get_pdf_link_text(PdfLink link);
-    std::string get_highlight_index_uuid(int index);
-    std::string get_bookmark_index_uuid(int index);
 
     //void create_table_of_contents(std::vector<TocNode*>& top_nodes);
     int add_stext_page_to_created_toc(fz_stext_page* stext_page,
@@ -395,21 +401,7 @@ public:
         std::vector<std::wstring>* line_texts = nullptr,
         std::vector<std::vector<PagelessDocumentRect>>* out_line_rects = nullptr);
 
-    std::wstring get_addtional_yaview_file_path(QString type);
-    std::wstring get_drawings_file_path();
-    std::wstring get_scratchpad_file_path();
-    std::wstring get_extras_file_path();
-    std::wstring get_annotations_file_path();
-    bool annotations_file_exists();
-    bool annotations_file_is_newer_than_database();
     std::optional<AbsoluteRect> get_rect_vertically(bool below, AbsoluteRect rect);
-
-    void persist_drawings(bool force = false);
-    void persist_annotations(bool force = false);
-    void load_drawings();
-    void load_annotations(bool sync = false);
-    void load_drawings_async();
-    //void persist_drawings_async();
 
     std::wstring detect_paper_name(fz_context* context, fz_document* doc);
     std::wstring detect_paper_name();
@@ -420,15 +412,9 @@ public:
     std::vector<SearchResult> search_text(std::wstring query, SearchCaseSensitivity case_sensitive, int begin_page, int min_page, int max_page);
     std::vector<SearchResult> search_regex(std::wstring query, SearchCaseSensitivity case_sensitive, int begin_page, int min_page, int max_page);
     float max_y_offset();
-    void add_freehand_drawing(FreehandDrawing new_drawing);
-    void get_page_freehand_drawings_with_indices(int page, const std::vector<SelectedObjectIndex>& indices, std::vector<FreehandDrawing>& freehand_drawings, std::vector<PixmapDrawing>& pixmap_drawings);
-    void undo_freehand_drawing();
-    const std::vector<FreehandDrawing>& get_page_drawings(int page);
     AbsoluteRect to_absolute(int page, fz_quad quad);
     AbsoluteRect to_absolute(int page, PagelessDocumentRect rect);
 
-    bool get_should_reload_annotations();
-    void reload_annotations_on_new_checksum();
     int find_reference_page_with_reference_text(std::wstring query);
     std::optional<DocumentPos> find_abbreviation(std::wstring abbr, std::vector<DocumentRect>& overview_highlight_rects);
 
@@ -450,13 +436,11 @@ class DocumentManager {
 private:
     fz_context* mupdf_context = nullptr;
     DatabaseManager* db_manager = nullptr;
-    CachedChecksummer* checksummer;
     std::unordered_map<std::wstring, Document*> cached_documents;
-    std::unordered_map<std::string, std::wstring> hash_to_path;
     std::vector<std::wstring> tabs;
 public:
 
-    DocumentManager(fz_context* mupdf_context, DatabaseManager* db_manager, CachedChecksummer* checksummer);
+    DocumentManager(fz_context* mupdf_context, DatabaseManager* db_manager);
 
     int get_tab_index(const std::wstring& path);
     int add_tab(const std::wstring& path);
@@ -466,13 +450,9 @@ public:
     std::vector<std::wstring> get_tabs();
 
     Document* get_document(const std::wstring& path);
-    std::optional<std::wstring> get_path_from_hash(const std::string& checksum);
-
-    Document* get_document_with_checksum(const std::string& checksum);
     std::optional<Document*> get_cached_document(const std::wstring& path);
     void free_document(Document* document);
     const std::unordered_map<std::wstring, Document*>& get_cached_documents();
     std::vector<std::wstring> get_loaded_document_paths();
-    void delete_global_mark(char symbol);
     ~DocumentManager();
 };

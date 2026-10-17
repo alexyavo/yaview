@@ -324,6 +324,7 @@ public:
     }
 
     void set_text_requirement(std::wstring value) { get_command()->set_text_requirement(value); }
+    bool uses_centered_text_prompt() { return get_command()->uses_centered_text_prompt(); }
     void set_symbol_requirement(char value) { get_command()->set_symbol_requirement(value); }
     void set_file_requirement(std::wstring value) { get_command()->set_file_requirement(value); }
     void set_rect_requirement(AbsoluteRect value) { get_command()->set_rect_requirement(value); }
@@ -449,6 +450,13 @@ public:
             return commands.back()->get_result();
         }
         return {};
+    }
+
+    bool uses_centered_text_prompt() {
+        for (auto& command : commands) {
+            if (command->next_requirement(widget)) return command->uses_centered_text_prompt();
+        }
+        return false;
     }
 
     void set_text_requirement(std::wstring value) {
@@ -1096,8 +1104,7 @@ class GenericPathAndLocationCommand : public Command {
 public:
 
     std::optional<QVariant> target_location;
-    bool is_hash = false;
-    GenericPathAndLocationCommand(std::string name, MainWidget* w, bool is_hash_ = false) : Command(name, w) { is_hash = is_hash_; };
+    GenericPathAndLocationCommand(std::string name, MainWidget* w) : Command(name, w) {};
 
     std::optional<Requirement> next_requirement(MainWidget* widget) {
         if (target_location) {
@@ -1117,14 +1124,8 @@ public:
         std::wstring file_name = values[0].toString().toStdWString();
 
         if (values.size() == 1) {
-            if (is_hash) {
-                widget->open_document_with_hash(utf8_encode(file_name));
-                widget->validate_render();
-            }
-            else {
-                widget->open_document(file_name);
-                widget->validate_render();
-            }
+            widget->open_document(file_name);
+            widget->validate_render();
         }
         else if (values.size() == 2) {
             float y_offset = values[1].toFloat();
@@ -1245,8 +1246,6 @@ public:
         assert(this->symbol != 0);
         widget->goto_mark(this->symbol);
     }
-
-    bool requires_document() { return false; }
 };
 
 class ClearDocumentMarksCommand : public Command {
@@ -1258,19 +1257,6 @@ public:
     void perform() {
         widget->clear_document_marks();
     }
-};
-
-class ClearAllMarksCommand : public Command {
-public:
-    static inline const std::string cname = "clear_all_marks";
-    static inline const std::string hname = "Delete all marks in all documents";
-    ClearAllMarksCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->clear_all_marks();
-    }
-
-    bool requires_document() { return false; }
 };
 
 class SetMark : public SymbolCommand {
@@ -1291,19 +1277,92 @@ public:
     }
 };
 
-class ToggleDrawingMask : public SymbolCommand {
+// Base of the commands that act on a mark and then ask for a text, prefilled with the mark's description:
+// the mark is picked from a menu of the document's marks, the text typed in a centered prompt. A macro
+// gives the mark's letter as the first argument. A letter without a mark ends the command.
+class MarkTextCommand : public Command {
+protected:
+    char symbol = 0;
+    std::optional<std::wstring> text = {};
 public:
-    static inline const std::string cname = "toggle_drawing_mask";
-    static inline const std::string hname = "Toggle drawing type visibility";
+    MarkTextCommand(std::string name, MainWidget* w) : Command(name, w) {}
 
-    ToggleDrawingMask(MainWidget* w) : SymbolCommand(cname, w) {}
+    virtual std::string text_requirement_name() = 0;
+    virtual void perform_with_text(const std::wstring& text) = 0;
 
-    std::string get_name() {
-        return cname;
+    std::optional<Requirement> next_requirement(MainWidget* widget) {
+        if (symbol == 0) {
+            return Requirement{ RequirementType::Generic, "Mark" };
+        }
+        if (!widget->doc()->get_mark_if_exists(symbol)) {
+            return {};
+        }
+        if (!text.has_value()) {
+            return Requirement{ RequirementType::Text, text_requirement_name() };
+        }
+        return {};
+    }
+
+    void set_generic_requirement(QVariant value) {
+        QString letter = value.toString();
+        if (letter.size() > 0) {
+            symbol = letter.at(0).toLatin1();
+        }
+    }
+
+    void handle_generic_requirement() {
+        widget->show_mark_picker();
+    }
+
+    void set_text_requirement(std::wstring value) {
+        text = value;
+    }
+
+    bool uses_centered_text_prompt() {
+        return true;
+    }
+
+    std::wstring get_text_default_value() {
+        std::optional<Mark> mark = widget->doc()->get_mark_if_exists(symbol);
+        return mark ? mark->description : L"";
     }
 
     void perform() {
-        widget->handle_toggle_drawing_mask(this->symbol);
+        if (!text.has_value()) {
+            widget->set_status_message(std::wstring(L"No mark named ") + static_cast<wchar_t>(symbol));
+            return;
+        }
+        perform_with_text(text.value());
+    }
+};
+
+class EditMarkCommand : public MarkTextCommand {
+public:
+    static inline const std::string cname = "edit_mark";
+    static inline const std::string hname = "Edit the description of a mark";
+    EditMarkCommand(MainWidget* w) : MarkTextCommand(cname, w) {}
+
+    std::string text_requirement_name() {
+        return std::string("Description of mark ") + symbol;
+    }
+
+    void perform_with_text(const std::wstring& text) {
+        widget->doc()->set_mark_description(symbol, text);
+    }
+};
+
+class MarkToBookmarkCommand : public MarkTextCommand {
+public:
+    static inline const std::string cname = "mark_to_bookmark";
+    static inline const std::string hname = "Turn a mark into a bookmark at its location";
+    MarkToBookmarkCommand(MainWidget* w) : MarkTextCommand(cname, w) {}
+
+    std::string text_requirement_name() {
+        return std::string("Bookmark text for mark ") + symbol;
+    }
+
+    void perform_with_text(const std::wstring& text) {
+        widget->convert_mark_to_bookmark(symbol, text);
     }
 };
 
@@ -2066,27 +2125,6 @@ public:
     }
 };
 
-class SetFreehandThickness : public TextCommand {
-public:
-    static inline const std::string cname = "set_freehand_thickness";
-    static inline const std::string hname = "Set thickness of freehand drawings";
-    SetFreehandThickness(MainWidget* w) : TextCommand(cname, w) {};
-
-    void perform() {
-        float thickness = QString::fromStdWString(this->text.value()).toFloat();
-        widget->set_freehand_thickness(thickness);
-        //widget->perform_search(this->text.value(), false);
-        //if (TOUCH_MODE) {
-        //	widget->show_search_buttons();
-        //}
-    }
-
-
-    std::string text_requirement_name() {
-        return "Thickness";
-    }
-};
-
 class GotoPageWithLabel : public TextCommand {
 public:
     static inline const std::string cname = "goto_page_with_label";
@@ -2157,12 +2195,12 @@ public:
 class AddBookmarkCommand : public TextCommand {
 public:
     static inline const std::string cname = "add_bookmark";
-    static inline const std::string hname = "Add an invisible bookmark in the current location";
+    static inline const std::string hname = "Add a bookmark in the current location";
     AddBookmarkCommand(MainWidget* w) : TextCommand(cname, w) {}
 
     void perform() {
-        std::string uuid = widget->main_document_view->add_bookmark(text.value());
-        result = utf8_decode(uuid);
+        int index = widget->main_document_view->add_bookmark(text.value());
+        result = widget->bookmark_result_string(index);
     }
 
 
@@ -2223,9 +2261,9 @@ public:
 
     void perform() {
         if (text_->size() > 0) {
-            std::string uuid = widget->doc()->add_pending_bookmark(pending_index, text_.value());
+            int index = widget->doc()->add_pending_bookmark(pending_index, text_.value());
             widget->invalidate_render();
-            result = utf8_decode(uuid);
+            result = widget->bookmark_result_string(index);
             widget->set_selected_bookmark_index(-1);
         }
         else {
@@ -2260,61 +2298,6 @@ public:
 
     void perform() {
         widget->start_creating_rect_portal(point_.value());
-    }
-
-};
-
-class CopyDrawingsFromScratchpadCommand : public Command {
-
-public:
-    static inline const std::string cname = "copy_drawings_from_scratchpad";
-    static inline const std::string hname = "";
-
-    std::optional<AbsoluteRect> rect_;
-
-    CopyDrawingsFromScratchpadCommand(MainWidget* w) : Command(cname, w) {};
-
-    std::optional<Requirement> next_requirement(MainWidget* widget) {
-
-        if (!rect_.has_value()) {
-            Requirement req = { RequirementType::Rect, "Screenshot rect" };
-            return req;
-        }
-        return {};
-    }
-
-    void set_rect_requirement(AbsoluteRect value) {
-        rect_ = value;
-    }
-
-    void perform() {
-        AbsoluteDocumentPos scratchpad_pos = AbsoluteDocumentPos{ widget->scratchpad->get_offset_x(), widget->scratchpad->get_offset_y() };
-        AbsoluteDocumentPos main_window_pos = widget->main_document_view->get_offsets();
-        AbsoluteDocumentPos click_pos = rect_->center().to_window(widget->scratchpad).to_absolute(widget->main_document_view);
-
-        //float diff_x = main_window_pos.x - scratchpad_pos.x;
-        //float diff_y = main_window_pos.y - scratchpad_pos.y;
-
-        auto indices = widget->scratchpad->get_intersecting_objects(rect_.value());
-        std::vector<FreehandDrawing> drawings;
-        std::vector<PixmapDrawing> pixmaps;
-
-        widget->scratchpad->get_selected_objects_with_indices(indices, drawings, pixmaps);
-
-        for (auto& drawing : drawings) {
-            for (int i = 0; i < drawing.points.size(); i++) {
-                drawing.points[i].pos = drawing.points[i].pos.to_window(widget->scratchpad).to_absolute(widget->main_document_view);
-            }
-        }
-
-        FreehandDrawingMoveData md;
-        md.initial_drawings = drawings;
-        md.initial_pixmaps = {};
-        md.initial_mouse_position = click_pos;
-        widget->freehand_drawing_move_data = md;
-        widget->toggle_scratchpad_mode();
-        widget->set_rect_select_mode(false);
-        widget->invalidate_render();
     }
 
 };
@@ -2361,49 +2344,6 @@ public:
         widget->invalidate_render();
     }
 
-};
-
-class CopyScreenshotToScratchpad : public Command {
-
-public:
-    static inline const std::string cname = "copy_screenshot_to_scratchpad";
-    static inline const std::string hname = "Copy window screenshot to scratchpad";
-
-    std::optional<AbsoluteRect> rect_;
-
-    CopyScreenshotToScratchpad(MainWidget* w) : Command(cname, w) {};
-
-    std::optional<Requirement> next_requirement(MainWidget* widget) {
-
-        if (!rect_.has_value()) {
-            Requirement req = { RequirementType::Rect, "Screenshot rect" };
-            return req;
-        }
-        return {};
-    }
-
-    void set_rect_requirement(AbsoluteRect value) {
-        rect_ = value;
-    }
-
-    void perform() {
-        widget->clear_selected_rect();
-
-        WindowRect window_rect = rect_->to_window(widget->main_document_view);
-        window_rect.y0 += 1;
-        QRect window_qrect = QRect(window_rect.x0, window_rect.y0, window_rect.width(), window_rect.height());
-
-        float ratio = QGuiApplication::primaryScreen()->devicePixelRatio();
-        QPixmap pixmap(static_cast<int>(window_qrect.width() * ratio), static_cast<int>(window_qrect.height() * ratio));
-        pixmap.setDevicePixelRatio(ratio);
-
-        //widget->render(&pixmap, QPoint(), QRegion(widget->rect()));
-        widget->render(&pixmap, QPoint(), QRegion(window_qrect));
-        widget->toggle_scratchpad_mode();
-        widget->add_pixmap_to_scratchpad(pixmap);
-        widget->set_rect_select_mode(false);
-        widget->invalidate_render();
-    }
 };
 
 class AddBookmarkFreetextCommand : public Command {
@@ -2471,8 +2411,8 @@ public:
     void perform() {
         //widget->doc()->add_freetext_bookmark(text_.value(), rect_.value());
         if (text_.value().size() > 0) {
-            std::string uuid = widget->doc()->add_pending_bookmark(pending_index, text_.value());
-            result = utf8_decode(uuid);
+            int index = widget->doc()->add_pending_bookmark(pending_index, text_.value());
+            result = widget->bookmark_result_string(index);
             widget->set_selected_bookmark_index(-1);
         }
         else {
@@ -2488,7 +2428,7 @@ public:
 class ShowMarks : public GenericGotoLocationCommand {
 public:
     static inline const std::string cname = "show_marks";
-    static inline const std::string hname = "Show the list of the current marks in all documents.";
+    static inline const std::string hname = "Show the list of the marks of the current document";
     ShowMarks(MainWidget* w) : GenericGotoLocationCommand(cname, w) {};
 
     void handle_generic_requirement() {
@@ -2517,19 +2457,6 @@ public:
     void handle_generic_requirement() {
         widget->handle_goto_portal_list();
     }
-};
-
-class GotoBookmarkGlobalCommand : public GenericPathAndLocationCommand {
-public:
-    static inline const std::string cname = "goto_bookmark_g";
-    static inline const std::string hname = "Open the bookmark list of all documents";
-
-    GotoBookmarkGlobalCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w) {};
-
-    void handle_generic_requirement() {
-        widget->handle_goto_bookmark_global();
-    }
-    bool requires_document() { return false; }
 };
 
 class IncreaseFreetextBookmarkFontSizeCommand : public Command {
@@ -2575,6 +2502,58 @@ public:
     }
 };
 
+
+class GotoBookmarkGlobalCommand : public GenericPathAndLocationCommand {
+public:
+    static inline const std::string cname = "goto_bookmark_g";
+    static inline const std::string hname = "Open the bookmark list of the open and recently opened documents";
+
+    GotoBookmarkGlobalCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w) {};
+
+    void handle_generic_requirement() {
+        widget->handle_goto_bookmark_global();
+    }
+    bool requires_document() { return false; }
+};
+
+// Edits the text of a bookmark in any document, which the bookmark list of several documents sets
+// (document path, PDF object number) before running it.
+class EditBookmarkTextCommand : public TextCommand {
+    std::optional<std::pair<std::wstring, int>> target = {};
+public:
+    static inline const std::string cname = "edit_bookmark_text";
+    static inline const std::string hname = "";
+    EditBookmarkTextCommand(MainWidget* w) : TextCommand(cname, w) {};
+
+    void set_generic_requirement(QVariant value) {
+        QList<QVariant> values = value.toList();
+        target = std::make_pair(values[0].toString().toStdWString(), values[1].toInt());
+    }
+
+    std::optional<Requirement> next_requirement(MainWidget* widget) {
+        if (!target) return {};
+        return TextCommand::next_requirement(widget);
+    }
+
+    std::string text_requirement_name() {
+        return "Bookmark Text";
+    }
+
+    std::wstring get_text_default_value() {
+        if (!target) return L"";
+        Document* document = widget->document_manager->get_document(target->first);
+        int index = document->get_bookmark_index_with_object(target->second);
+        return index == -1 ? L"" : document->get_bookmarks()[index].description;
+    }
+
+    void perform() {
+        if (target && text) {
+            widget->edit_bookmark_text(target->first, target->second, text.value());
+        }
+    }
+
+    bool requires_document() { return false; }
+};
 
 class GotoHighlightGlobalCommand : public GenericPathAndLocationCommand {
 public:
@@ -3408,36 +3387,6 @@ public:
 
 };
 
-class SaveScratchpadCommand : public Command {
-public:
-    static inline const std::string cname = "save_scratchpad";
-    static inline const std::string hname = "Save scratchpad file";
-    SaveScratchpadCommand(MainWidget* w) : Command(cname, w) {};
-    void perform() {
-        widget->save_scratchpad();
-    }
-};
-
-class LoadScratchpadCommand : public Command {
-public:
-    static inline const std::string cname = "load_scratchpad";
-    static inline const std::string hname = "Load scratchpad file";
-    LoadScratchpadCommand(MainWidget* w) : Command(cname, w) {};
-    void perform() {
-        widget->load_scratchpad();
-    }
-};
-
-class ClearScratchpadCommand : public Command {
-public:
-    static inline const std::string cname = "clear_scratchpad";
-    static inline const std::string hname = "Clear all scratchpad content";
-    ClearScratchpadCommand(MainWidget* w) : Command(cname, w) {};
-    void perform() {
-        widget->clear_scratchpad();
-    }
-};
-
 class ZoomInCommand : public Command {
 public:
     static inline const std::string cname = "zoom_in";
@@ -3528,7 +3477,7 @@ public:
     static inline const std::string hname = "Go to next page";
     NextPageCommand(MainWidget* w) : Command(cname, w) {};
     void perform() {
-        widget->main_document_view->move_pages(std::max(1, num_repeats));
+        widget->turn_pages(std::max(1, num_repeats));
     }
 };
 
@@ -3538,7 +3487,7 @@ public:
     static inline const std::string hname = "Go to previous page";
     PreviousPageCommand(MainWidget* w) : Command(cname, w) {};
     void perform() {
-        widget->main_document_view->move_pages(std::min(-1, -num_repeats));
+        widget->turn_pages(std::min(-1, -num_repeats));
     }
 };
 
@@ -4113,7 +4062,7 @@ class OpenPrevDocCommand : public GenericPathAndLocationCommand {
 public:
     static inline const std::string cname = "open_prev_doc";
     static inline const std::string hname = "Open the list of previously opened documents";
-    OpenPrevDocCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w, true) {};
+    OpenPrevDocCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w) {};
 
     void handle_generic_requirement() {
         widget->handle_open_prev_doc();
@@ -4139,7 +4088,7 @@ class OpenAllDocsCommand : public GenericPathAndLocationCommand {
 public:
     static inline const std::string cname = "open_all_docs";
     static inline const std::string hname = "";
-    OpenAllDocsCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w, true) {};
+    OpenAllDocsCommand(MainWidget* w) : GenericPathAndLocationCommand(cname, w) {};
 
     void handle_generic_requirement() {
         widget->handle_open_all_docs();
@@ -4805,45 +4754,6 @@ public:
 
     void perform() {
         widget->toggle_mouse_drag_mode();
-    }
-
-    bool requires_document() { return false; }
-};
-
-class ToggleFreehandDrawingMode : public Command {
-public:
-    static inline const std::string cname = "toggle_freehand_drawing_mode";
-    static inline const std::string hname = "Toggle freehand drawing mode";
-    ToggleFreehandDrawingMode(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->toggle_freehand_drawing_mode();
-    }
-
-    bool requires_document() { return false; }
-};
-
-class TogglePenDrawingMode : public Command {
-public:
-    static inline const std::string cname = "toggle_pen_drawing_mode";
-    static inline const std::string hname = "Toggle pen drawing mode";
-    TogglePenDrawingMode(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->toggle_pen_drawing_mode();
-    }
-
-    bool requires_document() { return false; }
-};
-
-class ToggleScratchpadMode : public Command {
-public:
-    static inline const std::string cname = "toggle_scratchpad_mode";
-    static inline const std::string hname = "Toggle scratchpad";
-    ToggleScratchpadMode(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->toggle_scratchpad_mode();
     }
 
     bool requires_document() { return false; }
@@ -5583,38 +5493,6 @@ public:
 
 };
 
-class SetFreehandType : public SymbolCommand {
-public:
-    static inline const std::string cname = "set_freehand_type";
-    static inline const std::string hname = "Set the freehand drawing color type";
-    SetFreehandType(MainWidget* w) : SymbolCommand(cname, w) {};
-    void perform() {
-        widget->current_freehand_type = symbol;
-    }
-
-    bool requires_document() { return false; }
-};
-
-class SetFreehandAlphaCommand : public TextCommand {
-public:
-    static inline const std::string cname = "set_freehand_alpha";
-    static inline const std::string hname = "Set the freehand drawing alpha";
-    SetFreehandAlphaCommand(MainWidget* w) : TextCommand(cname, w) {};
-    void perform() {
-        if (text.has_value() && text->size() > 0) {
-            bool was_number = false;
-            float alpha = QString::fromStdWString(text.value()).toFloat(&was_number);
-            if (!was_number || alpha > 1 || alpha < 0) {
-                alpha = 1.0f;
-            }
-            widget->set_current_freehand_alpha(alpha);
-
-        }
-    }
-
-    bool requires_document() { return false; }
-};
-
 class AddHighlightWithCurrentTypeCommand : public Command {
 public:
     static inline const std::string cname = "add_highlight_with_current_type";
@@ -5628,19 +5506,6 @@ public:
     }
 
 };
-
-class UndoDrawingCommand : public Command {
-public:
-    static inline const std::string cname = "undo_drawing";
-    static inline const std::string hname = "Undo freehand drawing";
-    UndoDrawingCommand(MainWidget* w) : Command(cname, w) {};
-    void perform() {
-        widget->handle_undo_drawing();
-    }
-
-    bool requires_document() { return true; }
-};
-
 
 class EnterPasswordCommand : public PasswordCommand {
 public:
@@ -5718,30 +5583,6 @@ public:
     ReloadConfigCommand(MainWidget* w) : Command(cname, w) {};
     void perform() {
         widget->on_config_file_changed(widget->config_manager);
-    }
-
-    bool requires_document() { return false; }
-};
-
-class TurnOnAllDrawings : public Command {
-public:
-    static inline const std::string cname = "turn_on_all_drawings";
-    static inline const std::string hname = "Make all freehand drawings visible";
-    TurnOnAllDrawings(MainWidget* w) : Command(cname, w) {};
-    void perform() {
-        widget->hande_turn_on_all_drawings();
-    }
-
-    bool requires_document() { return false; }
-};
-
-class TurnOffAllDrawings : public Command {
-public:
-    static inline const std::string cname = "turn_off_all_drawings";
-    static inline const std::string hname = "Make all freehand drawings invisible";
-    TurnOffAllDrawings(MainWidget* w) : Command(cname, w) {};
-    void perform() {
-        widget->hande_turn_off_all_drawings();
     }
 
     bool requires_document() { return false; }
@@ -6009,18 +5850,6 @@ public:
 
 };
 
-class ScanNewFilesFromScanDirCommand : public Command {
-public:
-    static inline const std::string cname = "scan_new_files";
-    static inline const std::string hname = "";
-    ScanNewFilesFromScanDirCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->scan_new_files_from_scan_directory();
-    }
-
-};
-
 class DebugCommand : public Command {
 public:
     inline static const std::string cname = "debug";
@@ -6082,18 +5911,6 @@ public:
 
     void perform() {
         widget->show_touch_main_menu();
-    }
-
-};
-
-class ShowTouchDrawingMenu : public Command {
-public:
-    static inline const std::string cname = "show_touch_draw_controls";
-    static inline const std::string hname = "";
-    ShowTouchDrawingMenu(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->show_draw_controls();
     }
 
 };
@@ -6246,79 +6063,6 @@ public:
 };
 
 
-class ImportCommand : public Command {
-public:
-    static inline const std::string cname = "import";
-    static inline const std::string hname = "Import annotation data from a json file";
-    ImportCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        std::wstring import_file_name = select_json_file_name();
-        widget->import_json(import_file_name);
-    }
-
-    bool requires_document() { return false; }
-};
-
-class ExportCommand : public Command {
-public:
-    static inline const std::string cname = "export";
-    static inline const std::string hname = "Export annotation data to a json file";
-    std::optional<std::wstring> file_name = {};
-    ExportCommand(MainWidget* w) : Command(cname, w) {};
-
-    std::optional<Requirement> next_requirement(MainWidget* widget) {
-        if (file_name.has_value()) return {};
-        return Requirement{ RequirementType::File, "Json file" };
-    }
-
-    void set_file_requirement(std::wstring value) {
-        file_name = value;
-    }
-
-    void perform() {
-        widget->export_json(file_name.value());
-    }
-
-    bool requires_document() { return false; }
-};
-
-class WriteAnnotationsFileCommand : public Command {
-public:
-    static inline const std::string cname = "write_annotations_file";
-    static inline const std::string hname = "";
-    WriteAnnotationsFileCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->doc()->persist_annotations(true);
-    }
-
-};
-
-class LoadAnnotationsFileCommand : public Command {
-public:
-    static inline const std::string cname = "load_annotations_file";
-    static inline const std::string hname = "";
-    LoadAnnotationsFileCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->doc()->load_annotations();
-    }
-
-};
-
-class LoadAnnotationsFileSyncDeletedCommand : public Command {
-public:
-    static inline const std::string cname = "import_annotations_file_sync_deleted";
-    static inline const std::string hname = "";
-    LoadAnnotationsFileSyncDeletedCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->doc()->load_annotations(true);
-    }
-
-};
-
 class EnterVisualMarkModeCommand : public Command {
 public:
     static inline const std::string cname = "enter_visual_mark_mode";
@@ -6379,54 +6123,6 @@ public:
     }
 
     bool requires_document() { return false; }
-};
-
-class ImportAnnotationsCommand : public Command {
-public:
-    static inline const std::string cname = "import_annotations";
-    static inline const std::string hname = "Import PDF annotations into yaview";
-    ImportAnnotationsCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->doc()->import_annotations();
-    }
-
-};
-
-class EmbedAnnotationsCommand : public Command {
-public:
-    static inline const std::string cname = "embed_annotations";
-    static inline const std::string hname = "Embed the annotations into a new PDF file";
-    EmbedAnnotationsCommand(MainWidget* w) : Command(cname, w) {};
-
-    std::optional<std::wstring> file_path = {};
-
-    virtual void set_file_requirement(std::wstring value) {
-        file_path = value;
-    }
-
-    std::optional<QString> get_file_path_requirement_root_dir() {
-        QFileInfo file_info(QString::fromStdWString(widget->doc()->get_path()));
-        QString full_path = file_info.absolutePath();
-        QString file_path = file_info.fileName();
-        QString parent_path = full_path.mid(full_path.size() - file_path.size());
-        return parent_path;
-    }
-
-    std::optional<Requirement> next_requirement(MainWidget* widget) {
-        if (!file_path.has_value()) {
-            Requirement req = { RequirementType::File, "File Path" };
-            return req;
-        }
-        return {};
-    }
-
-    void perform() {
-        //std::wstring embedded_pdf_file_name = select_new_pdf_file_name();
-        if (file_path->size() > 0) {
-            widget->main_document_view->get_document()->embed_annotations(file_path.value());
-        }
-    }
 };
 
 class EmbedGeneratedTocCommand : public Command {
@@ -6535,9 +6231,9 @@ public:
     }
 
     void perform() {
-        auto last_opened_file = widget->get_last_opened_file_checksum();
+        auto last_opened_file = widget->get_last_opened_file_path();
         if (last_opened_file) {
-            widget->open_document_with_hash(last_opened_file.value());
+            widget->open_document(last_opened_file.value());
         }
     }
 
@@ -6624,116 +6320,6 @@ public:
 };
 
 
-
-class ClearCurrentPageDrawingsCommand : public Command {
-public:
-    static inline const std::string cname = "clear_current_page_drawings";
-    static inline const std::string hname = "";
-    ClearCurrentPageDrawingsCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->clear_current_page_drawings();
-    }
-
-
-    bool requires_document() { return false; }
-};
-
-class ClearCurrentDocumentDrawingsCommand : public Command {
-public:
-    static inline const std::string cname = "clear_current_document_drawings";
-    static inline const std::string hname = "";
-    ClearCurrentDocumentDrawingsCommand(MainWidget* w) : Command(cname, w) {};
-
-    void perform() {
-        widget->clear_current_document_drawings();
-    }
-
-
-    bool requires_document() { return false; }
-};
-
-class DeleteFreehandDrawingsCommand : public Command {
-public:
-    static inline const std::string cname = "delete_freehand_drawings";
-    static inline const std::string hname = "Delete freehand drawings in selected rectangle";
-    DeleteFreehandDrawingsCommand(MainWidget* w) : Command(cname, w) {};
-
-    std::optional<AbsoluteRect> rect_;
-    DrawingMode original_drawing_mode = DrawingMode::None;
-
-
-    void pre_perform() {
-        original_drawing_mode = widget->freehand_drawing_mode;
-        widget->freehand_drawing_mode = DrawingMode::None;
-    }
-
-    std::optional<Requirement> next_requirement(MainWidget* widget) {
-
-        if (!rect_.has_value()) {
-            Requirement req = { RequirementType::Rect, "Command Rect" };
-            return req;
-        }
-        return {};
-    }
-
-    void set_rect_requirement(AbsoluteRect rect) {
-        if (rect.x0 > rect.x1) {
-            std::swap(rect.x0, rect.x1);
-        }
-        if (rect.y0 > rect.y1) {
-            std::swap(rect.y0, rect.y1);
-        }
-
-        rect_ = rect;
-    }
-
-    void perform() {
-        widget->delete_freehand_drawings(rect_.value());
-        widget->freehand_drawing_mode = original_drawing_mode;
-    }
-};
-
-class SelectFreehandDrawingsCommand : public Command {
-public:
-    static inline const std::string cname = "select_freehand_drawings";
-    static inline const std::string hname = "Select freehand drawings";
-    SelectFreehandDrawingsCommand(MainWidget* w) : Command(cname, w) {};
-
-    std::optional<AbsoluteRect> rect_;
-    DrawingMode original_drawing_mode = DrawingMode::None;
-
-
-    void pre_perform() {
-        original_drawing_mode = widget->freehand_drawing_mode;
-        widget->freehand_drawing_mode = DrawingMode::None;
-    }
-
-    std::optional<Requirement> next_requirement(MainWidget* widget) {
-
-        if (!rect_.has_value()) {
-            Requirement req = { RequirementType::Rect, "Command Rect" };
-            return req;
-        }
-        return {};
-    }
-
-    void set_rect_requirement(AbsoluteRect rect) {
-        if (rect.x0 > rect.x1) {
-            std::swap(rect.x0, rect.x1);
-        }
-        if (rect.y0 > rect.y1) {
-            std::swap(rect.y0, rect.y1);
-        }
-
-        rect_ = rect;
-    }
-
-    void perform() {
-        widget->select_freehand_drawings(rect_.value());
-        widget->freehand_drawing_mode = original_drawing_mode;
-    }
-};
 
 class CustomCommand : public Command {
 
@@ -7241,11 +6827,9 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<MoveTextMarkDownCommand>();
     register_command<MoveTextMarkUpCommand>();
     register_command<SetMark>();
+    register_command<EditMarkCommand>();
+    register_command<MarkToBookmarkCommand>();
     register_command<ClearDocumentMarksCommand>();
-    register_command<ClearAllMarksCommand>();
-    register_command<ToggleDrawingMask>();
-    register_command<TurnOnAllDrawings>();
-    register_command<TurnOffAllDrawings>();
     register_command<GotoMark>();
     register_command<GotoPageWithPageNumberCommand>();
     register_command<EditSelectedBookmarkCommand>();
@@ -7270,7 +6854,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<AddAnnotationToHighlightCommand>();
     register_command<ChangeHighlightTypeCommand>();
     register_command<RenameCommand>();
-    register_command<SetFreehandThickness>();
     register_command<GotoPageWithLabel>();
     register_command<RegexSearchCommand>();
     register_command<ChapterSearchCommand>();
@@ -7288,9 +6871,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<ScreenDownSmoothCommand>();
     register_command<MoveLeftInOverviewCommand>();
     register_command<MoveRightInOverviewCommand>();
-    register_command<SaveScratchpadCommand>();
-    register_command<LoadScratchpadCommand>();
-    register_command<ClearScratchpadCommand>();
     register_command<ZoomInCommand>();
     register_command<ZoomOutCommand>();
     register_command<ZoomInOverviewCommand>();
@@ -7313,8 +6893,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<AddBookmarkCommand>();
     register_command<AddBookmarkMarkedCommand>();
     register_command<AddBookmarkFreetextCommand>();
-    register_command<CopyDrawingsFromScratchpadCommand>();
-    register_command<CopyScreenshotToScratchpad>();
     register_command<CopyScreenshotToClipboard>();
     register_command<AddHighlightCommand>();
     register_command<GotoTableOfContentsCommand>();
@@ -7325,6 +6903,7 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<ShowMarks>();
     register_command<GotoBookmarkCommand>();
     register_command<GotoBookmarkGlobalCommand>();
+    register_command<EditBookmarkTextCommand>();
     register_command<GotoHighlightGlobalCommand>();
     register_command<PortalCommand>();
     register_command<PortalCommand>();
@@ -7378,9 +6957,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<TogglePresentationModeCommand>();
     register_command<TurnOnPresentationModeCommand>();
     register_command<ToggleMouseDragMode>();
-    register_command<ToggleFreehandDrawingMode>();
-    register_command<TogglePenDrawingMode>();
-    register_command<ToggleScratchpadMode>();
     register_command<CloseWindowCommand>();
     register_command<QuitCommand>();
     register_command<EscapeCommand>();
@@ -7406,8 +6982,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<MoveVisualMarkPrevCommand>();
     register_command<ToggleCustomColorMode>();
     register_command<SetSelectHighlightTypeCommand>();
-    register_command<SetFreehandType>();
-    register_command<SetFreehandAlphaCommand>();
     register_command<ToggleWindowConfigurationCommand>();
     register_command<ShowPortalWindowCommand>();
     register_command<FitToPageWidthRatioCommand>();
@@ -7431,7 +7005,6 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<GotoNextHighlightOfTypeCommand>();
     register_command<GotoPrevHighlightOfTypeCommand>();
     register_command<AddHighlightWithCurrentTypeCommand>();
-    register_command<UndoDrawingCommand>();
     register_command<EnterPasswordCommand>();
     register_command<ToggleFastreadCommand>();
     register_command<GotoTopOfPageCommand>();
@@ -7467,20 +7040,13 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<OverviewPrevItemCommand>();
     register_command<DeleteHighlightUnderCursorCommand>();
     register_command<NoopCommand>();
-    register_command<ImportCommand>();
-    register_command<ExportCommand>();
-    register_command<WriteAnnotationsFileCommand>();
-    register_command<LoadAnnotationsFileCommand>();
-    register_command<LoadAnnotationsFileSyncDeletedCommand>();
     register_command<EnterVisualMarkModeCommand>();
     register_command<SetPageOffsetCommand>();
     register_command<ToggleVisualScrollCommand>();
     register_command<ToggleHorizontalLockCommand>();
     register_command<ExecuteCommand>();
-    register_command<EmbedAnnotationsCommand>();
     register_command<EmbedGeneratedTocCommand>();
     register_command<ExportGeneratedTocCommand>();
-    register_command<ImportAnnotationsCommand>();
     register_command<CopyWindowSizeConfigCommand>();
     register_command<ToggleSelectHighlightCommand>();
     register_command<OpenLastDocumentCommand>();
@@ -7488,21 +7054,15 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<StartReadingCommand>();
     register_command<StopReadingCommand>();
     register_command<ToggleReadingCommand>();
-    register_command<ScanNewFilesFromScanDirCommand>();
     register_command<AddMarkedDataCommand>();
     register_command<RemoveMarkedDataCommand>();
     register_command<ExportMarkedDataCommand>();
     register_command<UndoMarkedDataCommand>();
     register_command<GotoRandomPageCommand>();
-    register_command<ClearCurrentPageDrawingsCommand>();
-    register_command<ClearCurrentDocumentDrawingsCommand>();
-    register_command<DeleteFreehandDrawingsCommand>();
-    register_command<SelectFreehandDrawingsCommand>();
     register_command<SelectCurrentSearchMatchCommand>();
     register_command<SelectRulerTextCommand>();
     register_command<ShowTouchMainMenu>();
     register_command<ShowTouchSettingsMenu>();
-    register_command<ShowTouchDrawingMenu>();
     register_command<DebugCommand>();
     register_command<SelectNextCharCommand>();
     register_command<UnselectLastCharCommand>();
@@ -8349,6 +7909,10 @@ void Command::set_symbol_requirement(char value) {}
 void Command::set_file_requirement(std::wstring value) {}
 void Command::set_rect_requirement(AbsoluteRect value) {}
 void Command::set_point_requirement(AbsoluteDocumentPos value) {}
+
+bool Command::uses_centered_text_prompt() {
+    return false;
+}
 
 std::wstring Command::get_text_default_value() {
     return L"";
