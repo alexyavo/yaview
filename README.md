@@ -6,38 +6,38 @@
 
 yaview is a fork of [sioyek](https://github.com/ahrm/sioyek).
 
-## Tutorial
-
-This is yaview's tutorial ([`tutorial.pdf`](tutorial.pdf), built from [`tutorial/tut.tex`](tutorial/tut.tex)), with the key
-bindings updated to yaview's defaults. yaview opens `tutorial.pdf` when there is no other document to show; the "try it
-out" examples below refer to text in that PDF. On macOS, <kbd>Ctrl</kbd> means the physical Control key, not Command.
-
 ### Basics
 
-- Press <kbd>o</kbd> to open a document in yaview's file browser, which starts in the current document's folder
-  (<kbd>Ctrl</kbd>+<kbd>o</kbd> starts it in `default_open_file_path`, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>o</kbd>
-  opens the system's file dialog). Press <kbd>Shift</kbd>+<kbd>o</kbd> to open a previously opened document.
-- Use the arrow keys for navigation. <kbd>h</kbd> and <kbd>l</kbd> scroll left and right, like in vim.
-- Use <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> / <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> to go to the next/previous page.
-- Press <kbd>Space</kbd> / <kbd>Shift</kbd>+<kbd>Space</kbd> to go to the next/previous screen (which is equivalent to
-  scrolling down half of screen width). You can also use <kbd>PageDown</kbd> and <kbd>PageUp</kbd>, or
-  <kbd>Ctrl</kbd>+<kbd>d</kbd> and <kbd>Ctrl</kbd>+<kbd>u</kbd>.
-- Press <kbd>-</kbd> to zoom out and <kbd>+</kbd> to zoom in. On macOS, <kbd>Cmd</kbd>+<kbd>-</kbd> zooms out and
-  <kbd>Cmd</kbd>+<kbd>=</kbd> (or <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>=</kbd>) zooms in.
-- Press <kbd>F11</kbd> to enter fullscreen mode.
-- Press <kbd>F10</kbd> to fit the document to screen ignoring white page margins.
-- Press <kbd>F9</kbd> to fit the document to screen (including white margins).
-- Press <kbd>F8</kbd> to toggle dark mode.
-- Enter <kbd>gg</kbd> (press <kbd>g</kbd> two times) to go to the first page. In order to go to a specific page, enter
-  `[NUM]`<kbd>gg</kbd> where `[NUM]` is the page number. For example in order to go to page 31, enter <kbd>31gg</kbd>.
-  You can also press <kbd>Home</kbd> to go to a specific page.
-- Press <kbd>Shift</kbd>+<kbd>g</kbd> (<kbd>G</kbd>) or <kbd>End</kbd> to go to the last page.
-- Press <kbd>t</kbd> to open table of contents (if it exists).
-- Use <kbd>Backspace</kbd> to go back in history. You can also use <kbd>Ctrl</kbd>+<kbd>←</kbd> and
-  <kbd>Ctrl</kbd>+<kbd>→</kbd> to navigate backward/forward in history. Also extra mouse buttons (and, on macOS,
-  trackpad page swipes) can be used to navigate history.
-- With some text selected, press <kbd>ss</kbd> to search the text on Kagi, <kbd>sc</kbd> to search it in Google
-  Scholar and <kbd>sg</kbd> to search it on Google. Try it out on the following text:
+- <kbd>o</kbd> open a file, starting in the current document's folder.
+- <kbd>Ctrl</kbd>+<kbd>o</kbd> open a file, starting in `default_open_file_path` (the home folder if unset).
+- <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>o</kbd> open a file with the system's file dialog (starts in
+  `default_open_file_path` if set).
+- <kbd>Shift</kbd>+<kbd>o</kbd> open a previously opened document.
+- <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> navigation.
+- <kbd>Ctrl</kbd>+<kbd>d</kbd> page down by half a screen (also: <kbd>Space</kbd>, <kbd>PageDown</kbd>)
+- <kbd>Ctrl</kbd>+<kbd>u</kbd> page up by half a screen (also: <kbd>Shift</kbd>+<kbd>Space</kbd>, <kbd>PageUp</kbd>)
+- <kbd>F10</kbd> fit the document to screen ignoring white page margins.
+- <kbd>F9</kbd> fit the document to screen (including white margins).
+- <kbd>F8</kbd> toggle dark mode.
+- <kbd>gg</kbd> go to the first page.
+- `[NUM]`<kbd>gg</kbd> go to page `[NUM]`
+- <kbd>G</kbd> go to the last page.
+- <kbd>t</kbd> open table of contents (if exists)
+- <kbd>Backspace</kbd> go back in history (also: <kbd>Ctrl</kbd>+<kbd>←</kbd>, the mouse's back button, a trackpad
+  swipe on macOS)
+- <kbd>Shift</kbd>+<kbd>Backspace</kbd> go forward in history (also: <kbd>Ctrl</kbd>+<kbd>→</kbd>, the mouse's forward
+  button, a trackpad swipe on macOS)
+- <kbd>ss</kbd> search selected text in configured search engine.
+
+  The default is Google, opened in the system's default browser. To use another engine, put `search_url_s` followed
+  by the engine's search URL in `prefs_user.config` (see [Configuration](#configuration)); the selected text is
+  appended to the URL. For example:
+
+  ```
+  search_url_s https://kagi.com/search?q=
+  ```
+
+  Try it out on the following text:
 
   > Vaswani, Ashish, et al. "**Attention is all you need**." Advances in neural information processing systems. 2017.
 
@@ -108,7 +108,7 @@ out" examples below refer to text in that PDF. On macOS, <kbd>Ctrl</kbd> means t
 
   > You can see a beautiful colorization of mandlebrot set in Figure 1. For more information about the mandlebrot set,
   > see [1].
-- You can also middle click on the full-citation of a paper to search it with the `s` search engine (Kagi; set
+- You can also middle click on the full-citation of a paper to search it with the `s` search engine (Google; set
   `middle_click_search_engine` in `prefs_user.config` to use another one, for example `c` for Google Scholar). You can
   use this feature, for example, while in the "References" section of a document.
 

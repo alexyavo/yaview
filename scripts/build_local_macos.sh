@@ -67,6 +67,10 @@ if "$install_app"; then
     printf 'Previous installation saved to %s\n' "$backup_dir/yaview.app"
   fi
   ditto "$app_path" "$install_target"
+  # ditto keeps the build's timestamps, and the Dock and Finder keep showing a
+  # cached icon while the bundle looks unchanged. Mark it as changed.
+  touch "$install_target" "$install_target/Contents/Info.plist"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$install_target"
   codesign --verify --deep --strict "$install_target"
   printf 'Installed: %s\n' "$install_target"
 else
