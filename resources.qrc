@@ -20,7 +20,6 @@
         <file>pdf_viewer/touchui/TouchAudioButtons.qml</file>
         <file>pdf_viewer/touchui/TouchSettings.qml</file>
         <file>pdf_viewer/touchui/TouchMarkSelector.qml</file>
-        <file>pdf_viewer/touchui/TouchDrawControls.qml</file>
         <file>pdf_viewer/touchui/TouchMacroEditor.qml</file>
         <file>pdf_viewer/touchui/TouchGenericButtons.qml</file>
         <file>pdf_viewer/touchui/TouchSymbolColorSelector.qml</file>
@@ -63,7 +62,6 @@
         <file>icons/home.svg</file>
         <file>icons/left.svg</file>
         <file>icons/right.svg</file>
-        <file>icons/draw.svg</file>
         <file>icons/next.svg</file>
         <file>icons/previous.svg</file>
         <file>icons/go-to-file.svg</file>
@@ -75,16 +73,6 @@
         <file>icons/arrow-begin.svg</file>
         <file>icons/arrow-end.svg</file>
         <file>icons/hourglass.svg</file>
-        <file>icons/adjust.svg</file>
-        <file>icons/close.svg</file>
-        <file>icons/erase.svg</file>
-        <file>icons/finger-index.svg</file>
-        <file>icons/screenshot.svg</file>
-        <file>icons/swap.svg</file>
-        <file>icons/pen.svg</file>
-        <file>icons/save.svg</file>
-        <file>icons/load.svg</file>
-        <file>icons/move.svg</file>
         <file>data/embedding.npy</file>
         <file>data/linear.npy</file>
         <file>data/command_docs.json</file>

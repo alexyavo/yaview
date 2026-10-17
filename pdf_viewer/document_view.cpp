@@ -1,7 +1,6 @@
 #include <cmath>
 
 #include "document_view.h"
-#include "checksum.h"
 #include "database.h"
 #include "document.h"
 #include "qlogging.h"
@@ -28,12 +27,9 @@ extern bool SCROLL_PAST_DOCUMENT_ENDS;
 extern bool HORIZONTAL_SCROLL_PAST_PAGE_ENDS;
 extern bool RECTO_VERSO_ADJUSTMENT;
 
-DocumentView::DocumentView(DatabaseManager* db_manager,
-    DocumentManager* document_manager,
-    CachedChecksummer* checksummer) :
+DocumentView::DocumentView(DatabaseManager* db_manager, DocumentManager* document_manager) :
     db_manager(db_manager),
-    document_manager(document_manager),
-    checksummer(checksummer)
+    document_manager(document_manager)
 {
     page_space_x = PAGE_SPACE_X;
     page_space_y = PAGE_SPACE_Y;
@@ -62,14 +58,13 @@ DocumentViewState DocumentView::get_state() {
     return res;
 }
 
-PortalViewState DocumentView::get_checksum_state() {
+PortalViewState DocumentView::get_portal_state() {
     PortalViewState res;
 
     if (current_document) {
-        res.document_checksum = current_document->get_checksum();
-        res.book_state.offset_x = get_offset_x();
-        res.book_state.offset_y = get_offset_y();
-        res.book_state.zoom_level = get_zoom_level();
+        res.document_path = current_document->get_path();
+        res.pos = current_document->page_pos_to_pdf_space(current_document->absolute_to_page_pos(get_offsets()));
+        res.zoom_level = get_zoom_level();
     }
     return res;
 }
@@ -181,7 +176,7 @@ std::optional<Portal> DocumentView::find_closest_portal(bool limit) {
                 return res;
             }
             else {
-                if (std::abs(res.value().src_offset_y - offset_y) < 500.0f) {
+                if (std::abs(res.value().src_pos.y - offset_y) < 500.0f) {
                     return res;
                 }
             }
@@ -207,16 +202,15 @@ std::optional<BookMark> DocumentView::find_closest_bookmark() {
 
 void DocumentView::goto_portal(Portal* link) {
     if (link) {
-        if (get_document() &&
-            get_document()->get_checksum() == link->dst.document_checksum) {
-            set_book_state(link->dst.book_state);
+        if (!get_document() || get_document()->get_path() != link->dst.document_path) {
+            open_document(link->dst.document_path, nullptr);
         }
-        else {
-            auto destination_path = checksummer->get_path(link->dst.document_checksum);
-            if (destination_path) {
-                open_document(destination_path.value(), nullptr);
-                set_book_state(link->dst.book_state);
+        if (get_document()) {
+            OpenedBookState state = link->dst.book_state(get_document());
+            if (state.zoom_level <= 0) {
+                state.zoom_level = zoom_level;
             }
+            set_book_state(state);
         }
     }
 }
@@ -351,15 +345,14 @@ void DocumentView::add_mark(char symbol) {
     }
 }
 
-std::string DocumentView::add_bookmark(std::wstring desc) {
-    //assert(current_document);
+int DocumentView::add_bookmark(std::wstring desc) {
     if (current_document) {
         return current_document->add_bookmark(desc, get_offset_y());
     }
-    return "";
+    return -1;
 }
 
-std::string DocumentView::add_highlight(AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type) {
+int DocumentView::add_highlight(AbsoluteDocumentPos selection_begin, AbsoluteDocumentPos selection_end, char type) {
 
     if (current_document) {
         std::deque<AbsoluteRect> selected_characters;
@@ -373,7 +366,7 @@ std::string DocumentView::add_highlight(AbsoluteDocumentPos selection_begin, Abs
         }
     }
 
-    return "";
+    return -1;
 }
 
 void DocumentView::on_view_size_change(int new_width, int new_height) {
@@ -798,15 +791,9 @@ void DocumentView::open_document(const std::wstring& doc_path,
     }
     else if (load_prev_state) {
 
-        std::optional<std::string> checksum = checksummer->get_checksum_fast(canonical_path);
-        std::vector<OpenedBookState> prev_state;
-        if (checksum && db_manager->select_opened_book(checksum.value(), prev_state)) {
-            if (prev_state.size() > 1) {
-                LOG(std::cerr << "more than one file with one path, this should not happen!" << std::endl);
-            }
-        }
-        if (prev_state.size() > 0) {
-            OpenedBookState previous_state = prev_state[0];
+        std::optional<OpenedBookState> saved_state = db_manager->select_document(canonical_path);
+        if (saved_state) {
+            OpenedBookState previous_state = saved_state.value();
             zoom_level = previous_state.zoom_level;
             //offset_x = previous_state.offset_x;
             //offset_y = previous_state.offset_y;
@@ -1012,7 +999,7 @@ void DocumentView::fit_to_page_height_width_minimum(int statusbar_height) {
 
 }
 
-void DocumentView::persist(bool persist_drawings) {
+void DocumentView::persist() {
     if (!current_document) return;
     AbsoluteDocumentPos abs_offset = get_offsets();
 
@@ -1020,12 +1007,7 @@ void DocumentView::persist(bool persist_drawings) {
         abs_offset.x = 0;
     }
 
-    db_manager->update_book(current_document->get_checksum(), zoom_level, abs_offset.x, abs_offset.y, current_document->detect_paper_name());
-    if (persist_drawings) {
-        current_document->persist_drawings();
-        current_document->persist_annotations();
-        current_document->persist_extras();
-    }
+    db_manager->update_document(current_document->get_path(), zoom_level, abs_offset.x, abs_offset.y, current_document->detect_paper_name());
 }
 
 int DocumentView::get_current_chapter_index() {
@@ -1731,204 +1713,6 @@ AbsoluteDocumentPos SmartViewCandidate::get_abspos(DocumentView* view) {
     else {
         return get_document(view)->document_to_absolute_pos(std::get<DocumentPos>(target_pos));
     }
-}
-
-ScratchPad::ScratchPad() : DocumentView(nullptr, nullptr, nullptr) {
-    zoom_level = 1;
-}
-
-bool ScratchPad::set_offsets(float new_offset_x, float new_offset_y, bool force) {
-    offset.x = new_offset_x;
-    offset.y = new_offset_y;
-    return false;
-}
-
-float ScratchPad::set_zoom_level(float zl, bool should_exit_auto_resize_mode, bool readjust) {
-    float min_zoom_level = 0.1f;
-    float max_zoom_level = 1000.0f;
-
-    if (zl < min_zoom_level) {
-        zl = min_zoom_level;
-    }
-    if (zl > max_zoom_level) {
-        zl = max_zoom_level;
-    }
-
-    zoom_level = zl;
-    return zoom_level;
-}
-
-float ScratchPad::zoom_in(float zoom_factor, bool readjust) {
-    return set_zoom_level(zoom_level * zoom_factor, true);
-}
-
-float ScratchPad::zoom_out(float zoom_factor, bool readjust) {
-    return set_zoom_level(zoom_level / zoom_factor, true);
-}
-
-std::vector<int> ScratchPad::get_intersecting_drawing_indices(AbsoluteRect selection) {
-    invalidate_compile();
-
-    std::vector<int> res;
-
-    for (int i = 0; i < all_drawings.size(); i++) {
-        for (auto p : all_drawings[i].points) {
-            if (selection.contains(p.pos)) {
-                res.push_back(i);
-                break;
-            }
-        }
-    }
-    return res;
-}
-
-void ScratchPad::delete_intersecting_drawings(AbsoluteRect selection) {
-    invalidate_compile(true);
-
-    std::vector<int> indices = get_intersecting_drawing_indices(selection);
-    for (int i = 0; i < indices.size(); i++) {
-        all_drawings.erase(all_drawings.begin() + indices[indices.size() - 1 - i]);
-    }
-}
-
-std::vector<int> ScratchPad::get_intersecting_pixmap_indices(AbsoluteRect selection) {
-    std::vector<int> res;
-    for (int i = 0; i < pixmaps.size(); i++) {
-        if (selection.intersects(pixmaps[i].rect)) {
-            res.push_back(i);
-        }
-    }
-    return res;
-}
-
-void ScratchPad::delete_intersecting_pixmaps(AbsoluteRect selection) {
-    std::vector<int> indices = get_intersecting_pixmap_indices(selection);
-    for (int i = 0; i < indices.size(); i++) {
-        pixmaps.erase(pixmaps.begin() + indices[indices.size() - 1 - i]);
-    }
-}
-
-void ScratchPad::delete_intersecting_objects(AbsoluteRect selection) {
-    delete_intersecting_drawings(selection);
-    delete_intersecting_pixmaps(selection);
-}
-
-void ScratchPad::get_selected_objects_with_indices(const std::vector<SelectedObjectIndex>&indices, std::vector<FreehandDrawing>&freehand_drawings, std::vector<PixmapDrawing>&pixmap_drawings){
-
-    for (auto [index, type] : indices) {
-        if (type == SelectedObjectType::Drawing) {
-            freehand_drawings.push_back(all_drawings[index]);
-        }
-        else if (type == SelectedObjectType::Pixmap) {
-            pixmap_drawings.push_back(pixmaps[index]);
-        }
-    }
-}
-
-void ScratchPad::add_pixmap(QPixmap pixmap) {
-    AbsoluteDocumentPos top_abs_pos = get_bounding_box().bottom_right();
-    int top_window_pos = top_abs_pos.to_window(this).y;
-
-    float dpr = pixmap.devicePixelRatio();
-    int pixmap_width = pixmap.width() / dpr;
-    int pixmap_height = pixmap.height() / dpr;
-
-    int pixmap_window_left = view_width / 2 - pixmap_width / 2;
-    int pixmap_window_right = view_width / 2 + pixmap_width / 2;
-    int pixmap_window_top = top_window_pos;
-    int pixmap_window_bottom = top_window_pos + pixmap_height;
-
-    WindowPos top_left = { pixmap_window_left, pixmap_window_top };
-    WindowPos bottom_right = { pixmap_window_right, pixmap_window_bottom };
-
-    AbsoluteDocumentPos top_left_abs = top_left.to_absolute(this);
-    AbsoluteDocumentPos bottom_right_abs = bottom_right.to_absolute(this);
-    AbsoluteRect pixmap_rect = AbsoluteRect(top_left_abs, bottom_right_abs);
-    AbsoluteDocumentPos center_pos = pixmap_rect.center();
-    offset.x = center_pos.x;
-    offset.y = center_pos.y;
-
-    pixmaps.push_back(PixmapDrawing{ pixmap, pixmap_rect });
-
-}
-
-AbsoluteRect ScratchPad::get_bounding_box() {
-    AbsoluteRect res;
-    res.x0 = res.x1 = res.y0 = res.y1 = 0;
-
-    if (all_drawings.size() > 0) {
-        res = all_drawings[0].bbox();
-    }
-    else if (pixmaps.size() > 0) {
-        res = pixmaps[0].rect;
-    }
-    else {
-        return res;
-    }
-
-    for (auto drawing : all_drawings) {
-        res = res.union_rect(drawing.bbox());
-    }
-    for (auto [_, pixmap_rect] : pixmaps) {
-        res = res.union_rect(pixmap_rect);
-    }
-
-    return res;
-}
-
-std::vector<SelectedObjectIndex> ScratchPad::get_intersecting_objects(AbsoluteRect selection) {
-    std::vector<SelectedObjectIndex> selected_objects;
-
-    std::vector<int> drawing_indices = get_intersecting_drawing_indices(selection);
-    std::vector<int> pixmap_indices = get_intersecting_pixmap_indices(selection);
-
-    for (auto index : drawing_indices) {
-        selected_objects.push_back(SelectedObjectIndex{ index, SelectedObjectType::Drawing });
-    }
-    for (auto index : pixmap_indices) {
-        selected_objects.push_back(SelectedObjectIndex{ index, SelectedObjectType::Pixmap });
-    }
-
-    return selected_objects;
-}
-
-const std::vector<FreehandDrawing>& ScratchPad::get_all_drawings() {
-    return all_drawings;
-}
-
-const std::vector<FreehandDrawing>& ScratchPad::get_non_compiled_drawings() {
-    return non_compiled_drawings;
-}
-
-void ScratchPad::on_compile() {
-    is_compile_valid = true;
-    non_compiled_drawings.clear();
-}
-
-void ScratchPad::invalidate_compile(bool force) {
-
-    if (non_compiled_drawings.size() > 0) {
-        is_compile_valid = false;
-    }
-    if (force) {
-        is_compile_valid = false;
-    }
-}
-
-void ScratchPad::add_drawing(FreehandDrawing drawing) {
-    all_drawings.push_back(drawing);
-    non_compiled_drawings.push_back(drawing);
-}
-
-void ScratchPad::clear() {
-    all_drawings.clear();
-    pixmaps.clear();
-    non_compiled_drawings.clear();
-    is_compile_valid = false;
-}
-
-bool ScratchPad::is_compile_invalid() {
-    return !is_compile_valid;
 }
 
 std::vector<int> DocumentView::get_visible_bookmark_indices() {

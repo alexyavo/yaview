@@ -1,5 +1,6 @@
 #include "pdf_renderer.h"
 #include "utils.h"
+#include <mupdf/pdf.h>
 #include <qdatetime.h>
 
 extern bool LINEAR_TEXTURE_FILTERING;
@@ -17,7 +18,33 @@ extern float CUSTOM_COLOR_CONTRAST;
 extern int MAX_PENDING_REQUESTS;
 extern unsigned int CACHE_INVALID_MILIES;
 
-PdfRenderer::PdfRenderer(int num_threads, bool* should_quit_pointer, fz_context* context_to_clone) : context_to_clone(context_to_clone),
+// Draws the page with its annotations, except the kinds that are yaview's own annotations (highlights,
+// bookmarks and portals, see document_annotations.cpp), which yaview draws itself over the page.
+static void run_page_without_yaview_annotations(fz_context* ctx, fz_page* page, fz_device* device) {
+    pdf_page* pdf_page = pdf_page_from_fz_page(ctx, page);
+    if (pdf_page == nullptr) {
+        fz_run_page(ctx, page, device, fz_identity, nullptr);
+        return;
+    }
+    fz_run_page_contents(ctx, page, device, fz_identity, nullptr);
+    for (pdf_annot* annot = pdf_first_annot(ctx, pdf_page); annot; annot = pdf_next_annot(ctx, annot)) {
+        switch (pdf_annot_type(ctx, annot)) {
+        case PDF_ANNOT_HIGHLIGHT:
+        case PDF_ANNOT_UNDERLINE:
+        case PDF_ANNOT_STRIKE_OUT:
+        case PDF_ANNOT_TEXT:
+        case PDF_ANNOT_FREE_TEXT:
+        case PDF_ANNOT_SQUARE:
+            break;
+        default:
+            pdf_run_annot(ctx, annot, device, fz_identity, nullptr);
+        }
+    }
+    fz_run_page_widgets(ctx, page, device, fz_identity, nullptr);
+}
+
+PdfRenderer::PdfRenderer(int num_threads, bool* should_quit_pointer, fz_context* context_to_clone, DatabaseManager* db_manager) : context_to_clone(context_to_clone),
+db_manager(db_manager),
 pixmaps_to_drop(num_threads),
 pixmap_drop_mutex(num_threads),
 thread_rendering_mutex(num_threads),
@@ -464,8 +491,7 @@ fz_document* PdfRenderer::get_document_with_path(int thread_index, fz_context* m
 
     fz_document* ret_val = nullptr;
     fz_try(mupdf_context) {
-        //		ret_val = fz_open_document(mupdf_context, utf8_encode(path).c_str());
-        ret_val = open_document_with_file_name(mupdf_context, path);
+        ret_val = open_document_with_file_name(mupdf_context, path, db_manager);
 
         if (fz_needs_password(mupdf_context, ret_val)) {
             if (document_passwords.find(path) != document_passwords.end()) {
@@ -601,7 +627,7 @@ void PdfRenderer::run(int thread_index) {
                     fz_device* draw_device = fz_new_draw_device(mupdf_context, transform_matrix, rendered_pixmap);
 
                     if (req.should_render_annotations) {
-                        fz_run_page(mupdf_context, page, draw_device, fz_identity, nullptr); // todo: use cookie to report progress
+                        run_page_without_yaview_annotations(mupdf_context, page, draw_device);
                     }
                     else {
                         fz_run_page_contents(mupdf_context, page, draw_device, fz_identity, nullptr); // todo: use cookie to report progress

@@ -37,11 +37,10 @@ qt_add_executable(yaview WIN32 MACOSX_BUNDLE
     pdf_viewer/OpenWithApplication.cpp pdf_viewer/OpenWithApplication.h
     pdf_viewer/RunGuard.cpp pdf_viewer/RunGuard.h
     pdf_viewer/book.cpp pdf_viewer/book.h
-    pdf_viewer/checksum.cpp pdf_viewer/checksum.h
     pdf_viewer/config.cpp pdf_viewer/config.h
     pdf_viewer/coordinates.cpp pdf_viewer/coordinates.h
     pdf_viewer/database.cpp pdf_viewer/database.h
-    pdf_viewer/document.cpp pdf_viewer/document.h
+    pdf_viewer/document.cpp pdf_viewer/document_annotations.cpp pdf_viewer/document.h
     pdf_viewer/document_view.cpp pdf_viewer/document_view.h
     pdf_viewer/fts_fuzzy_match.h
     pdf_viewer/input.cpp pdf_viewer/input.h
@@ -58,7 +57,6 @@ qt_add_executable(yaview WIN32 MACOSX_BUNDLE
     pdf_viewer/touchui/TouchConfigMenu.cpp pdf_viewer/touchui/TouchConfigMenu.h
     pdf_viewer/touchui/TouchCopyOptions.cpp pdf_viewer/touchui/TouchCopyOptions.h
     pdf_viewer/touchui/TouchDeleteButton.cpp pdf_viewer/touchui/TouchDeleteButton.h
-    pdf_viewer/touchui/TouchDrawControls.cpp pdf_viewer/touchui/TouchDrawControls.h
     pdf_viewer/touchui/TouchGenericButtons.cpp pdf_viewer/touchui/TouchGenericButtons.h
     pdf_viewer/touchui/TouchHighlightButtons.cpp pdf_viewer/touchui/TouchHighlightButtons.h
     pdf_viewer/touchui/TouchListView.cpp pdf_viewer/touchui/TouchListView.h

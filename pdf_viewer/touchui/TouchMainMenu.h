@@ -36,7 +36,6 @@ public slots:
     void handleTTS();
     void handleHorizontalLock();
     void handleFitToPageWidth();
-    void handleDrawingMode();
     void handleDownloadPaper();
     void handleHint();
 
@@ -64,7 +63,6 @@ signals:
     void ttsClicked();
     void horizontalLockClicked();
     void fitToPageWidthClicked();
-    void drawingModeClicked();
     void downloadPaperClicked();
     void hintClicked();
 

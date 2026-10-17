@@ -1,153 +1,53 @@
 #pragma once
 
-#include <iostream>
 #include <optional>
 #include <vector>
-#include <iostream>
 #include <string>
 #include <mutex>
 #include "sqlite3.h"
 #include "book.h"
 
-class CachedChecksummer;
-
-struct MarkInDatabase {
-    std::string checksum;
+/*
+    A global (uppercase) mark: it opens its document when gone to, so it is the reader's state rather
+    than a document's and lives in the database. Lowercase marks are stored in the document (see
+    document_annotations.cpp).
+*/
+struct GlobalMark {
     char symbol;
+    std::wstring document_path;
     float offset_y;
     std::optional<float> offset_x;
     std::optional<float> zoom_level;
-    std::wstring uuid;
 };
 
+/*
+    The database holds the reader's state about documents, keyed by their path: the reading position and
+    zoom of every document opened so far (which is also the list of previously opened documents), the
+    layout size of reflowable documents, and the global marks. Annotations are in the documents themselves.
+*/
 class DatabaseManager {
 private:
     std::recursive_mutex db_mutex;
-    sqlite3* local_db;
-    sqlite3* global_db;
-    bool create_opened_books_table();
-    bool create_marks_table();
-    bool create_bookmarks_table();
-    bool create_links_table();
-    void create_tables();
-    bool create_document_hash_table();
-    bool create_highlights_table();
+    sqlite3* db = nullptr;
+    bool run(const char* function_name, const std::string& sql, int (*callback)(void*, int, char**, char**) = nullptr, void* callback_data = nullptr);
+    bool create_tables();
 public:
-    bool open(const std::wstring& local_db_file_path, const std::wstring& global_db_file_path);
-    bool select_opened_book(const std::string& book_path, std::vector<OpenedBookState>& out_result);
-    bool insert_mark(const std::string& checksum,
-        char symbol,
-        float offset_y,
-        std::wstring uuid,
-        std::optional<float> offset_x = {},
-        std::optional<float> zoom_level = {});
-    bool update_mark(const std::string& checksum, char symbol, float offset_y, std::optional<float> offset_x, std::optional<float> zoom_level);
-    bool update_book(const std::string& path, float zoom_level, float offset_x, float offset_y, std::wstring actual_name=L"");
-    bool select_mark(const std::string& checksum, std::vector<Mark>& out_result);
-    bool insert_bookmark(const std::string& checksum, const std::wstring& desc, float offset_y, std::wstring uuid);
-    bool insert_bookmark_marked(const std::string& checksum, const std::wstring& desc, float offset_x, float offset_y, std::wstring uuid);
-    //bool insert_bookmark_freetext(const std::string& checksum, const std::wstring& desc, float begin_x, float begin_y, float end_x, float end_y, float color_red, float color_green, float color_blue, float font_size, std::string font_face, std::wstring uuid);
-    bool insert_bookmark_freetext(const std::string& checksum, const BookMark& bm);
-    bool select_bookmark(const std::string& checksum, std::vector<BookMark>& out_result);
-    bool insert_portal(const std::string& src_checksum,
-        const std::string& dst_checksum,
-        float dst_offset_y,
-        float dst_offset_x,
-        float dst_zoom_level,
-        float src_offset_y,
-        std::wstring uuid);
+    bool open(const std::wstring& database_file_path);
 
-    bool insert_visible_portal(const std::string& src_checksum,
-        const std::string& dst_checksum,
-        float dst_offset_y,
-        float dst_offset_x,
-        float dst_zoom_level,
-        float src_offet_x,
-        float src_offset_y,
-        std::wstring uuid);
+    bool update_document(const std::wstring& path, float zoom_level, float offset_x, float offset_y, const std::wstring& name);
+    std::optional<OpenedBookState> select_document(const std::wstring& path);
+    // the paths and detected names of the opened documents, most recently opened first
+    bool select_documents(std::vector<std::pair<std::wstring, std::wstring>>& out_paths_and_names);
+    bool delete_document(const std::wstring& path);
+    bool rename_document(const std::wstring& old_path, const std::wstring& new_path);
 
-    bool select_links(const std::string& src_checksum, std::vector<Portal>& out_result);
-    bool delete_portal(const std::string& uuid);
-    bool delete_bookmark(const std::string& uuid);
-    bool global_select_bookmark(std::vector<std::pair<std::string, BookMark>>& out_result);
-    bool global_select_highlight(std::vector<std::pair<std::string, Highlight>>& out_result);
-    //bool update_portal(const std::string& checksum, float dst_offset_x, float dst_offset_y, float dst_zoom_level, float src_offset_y);
-    bool update_portal(const std::string& uuid, float dst_offset_x, float dst_offset_y, float dst_zoom_level);
-    bool update_highlight_add_annotation(const std::string& uuid, const std::wstring& text_annot);
-    bool update_highlight_type(const std::string& uuid, char new_type);
-    bool update_bookmark_change_text(const std::string& uuid, const std::wstring& new_text, float new_font_size);
-    bool update_bookmark_change_position(const std::string& uuid, AbsoluteDocumentPos new_begin, AbsoluteDocumentPos new_end);
-    bool update_portal_change_src_position(const std::string& uuid, AbsoluteDocumentPos new_pos);
-    bool select_opened_books_path_values(std::vector<std::wstring>& out_result);
-    bool select_opened_books_path_and_doc_names(std::vector<std::pair<std::wstring, std::wstring>>& out_result);
-    bool delete_mark_with_symbol(char symbol);
-    bool delete_mark_with_uuid(const std::string& uuid);
-    bool delete_document_marks(const std::string& checksum);
-    bool delete_all_marks();
-    bool select_global_mark(char symbol, std::vector<std::pair<std::string, float>>& out_result);
-    bool delete_opened_book(const std::string& book_path);
-    bool delete_highlight(const std::string& uuid);
-    bool select_highlight(const std::string& checksum, std::vector<Highlight>& out_result);
-    bool select_highlight_with_type(const std::string& checksum, char type, std::vector<Highlight>& out_result);
-    bool set_actual_document_name(const std::string& checksum, const std::wstring& actual_name);
-    bool insert_highlight(const std::string& checksum,
-        const std::wstring& desc,
-        float begin_x,
-        float begin_y,
-        float end_x,
-        float end_y,
-        char type,
-        std::wstring uuid);
-    bool insert_highlight_with_annotation(const std::string& checksum,
-        const std::wstring& desc,
-        const std::wstring& annot,
-        float begin_x,
-        float begin_y,
-        float end_x,
-        float end_y,
-        char type,
-        std::wstring uuid);
-    bool get_path_from_hash(const std::string& checksum, std::vector<std::wstring>& out_paths);
-    bool get_hash_from_path(const std::string& path, std::vector<std::wstring>& out_checksum);
-    bool get_prev_path_hash_pairs(std::vector<std::pair<std::wstring, std::wstring>>& out_pairs);
-    bool insert_document_hash(const std::wstring& path, const std::string& checksum);
-    void upgrade_database_hashes();
-    void split_database(const std::wstring& local_database_path, const std::wstring& global_database_path, bool was_using_hashes);
-    void export_json(std::wstring json_file_path, CachedChecksummer* checksummer);
-    void import_json(std::wstring json_file_path, CachedChecksummer* checksummer);
-    void ensure_database_compatibility(const std::wstring& local_db_file_path, const std::wstring& global_db_file_path);
-    void ensure_schema_compatibility();
-    int get_version();
-    int set_version();
-    bool run_schema_query(const char* query);
-    void migrate_version_0_to_1();
-    void migrate_version_1_to_2();
-    bool select_all_mark_ids(std::vector<int>& mark_ids);
-    bool select_all_marks(std::vector<MarkInDatabase>& marks);
-    bool select_all_bookmark_ids(std::vector<int>& mark_ids);
-    bool select_all_highlight_ids(std::vector<int>& mark_ids);
-    bool select_all_portal_ids(std::vector<int>& mark_ids);
+    bool set_layout_size(const std::wstring& path, float width, float height);
+    std::optional<std::pair<float, float>> select_layout_size(const std::wstring& path);
 
-    std::string get_annot_table_name(Annotation* annot);
-
-    bool insert_annotation(Annotation* annot, std::string document_hash);
-    bool update_annotation(Annotation* annot);
-    bool delete_annotation(Annotation* annot);
-    bool update_file_name(std::wstring old_name, std::wstring new_name);
-
-    std::wstring generic_update_create_query(std::string table_name,
-        std::vector<std::pair<std::string, QVariant>> selections,
-        std::vector<std::pair<std::string, QVariant>> updated_values);
-
-    std::wstring generic_insert_create_query(std::string table_name,
-        std::vector<std::pair<std::string, QVariant>> values);
-
-    bool generic_update_run_query(std::string table_name,
-        std::vector<std::pair<std::string, QVariant>> selections,
-        std::vector<std::pair<std::string, QVariant>> updated_values);
-
-    bool generic_insert_run_query(std::string table_name,
-        std::vector<std::pair<std::string, QVariant>> values);
+    bool set_global_mark(const GlobalMark& mark);
+    std::optional<GlobalMark> select_global_mark(char symbol);
+    bool select_global_marks(std::vector<GlobalMark>& out_marks);
+    bool delete_global_mark(char symbol);
+    bool delete_global_marks_of_document(const std::wstring& path);
+    bool delete_all_global_marks();
 };
-
-

@@ -38,7 +38,6 @@ SOURCES += \
         pdf_viewer/touchui/TouchSettings.cpp \
         pdf_viewer/touchui/TouchAudioButtons.cpp \
         pdf_viewer/touchui/TouchMarkSelector.cpp \
-        pdf_viewer/touchui/TouchDrawControls.cpp \
         pdf_viewer/touchui/TouchMacroEditor.cpp \
         pdf_viewer/touchui/TouchGenericButtons.cpp \
         pdf_viewer/touchui/TouchMainMenu.cpp
@@ -59,7 +58,6 @@ HEADERS += \
     pdf_viewer/touchui/TouchSettings.h \
     pdf_viewer/touchui/TouchAudioButtons.h \
     pdf_viewer/touchui/TouchMarkSelector.h \
-    pdf_viewer/touchui/TouchDrawControls.h \
     pdf_viewer/touchui/TouchMacroEditor.h \
     pdf_viewer/touchui/TouchGenericButtons.h \
     pdf_viewer/touchui/TouchMainMenu.h
@@ -80,7 +78,6 @@ HEADERS += pdf_viewer/book.h \
            pdf_viewer/main_widget.h \
            pdf_viewer/pdf_renderer.h \
            pdf_viewer/pdf_view_opengl_widget.h \
-           pdf_viewer/checksum.h \
            pdf_viewer/new_file_checker.h \
            pdf_viewer/coordinates.h \
            pdf_viewer/sqlite3.h \
@@ -102,13 +99,13 @@ SOURCES += pdf_viewer/book.cpp \
            pdf_viewer/config.cpp \
            pdf_viewer/database.cpp \
            pdf_viewer/document.cpp \
+           pdf_viewer/document_annotations.cpp \
            pdf_viewer/document_view.cpp \
            pdf_viewer/input.cpp \
            pdf_viewer/main.cpp \
            pdf_viewer/main_widget.cpp \
            pdf_viewer/pdf_renderer.cpp \
            pdf_viewer/pdf_view_opengl_widget.cpp \
-           pdf_viewer/checksum.cpp \
            pdf_viewer/new_file_checker.cpp \
            pdf_viewer/coordinates.cpp \
            pdf_viewer/sqlite3.c \

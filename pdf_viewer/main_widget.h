@@ -37,7 +37,6 @@ class QTextToSpeech;
 class QStringListModel;
 class QLabel;
 class TouchTextSelectionButtons;
-class DrawControlsUI;
 class SearchButtons;
 class HighlightButtons;
 
@@ -45,24 +44,16 @@ struct fz_context;
 struct fz_stext_char;
 
 class DocumentView;
-class ScratchPad;
 class Document;
 class InputHandler;
 class ConfigManager;
 class PdfRenderer;
-class CachedChecksummer;
 class CommandManager;
 class Command;
 class PdfViewOpenGLWidget;
 class DatabaseManager;
 class DocumentManager;
 class TextToSpeechHandler;
-
-enum class DrawingMode {
-    Drawing,
-    PenDrawing,
-    None
-};
 
 enum class SelectionMode {
     Character,
@@ -115,24 +106,12 @@ struct PortalMoveData {
 };
 
 
-struct SelectedDrawings {
-    int page;
-    AbsoluteRect selection_absrect;
-    std::vector<SelectedObjectIndex> selected_indices;
-};
-
 struct PendingDownloadPortal {
     Portal pending_portal;
     std::wstring paper_name;
     std::wstring source_document_path;
     // the pending portal is marked for deletion
     bool marked = false;
-};
-
-struct FreehandDrawingMoveData {
-    std::vector<FreehandDrawing> initial_drawings;
-    std::vector<PixmapDrawing> initial_pixmaps;
-    AbsoluteDocumentPos initial_mouse_position;
 };
 
 struct ClickSpaceTime {
@@ -163,7 +142,6 @@ public:
     QNetworkAccessManager network_manager;
     PdfRenderer* pdf_renderer = nullptr;
     InputHandler* input_handler = nullptr;
-    CachedChecksummer* checksummer = nullptr;
     QWidget* central_widget = nullptr;
     QMenuBar* menu_bar = nullptr;
     int window_id;
@@ -196,7 +174,6 @@ public:
     int last_performed_command_num_repeats = 0;
 
     DocumentView* main_document_view = nullptr;
-    ScratchPad* scratchpad = nullptr;
     DocumentView* helper_document_view_ = nullptr;
 
     // A stack of widgets to be displayed (e.g. the bookmark menu or the touch main menu).
@@ -245,8 +222,7 @@ public:
     // selected text (using mouse cursor or other methods) which is used e.g. for copying or highlighting
     std::wstring selected_text;
 
-    // whether we are in rect/point select mode (some commands require a rectangle to be executed
-    // for example `delete_freehand_drawings`)
+    // whether we are in rect/point select mode (some commands require a rectangle to be executed)
     bool rect_select_mode = false;
     bool point_select_mode = false;
 
@@ -273,15 +249,6 @@ public:
     bool is_select_highlight_mode = false;
     char select_highlight_type = 'a';
 
-    // color type to use when freehand drawing
-    char current_freehand_type = 'r';
-
-    // alpha of freehand drawings
-    float freehand_alpha = 1.0f;
-
-    // line thickness of freehand drawings
-    float freehand_thickness = 1.0f;
-
     // in smooth scroll mode we scroll the document smoothly instead of jumping to the target
     // `smooth_scroll_speed` is used to keep track of our speed in this mode
     bool smooth_scroll_mode = false;
@@ -306,18 +273,9 @@ public:
     int selected_bookmark_index = -1;
     int selected_portal_index = -1;
 
-    std::optional<SelectedDrawings> selected_freehand_drawings = {};
-    std::optional<FreehandDrawingMoveData> freehand_drawing_move_data = {};
-
     // An incomplete portal that is being created. The source of the portal is filled
     // but the destination still needs to be set.
     std::optional<std::pair<std::optional<std::wstring>, Portal>> current_pending_portal;
-
-    // the current freehand drawing mode. None means we are not drawing anything
-    // Drawing means we use the mouse to draw a freehand diagram
-    // and PenDrawing means we assume the user is using a pen so we treat mouse inputs
-    // normally and only use pen inputs for freehand drawing
-    DrawingMode freehand_drawing_mode = DrawingMode::None;
 
     // In mouse drag mode, we use the mouse to drag the document around
     bool mouse_drag_mode = false;
@@ -330,9 +288,6 @@ public:
     bool is_dragging = false;
     // are we performing pinch to zoom gesture
     bool is_pinching = false;
-
-    // are we currently freehand drawing on the document
-    bool is_drawing = false;
 
     // should we show the status label?
     // If touch mode is enabled, we don't show the status label at all, unless there is another window
@@ -429,7 +384,7 @@ public:
     int num_js_engines = 0;
 
     bool main_document_view_has_document();
-    std::optional<std::string> get_last_opened_file_checksum();
+    std::optional<std::wstring> get_last_opened_file_path();
 
 
     int get_current_colorscheme_index();
@@ -445,7 +400,7 @@ public:
     // search the `paper_name` in one of the configurable when middle-click or shift+middle-clicking on paper's name
     void handle_search_paper_name(std::wstring paper_name, bool is_shift_pressed);
 
-    void persist(bool persist_drawings = false);
+    void persist();
     bool is_pending_link_source_filled();
     std::wstring get_status_string(bool is_right);
     void handle_escape();
@@ -548,7 +503,6 @@ public:
         ConfigManager* config_manager,
         CommandManager* command_manager,
         InputHandler* input_handler,
-        CachedChecksummer* checksummer,
         bool* should_quit_ptr,
         PdfRenderer* pdf_renderer,
         QWidget* parent = nullptr
@@ -565,10 +519,9 @@ public:
     void invalidate_ui();
     void open_document(const Path& path, std::optional<float> offset_x = {}, std::optional<float> offset_y = {}, std::optional<float> zoom_level = {});
     void open_document(const std::wstring& path, std::optional<float> offset_x = {}, std::optional<float> offset_y = {}, std::optional<float> zoom_level = {});
-    void open_document_with_hash(const std::string& hash, std::optional<float> offset_x = {}, std::optional<float> offset_y = {}, std::optional<float> zoom_level = {});
     void open_document_at_location(const Path& path, int page, std::optional<float> x_loc, std::optional<float> y_loc, std::optional<float> zoom_level);
     void open_document(const DocumentViewState& state);
-    void open_document(const PortalViewState& checksum);
+    void open_document(const PortalViewState& destination);
     void validate_render();
     void validate_ui();
     void zoom(WindowPos pos, float zoom_factor, bool zoom_in);
@@ -585,18 +538,11 @@ public:
     AbsoluteRect move_visual_mark(int offset);
     void on_config_file_changed(ConfigManager* new_config);
     void toggle_mouse_drag_mode();
-    void toggle_freehand_drawing_mode();
-    void exit_freehand_drawing_mode();
-    void toggle_pen_drawing_mode();
-    void set_pen_drawing_mode(bool enabled);
-    void set_hand_drawing_mode(bool enabled);
-    void handle_drawing_ui_visibilty();
 
     void toggle_dark_mode();
     void toggle_custom_color_mode();
     void do_synctex_forward_search(const Path& pdf_file_path, const Path& latex_file_path, int line, int column);
     //void handle_args(const QStringList &arguments);
-    void update_link_with_opened_book_state(Portal lnk, const OpenedBookState& new_state);
     void update_closest_link_with_opened_book_state(const OpenedBookState& new_state);
     void set_current_widget(QWidget* new_widget);
     void push_current_widget(QWidget* new_widget);
@@ -680,6 +626,10 @@ public:
     void handle_show_marks();
     void handle_goto_bookmark_global();
     std::wstring handle_add_highlight(char symbol);
+    // the result of a command that adds a bookmark: the bookmark's object number in the PDF, empty when none was added
+    std::wstring bookmark_result_string(int bookmark_index);
+    // whether the current document can hold annotations (it is a PDF); shows a message in the status bar when not
+    bool ensure_annotatable();
     void handle_goto_highlight();
     void handle_goto_highlight_global();
     void handle_goto_toc();
@@ -688,6 +638,7 @@ public:
     void clear_document_marks();
     void clear_all_marks();
     void handle_open_all_docs();
+    void show_opened_documents(bool include_current);
     void handle_move_screen(int amount);
     MainWidget* handle_new_window();
     void handle_open_link(const std::wstring& text, bool copy = false);
@@ -708,7 +659,6 @@ public:
     void handle_toggle_reading();
     void handle_stop_reading();
     void handle_play();
-    void handle_undo_drawing();
     void handle_pause();
     void read_current_line();
     void download_paper_under_cursor(bool use_last_touch_pos = false);
@@ -722,9 +672,6 @@ public:
     void handle_remove_marked_data();
     void handle_export_marked_data();
     void handle_goto_random_page();
-    void hande_turn_on_all_drawings();
-    void hande_turn_off_all_drawings();
-    void handle_toggle_drawing_mask(char symbol);
     void show_command_palette();
 
     DocumentPos get_document_pos_under_window_pos(WindowPos window_pos);
@@ -733,7 +680,6 @@ public:
     std::string get_current_mode_string();
 
     void show_audio_buttons();
-    void set_freehand_thickness(float val);
 
     // Text selection indicators in touch mode
     SelectionIndicator* selection_begin_indicator = nullptr;
@@ -798,12 +744,6 @@ public:
     bool is_in_edit_portal_rect(WindowPos pos);
     bool is_in_visual_mark_next_rect(WindowPos pos);
     bool is_in_visual_mark_prev_rect(WindowPos pos);
-    void handle_drawing_move(QPoint pos, float pressure);
-    void start_drawing();
-    void finish_drawing(QPoint pos);
-    void handle_pen_drawing_event(QTabletEvent* te);
-    void select_freehand_drawings(AbsoluteRect rect);
-    void delete_freehand_drawings(AbsoluteRect rect);
     void handle_move_text_mark_forward(bool word);
     void handle_move_text_mark_backward(bool word);
     void handle_move_text_mark_down();
@@ -826,13 +766,11 @@ public:
 
 protected:
     TouchTextSelectionButtons* text_selection_buttons_ = nullptr;
-    DrawControlsUI* draw_controls_ = nullptr;
     SearchButtons* search_buttons_ = nullptr;
     HighlightButtons* highlight_buttons_ = nullptr;
     bool middle_click_hold_command_already_executed = false;
 
     TouchTextSelectionButtons* get_text_selection_buttons();
-    DrawControlsUI* get_draw_controls();
     SearchButtons* get_search_buttons();
     HighlightButtons* get_highlight_buttons();
 
@@ -875,8 +813,6 @@ public:
     void begin_bookmark_move(int index, AbsoluteDocumentPos begin_cursor_pos);
     void begin_portal_move(int index, AbsoluteDocumentPos begin_cursor_pos, bool is_pending);
     bool should_drag();
-    void handle_freehand_drawing_move_finish();
-    void move_selected_drawings(AbsoluteDocumentPos new_pos, std::vector<FreehandDrawing>& moved_drawings, std::vector<PixmapDrawing>& moved_pixmaps);
     bool goto_ith_next_overview(int i);
     void on_overview_source_updated();
     std::optional<std::wstring> get_overview_paper_name();
@@ -911,8 +847,6 @@ public:
     void show_text_prompt(std::wstring initial_value, std::function<void(std::wstring)> on_select);
     void show_touch_buttons_for_overview_type(std::string type);
     void set_overview_page(std::optional<OverviewState> overview);
-    std::vector<std::wstring> get_new_files_from_scan_directory();
-    void scan_new_files_from_scan_directory();
     void export_python_api();
     QJSEngine* take_js_engine(bool async);
     void release_async_js_engine(QJSEngine* engine);
@@ -986,8 +920,6 @@ public:
     void rotate_clockwise();
     void rotate_counterclockwise();
     void toggle_fastread();
-    void export_json(std::wstring json_file_path);
-    void import_json(std::wstring json_file_path);
     bool does_current_widget_consume_quicktap_event();
     bool is_moving_annotations();
     PdfViewOpenGLWidget* helper_opengl_widget();
@@ -1009,18 +941,6 @@ public:
     void set_text_prompt_text(QString text);
     AbsoluteDocumentPos get_window_abspos(WindowPos window_pos);
     DocumentView* dv();
-    bool should_draw(bool originated_from_pen);
-    void handle_freehand_drawing_selection_click(AbsoluteDocumentPos click_pos);
-    bool is_scratchpad_mode();
-    void toggle_scratchpad_mode();
-    void add_pixmap_to_scratchpad(QPixmap pixmap);
-    void save_scratchpad();
-    void load_scratchpad();
-    void clear_scratchpad();
-    char get_current_freehand_type();
-    float get_current_freehand_alpha();
-    void set_current_freehand_alpha(float alpha);
-    void show_draw_controls();
     PaperDownloadFinishedAction get_default_paper_download_finish_action();
     QString get_paper_download_finish_action_string(PaperDownloadFinishedAction action);
     PaperDownloadFinishedAction get_paper_download_action_from_string(QString str);
@@ -1031,8 +951,6 @@ public:
     QMenu* get_menu_from_items(std::unique_ptr<MenuItems> items, QWidget* parent);
     void show_recursive_context_menu(std::unique_ptr<MenuItems> items);
     QPoint cursor_pos();
-    void clear_current_page_drawings();
-    void clear_current_document_drawings();
     void set_selected_highlight_index(int index);
     void set_selected_bookmark_index(int index);
     void handle_highlight_tags_pre_perform(const std::vector<int>& visible_highlight_indices);

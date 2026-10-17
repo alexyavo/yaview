@@ -17,20 +17,10 @@
 class DocumentView;
 class Document;
 
-enum class SelectedObjectType {
-    Drawing,
-    Pixmap
-};
-
-struct SelectedObjectIndex {
-    int index;
-    SelectedObjectType type;
-};
-
 struct BookState {
     std::wstring document_path;
     float offset_y;
-    std::string uuid;
+    int pdf_object;
 };
 
 struct OverviewState {
@@ -52,64 +42,67 @@ struct OpenedBookState {
     int line_index = -1;
 };
 
+/*
+    Bookmarks, highlights and portals are stored in the PDF file as PDF annotations (see
+    document_annotations.cpp). pdf_object is the object number of the annotation in the file; it
+    identifies the annotation until the document is closed, and is 0 for an annotation that is not
+    in the file yet.
+*/
 struct Annotation {
     std::string creation_time;
     std::string modification_time;
-    std::string uuid;
+    int pdf_object = 0;
 
-    virtual QJsonObject to_json(std::string doc_checksum) const = 0;
-    virtual void  add_to_tuples(std::vector<std::pair<std::string, QVariant>>& tuples) = 0;
-    virtual std::vector<std::pair<std::string, QVariant>> to_tuples();
-    virtual void from_json(const QJsonObject& json_object) = 0;
+    virtual QJsonObject to_json() const = 0;
 
     void add_metadata_to_json(QJsonObject& obj) const;
-    void load_metadata_from_json(const QJsonObject& obj);
 
     QDateTime get_creation_datetime() const;
     QDateTime get_modification_datetime() const;
 
     void update_creation_time();
     void update_modification_time();
+    void set_times(int64_t creation_secs, int64_t modification_secs);
 };
 
 /*
     A mark is a location in the document labeled with a symbol (which is a single character [a-z]). For example
     we can mark a location with symbol 'a' and later return to that location by going to the mark named 'a'.
-    Lower case marks are local to the document and upper case marks are global.
+    Lower case marks are local to the document and are stored in the PDF file, upper case marks are global
+    and are stored in the database.
 */
-struct Mark : Annotation {
+struct Mark {
     float y_offset;
     char symbol;
     std::optional<float> x_offset = {};
     std::optional<float> zoom_level = {};
 
-    QJsonObject to_json(std::string doc_checksum) const;
-    void from_json(const QJsonObject& json_object);
-    void add_to_tuples(std::vector<std::pair<std::string, QVariant>>& tuples) override;
+    QJsonObject to_json() const;
 };
 
 /*
-    A bookmark is similar to mark but instead of being indexed by a symbol, it has a description.
+    A bookmark is a note at a position in the document: either a marker with a description (a Text annotation
+    in the PDF), or a freetext bookmark, which draws its description inside a rectangle (a FreeText annotation).
+    A freetext bookmark whose description starts with '#' is a box: it draws a rectangle in the color of the
+    highlight type given by the next character (a Square annotation).
 */
 struct BookMark : Annotation {
-    float y_offset_ = -1;
     std::wstring description;
 
+    // position of the marker, or the top left corner of a freetext bookmark
     float begin_x = -1;
     float begin_y = -1;
+    // bottom right corner of a freetext bookmark (-1 for a marker)
     float end_x = -1;
     float end_y = -1;
 
     float color[3] = { 0 };
     float font_size = -1;
-    std::wstring font_face;
 
-    AbsoluteDocumentPos begin_pos();
-    AbsoluteDocumentPos end_pos();
-    AbsoluteRect rect();
-    QJsonObject to_json(std::string doc_checksum) const;
-    void from_json(const QJsonObject& json_object);
-    void add_to_tuples(std::vector<std::pair<std::string, QVariant>>& tuples) override;
+    AbsoluteDocumentPos begin_pos() const;
+    AbsoluteDocumentPos end_pos() const;
+    AbsoluteRect rect() const;
+    QJsonObject to_json() const;
     float get_y_offset() const;
 
     bool is_freetext() const;
@@ -120,18 +113,21 @@ struct BookMark : Annotation {
     AbsoluteRect get_rectangle() const;
 };
 
+/*
+    A highlight of a text range. The type is a letter: lowercase types are highlights, uppercase types underlines
+    (both in the color of highlight_color_<letter>), and '_' is a strikethrough. In the PDF it is a Highlight,
+    Underline or StrikeOut annotation whose quad points are highlight_rects.
+*/
 struct Highlight : Annotation {
     AbsoluteDocumentPos selection_begin;
     AbsoluteDocumentPos selection_end;
+    // the highlighted text; empty until Document::get_highlight_text fills it
     std::wstring description;
     std::wstring text_annot;
     char type;
     std::vector<AbsoluteRect> highlight_rects;
 
-    QJsonObject to_json(std::string doc_checksum) const;
-    void add_to_tuples(std::vector<std::pair<std::string, QVariant>>& tuples) override;
-    void from_json(const QJsonObject& json_object);
-
+    QJsonObject to_json() const;
 };
 
 
@@ -155,11 +151,6 @@ struct ParsedUri {
     float y;
 };
 
-struct FreehandDrawingPoint {
-    AbsoluteDocumentPos pos;
-    float thickness;
-};
-
 enum class SearchCaseSensitivity {
     CaseSensitive,
     CaseInsensitive,
@@ -173,19 +164,6 @@ struct DocumentCharacter {
     fz_stext_block* stext_block;
     fz_stext_line* stext_line;
     fz_stext_char* stext_char;
-};
-
-struct FreehandDrawing {
-    std::vector<FreehandDrawingPoint> points;
-    char type;
-    float alpha = 1;
-    QDateTime creattion_time;
-    AbsoluteRect bbox();
-};
-
-struct PixmapDrawing {
-    QPixmap pixmap;
-    AbsoluteRect rect;
 };
 
 struct CharacterAddress {
@@ -213,9 +191,17 @@ struct DocumentViewState {
     OpenedBookState book_state;
 };
 
+/*
+    The destination of a portal: a position on a page of a document, which may be another file than the
+    portal's. It is kept in page coordinates because the destination document is not necessarily loaded;
+    book_state converts it to view offsets once it is.
+*/
 struct PortalViewState {
-    std::string document_checksum;
-    OpenedBookState book_state;
+    std::wstring document_path;
+    DocumentPos pos;
+    float zoom_level = -1;
+
+    OpenedBookState book_state(Document* destination_document) const;
 };
 
 struct OverviewResizeData {
@@ -238,20 +224,14 @@ struct OverviewTouchMoveData {
     A link is a connection between two document locations. For example when reading a paragraph that is referencing a figure,
     we may want to link that paragraphs's location to the figure. We can then easily switch between the paragraph and the figure.
     Also if helper window is opened, it automatically displays the closest link to the current location.
+    In the PDF it is a Link annotation (marked as yaview's) whose action goes to the destination.
     Note that this is different from PdfLink which is the built-in link functionality in PDF file format.
 */
 struct Portal : Annotation {
-    static Portal with_src_offset(float src_offset);
-
     PortalViewState dst;
-    float src_offset_y;
-    std::optional<float> src_offset_x = {};
+    AbsoluteDocumentPos src_pos;
 
-    bool is_visible() const;
-
-    QJsonObject to_json(std::string doc_checksum) const;
-    void from_json(const QJsonObject& json_object);
-    void add_to_tuples(std::vector<std::pair<std::string, QVariant>>& tuples) override;
+    QJsonObject to_json() const;
 
     AbsoluteRect get_rectangle() const;
 };
@@ -347,7 +327,3 @@ bool operator==(const Mark& lhs, const Mark& rhs);
 bool operator==(const BookMark& lhs, const BookMark& rhs);
 bool operator==(const Highlight& lhs, const Highlight& rhs);
 bool operator==(const Portal& lhs, const Portal& rhs);
-
-bool are_same(const BookMark& lhs, const BookMark& rhs);
-
-bool are_same(const Highlight& lhs, const Highlight& rhs);

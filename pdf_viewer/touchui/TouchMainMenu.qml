@@ -36,7 +36,6 @@ Rectangle{
     signal ttsClicked();
     signal horizontalLockClicked();
     signal fitToPageWidthClicked();
-    signal drawingModeButtonClicked();
     signal downloadPaperClicked();
 
     property bool is_fit: _fit;
@@ -141,7 +140,6 @@ Rectangle{
                     _portaling ? "qrc:/icons/link-enabled.svg" :  "qrc:/icons/link.svg",
                     "qrc:/icons/unlink.svg",
                     _speaking ? "qrc:/icons/tts-enabled.svg" :  "qrc:/icons/tts.svg",
-                    "qrc:/icons/draw.svg",
                     is_locked ? "qrc:/icons/lock-enabled.svg" :"qrc:/icons/lock.svg",
                     "qrc:/icons/bookmark-g.svg",
                     "qrc:/icons/highlight-g.svg",
@@ -153,7 +151,6 @@ Rectangle{
                     "Portal",
                     "Delete Portal",
                     "Text to Speech",
-                    "Darwing Mode",
                     "Lock Horizontal Scroll",
                     "All Bookmarks",
                     "All Highlights",
@@ -183,23 +180,20 @@ Rectangle{
                                 /* emit */ ttsClicked();
                                 break;
                             case 4:
-                                /* emit */ drawingModeButtonClicked();
-                                break;
-                            case 5:
                                 /* emit */ horizontalLockClicked();
                                 is_locked = !is_locked;
                                 break;
-                            case 6:
+                            case 5:
                                 /* emit */ globalBookmarksClicked();
                                 break;
-                            case 7:
+                            case 6:
                                 /* emit */ globalHighlightsClicked();
                                 break;
-                            case 8:
+                            case 7:
                                 /* emit */ fitToPageWidthClicked();
                                 is_fit = !is_fit;
                                 break;
-                            case 9:
+                            case 8:
                                 /* emit */ downloadPaperClicked();
                                 break;
                             default:

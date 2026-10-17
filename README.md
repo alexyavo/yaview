@@ -12,6 +12,9 @@ yaview is a fork of [sioyek](https://github.com/ahrm/sioyek).
 
 lightweight, supports vim navigation.
 
+Highlights, bookmarks and portals are saved in the PDF file itself, as standard PDF annotations that other readers
+show too; marks are saved in the file as well. yaview only ever appends to a PDF, it never rewrites it.
+
 ### Basics
 
 - <kbd>o</kbd> open a file, starting in the current document's folder.
@@ -54,9 +57,9 @@ lightweight, supports vim navigation.
 - <kbd>m</kbd> + letter set a mark at the current location (e.g. <kbd>ma</kbd>). Lowercase marks belong to the
   document, uppercase marks are global (going to one opens its document). Marks are kept across restarts.
 - <kbd>&#96;</kbd> + letter go to a mark (e.g. <kbd>&#96;</kbd><kbd>a</kbd>).
-- `:show_marks` list the marks of all documents.
+- `:show_marks` list the marks of the current document and the global marks.
 - `:clear_document_marks` delete the marks of the current document (including the uppercase ones set in it).
-- `:clear_all_marks` delete the marks of all documents.
+- `:clear_all_marks` delete the global marks and the marks of all open documents.
 - Right click a line to put a ruler (visual mark) under it.
 - <kbd>j</kbd> / <kbd>k</kbd> move the ruler to the next/previous line (also: <kbd>↓</kbd> / <kbd>↑</kbd>).
 - <kbd>&#96;</kbd><kbd>&#96;</kbd> go back to the ruler's last location (also: <kbd>&#96;</kbd> then right click).
@@ -67,7 +70,7 @@ lightweight, supports vim navigation.
 - <kbd>b</kbd> add a bookmark at the current location: type its text and press <kbd>Enter</kbd>. Selected text is
   filled in as the bookmark text.
 - <kbd>gb</kbd> search the bookmarks of the current document.
-- <kbd>gB</kbd> search the bookmarks of all documents.
+- <kbd>gB</kbd> search the bookmarks of all previously opened documents (read from their files).
 - <kbd>db</kbd> delete the closest bookmark.
 
 ### Highlights
@@ -75,7 +78,7 @@ lightweight, supports vim navigation.
 - <kbd>h</kbd> + lowercase letter highlight the selected text (e.g. <kbd>ha</kbd>). The letter is the highlight's type;
   each type has its own color (`highlight_color_<letter>` in `yaview.config`).
 - <kbd>gh</kbd> search the highlights of the current document.
-- <kbd>gH</kbd> search the highlights of all documents.
+- <kbd>gH</kbd> search the highlights of all previously opened documents (read from their files).
 - <kbd>gnh</kbd> / <kbd>gNh</kbd> go to the next/previous highlight.
 - <kbd>dh</kbd> delete the clicked highlight.
 
@@ -174,7 +177,7 @@ lightweight, supports vim navigation.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `status_bar_format` | `[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{highlight}%{freehand_drawing}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}` | Template of the left part of the status bar; each `%{...}` placeholder is replaced by its value. |
+| `status_bar_format` | `[ %{current_page} / %{num_pages} ]%{chapter_name}%{search_results}%{search_progress}%{link_status}%{waiting_for_symbol}%{indexing}%{preview_index}%{synctex}%{drag}%{presentation}%{visual_scroll}%{locked_scroll}%{highlight}%{closest_bookmark}%{close_portal}%{rect_select}%{custom_message}%{download}` | Template of the left part of the status bar; each `%{...}` placeholder is replaced by its value. |
 | `right_status_bar_format` |  | Template of the right-aligned part of the status bar, with the same placeholders. |
 | `status_bar_color` | `0 0 0` | Background of the status bar, the text input bar and the command hints. |
 | `status_bar_text_color` | `1 1 1` | Text color of the status bar, the text input bar and the command hints. |
@@ -314,11 +317,11 @@ lightweight, supports vim navigation.
 | `middle_click_search_engine` | `s` | Letter of the `search_url_<letter>` used when middle-clicking a paper name. |
 | `shift_middle_click_search_engine` | `l` | Letter of the `search_url_<letter>` used when Shift+middle-clicking a paper name; `search_url_l` is empty by default. |
 
-#### Highlights, bookmarks and drawings
+#### Highlights and bookmarks
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `highlight_color_<letter>` | 26 colors from `0.94 0.64 1.00` (`a`) to `1.00 0.31 0.02` (`z`), listed in `prefs.config` | Color of highlight type `<letter>` (the uppercase type draws an underline in the same color) and of freehand drawings of that type. |
+| `highlight_color_<letter>` | 26 colors from `0.94 0.64 1.00` (`a`) to `1.00 0.31 0.02` (`z`), listed in `prefs.config` | Color of highlight type `<letter>` (the uppercase type draws an underline in the same color). |
 | `strike_line_width` | `1.0` | Line thickness of underline and strikethrough highlights (range 0–10). |
 | `exact_highlight_select` | `0` | Highlight exactly the selected characters instead of expanding to whole words. |
 | `sort_highlights_by_location` | `1` | Sort the highlight list by position in the document instead of creation time. |
@@ -326,10 +329,6 @@ lightweight, supports vim navigation.
 | `freetext_bookmark_color` | `0 0 0` | Text color of new freetext bookmarks. |
 | `freetext_bookmark_font_size` | `8` | Default font size of freetext bookmarks; `increase_freetext_font_size`/`decrease_freetext_font_size` change it (range 0–100). |
 | `render_freetext_borders` | `0` | Draw a border around freetext bookmarks. |
-| `lighten_colors_when_embedding_annotations` | `1` | Lighten highlight colors when `embed_annotations` writes them into a PDF. |
-| `simplify_freehand_drawings` | `1` | Drop redundant points from a freehand stroke when it ends. |
-| `annotations_directory` |  | Folder for each document's side files (`<file>.yaview.drawings`, `.scratchpad`, `.annotations`); empty puts them next to the document. |
-| `shared_database_path` |  | Path of the `shared.db` database; a synced folder shares it between computers; empty uses the data folder. |
 
 #### Portals, overview and links
 
@@ -365,7 +364,7 @@ lightweight, supports vim navigation.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `render_pdf_annotations` | `1` | Render the annotations stored in the PDF itself. |
+| `render_pdf_annotations` | `1` | Draw the annotations in the PDF that are not yaview's (stamps, ink, form fields, ...); highlights, bookmarks and portals are drawn regardless. |
 | `linear_filter` | `0` | Draw pages with linear instead of nearest-neighbor texture filtering. |
 | `gamma` | `1` | Gamma correction applied to rendered pages; 1 changes nothing (range 0–1). |
 | `background_pixel_fix` | `0` | Leave out each page's last pixel row and column to avoid a light strip on dark backgrounds. |
@@ -413,7 +412,6 @@ lightweight, supports vim navigation.
 | `single_main_window_size` | `-1 -1` | Main window size without the helper window; `-1 -1` fills the primary screen (saved by yaview). |
 | `single_main_window_move` | `-1 -1` | Main window position without the helper window (saved by yaview). |
 | `default_open_file_path` |  | Start folder of the file browser (`open_document_embedded`, Ctrl+O) and the native open dialog; the file browser uses the home folder when empty. |
-| `scan_path` |  | Folder whose new files `scan_new_files` adds to the document database. |
 | `reload_interval_miliseconds` | `200` | How long a changed document must stay unchanged on disk before it is reloaded (range 0–10000). |
 
 #### Synctex and external tools

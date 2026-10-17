@@ -239,21 +239,11 @@ AndroidSelector::AndroidSelector(QWidget* parent) : QWidget(parent) {
         });
 
     QObject::connect(main_menu, &TouchMainMenu::hintClicked, [&]() {
-        //main_widget->run_command_with_name("toggle_rect_hints", true);
-
-        main_widget->toggle_scratchpad_mode();
-        main_widget->pop_current_widget();
-
-        main_widget->invalidate_render();
-
+        main_widget->run_command_with_name("toggle_rect_hints", true);
         });
 
     QObject::connect(main_menu, &TouchMainMenu::commandsClicked, [&]() {
         main_widget->run_command_with_name("command", true);
-        });
-
-    QObject::connect(main_menu, &TouchMainMenu::drawingModeClicked, [&]() {
-        main_widget->run_command_with_name("toggle_freehand_drawing_mode", true);
         });
 
     QObject::connect(main_menu, &TouchMainMenu::settingsClicked, [&]() {
@@ -552,80 +542,6 @@ TouchTextSelectionButtons::TouchTextSelectionButtons(MainWidget* parent) : QWidg
         main_widget->smart_jump_to_selected_text();
         main_widget->clear_selection_indicators();
         });
-}
-
-DrawControlsUI::DrawControlsUI(MainWidget* parent) : QWidget(parent) {
-    main_widget = parent;
-    controls_ui = new TouchDrawControls(parent->freehand_thickness, parent->get_current_freehand_type(), this);
-    this->setAttribute(Qt::WA_NoMousePropagation);
-
-    QObject::connect(controls_ui, &TouchDrawControls::exitDrawModePressed, [&]() {
-        main_widget->exit_freehand_drawing_mode();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::changeColorPressed, [&](int color_index) {
-        main_widget->current_freehand_type = 'a' + color_index;
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::enablePenDrawModePressed, [&]() {
-        main_widget->set_pen_drawing_mode(true);
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::screenshotPressed, [&]() {
-        if (main_widget->is_scratchpad_mode()) {
-            main_widget->run_command_with_name("copy_drawings_from_scratchpad");
-        }
-        else {
-            main_widget->run_command_with_name("copy_screenshot_to_scratchpad");
-        }
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::saveScratchpadPressed, [&]() {
-        main_widget->run_command_with_name("save_scratchpad");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::loadScratchpadPressed, [&]() {
-        main_widget->run_command_with_name("load_scratchpad");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::movePressed, [&]() {
-        main_widget->run_command_with_name("select_freehand_drawings");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::toggleScratchpadPressed, [&]() {
-        main_widget->run_command_with_name("toggle_scratchpad_mode");
-        main_widget->invalidate_render();
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::disablePenDrawModePressed, [&]() {
-        main_widget->set_hand_drawing_mode(true);
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::eraserPressed, [&]() {
-        main_widget->run_command_with_name("delete_freehand_drawings");
-        });
-
-    QObject::connect(controls_ui, &TouchDrawControls::penSizeChanged, [&](qreal val) {
-        main_widget->set_freehand_thickness(val);
-        });
-
-
-}
-void DrawControlsUI::resizeEvent(QResizeEvent* resize_event) {
-    QWidget::resizeEvent(resize_event);
-
-    int pwidth = parentWidget()->width();
-    int width = parentWidget()->width() * 3 / 4;
-    int height = std::max(parentWidget()->height() / 16, 50);
-
-    controls_ui->move(0, 0);
-    controls_ui->resize(width, height);
-    move((pwidth - width) / 2, height);
-    setFixedSize(width, height);
-
 }
 
 void TouchTextSelectionButtons::resizeEvent(QResizeEvent* resize_event) {

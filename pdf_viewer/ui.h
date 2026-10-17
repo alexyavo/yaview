@@ -53,7 +53,6 @@
 #include "touchui/TouchDeleteButton.h"
 #include "touchui/TouchHighlightButtons.h"
 #include "touchui/TouchAudioButtons.h"
-#include "touchui/TouchDrawControls.h"
 #include "touchui/TouchMacroEditor.h"
 #include "touchui/TouchGenericButtons.h"
 
@@ -819,16 +818,6 @@ private:
 
 //};
 
-
-class DrawControlsUI : public QWidget {
-public:
-    DrawControlsUI(MainWidget* parent);
-    void resizeEvent(QResizeEvent* resize_event) override;
-    TouchDrawControls* controls_ui;
-private:
-    MainWidget* main_widget;
-
-};
 
 class TouchTextSelectionButtons : public QWidget {
 public:

@@ -170,19 +170,9 @@ TouchMainMenu::TouchMainMenu(bool fit_mode, bool portaling, bool fullscreen, boo
 
     QObject::connect(
         dynamic_cast<QObject*>(quick_widget->rootObject()),
-        SIGNAL(drawingModeButtonClicked()),
-        this,
-        SLOT(handleDrawingMode()));
-
-    QObject::connect(
-        dynamic_cast<QObject*>(quick_widget->rootObject()),
         SIGNAL(downloadPaperClicked()),
         this,
         SLOT(handleDownloadPaper()));
-}
-
-void TouchMainMenu::handleDrawingMode() {
-    emit drawingModeClicked();
 }
 
 void TouchMainMenu::handleSelectText() {

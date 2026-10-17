@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cassert>
 #include "utils.h"
+#include "database.h"
 #include <optional>
 #include <functional>
 #include <cstring>
@@ -95,40 +96,6 @@ std::wstring to_lower(const std::wstring& inp) {
         res.push_back(::tolower(c));
     }
     return res;
-}
-
-std::wstring get_path_extras_file_name(const std::wstring& path_) {
-    Path path = Path(path_);
-    QString filename = QString::fromStdWString(path.filename().value());
-    QString drawing_file_name = filename + ".yaview.extras";
-    std::wstring extras_file_path = path.file_parent().slash(drawing_file_name.toStdWString()).get_path();
-    return extras_file_path;
-}
-
-void get_path_epub_size(const std::wstring& path, float* out_width, float* out_height) {
-    QString extras_file_path = QString::fromStdWString(get_path_extras_file_name(path));
-    QFileInfo extras_file_info(extras_file_path);
-
-    float width = EPUB_WIDTH;
-    float height = EPUB_HEIGHT;
-
-    if (extras_file_info.exists()) {
-        QFile extras_file(extras_file_path);
-        if (extras_file.open(QIODevice::ReadOnly)) {
-            QByteArray data = extras_file.readAll();
-            QJsonDocument doc = QJsonDocument::fromJson(data);
-            QJsonObject object = doc.object();
-            if (object.find("epub_width") != object.end()) {
-                width = object["epub_width"].toDouble();
-                height = object["epub_height"].toDouble();
-
-            }
-            extras_file.close();
-        }
-    }
-
-    *out_width = width;
-    *out_height = height;
 }
 
 void get_flat_toc(const std::vector<TocNode*>& roots, std::vector<std::wstring>& output, std::vector<int>& pages) {
@@ -1981,9 +1948,6 @@ QCommandLineParser* get_command_line_parser() {
     QCommandLineOption window_id_option("window-id", "Apply command to window with id <window-id>", "window-id");
     parser->addOption(window_id_option);
 
-    QCommandLineOption shared_database_path_option("shared-database-path", "Specify which file to use for shared data (bookmarks, highlights, etc.)", "path");
-    parser->addOption(shared_database_path_option);
-
     QCommandLineOption verbose_option("verbose", "Print extra information in commnad line.");
     parser->addOption(verbose_option);
 
@@ -2727,10 +2691,7 @@ void convert_color3(const float* in_color, int* out_color) {
     out_color[2] = (int)(in_color[2] * 255);
 }
 
-fz_document* open_document_with_file_name(fz_context* context, std::wstring file_name) {
-
-    float epub_width, epub_height;
-    get_path_epub_size(file_name, &epub_width, &epub_height);
+fz_document* open_document_with_file_name(fz_context* context, std::wstring file_name, DatabaseManager* db_manager) {
 
     fz_document* doc = fz_open_document(context, utf8_encode(file_name).c_str());
     if (fz_is_document_reflowable(context, doc)) {
@@ -2740,9 +2701,9 @@ fz_document* open_document_with_file_name(fz_context* context, std::wstring file
             fz_set_user_css(context, css.c_str());
         }
 
-        fz_layout_document(context, doc, epub_width, epub_height, EPUB_FONT_SIZE);
-
-        //int a = 2;
+        // every thread that opens the document must lay it out with the same size, which is kept in the database
+        std::pair<float, float> layout_size = db_manager->select_layout_size(file_name).value_or(std::make_pair(EPUB_WIDTH, EPUB_HEIGHT));
+        fz_layout_document(context, doc, layout_size.first, layout_size.second, EPUB_FONT_SIZE);
     }
     return doc;
 }
@@ -2994,73 +2955,6 @@ std::wstring clean_bib_item(std::wstring bib_item) {
         candid = candid.substr(0, candid.size() - 1);
     }
     return candid;
-}
-
-struct Line2D {
-    float nx;
-    float ny;
-    float c;
-};
-
-float point_distance_from_line(AbsoluteDocumentPos point, Line2D line) {
-    return std::abs(line.nx * point.x + line.ny * point.y - line.c);
-}
-
-Line2D line_from_points(AbsoluteDocumentPos p1, AbsoluteDocumentPos p2) {
-    float dx = p2.x - p1.x;
-    float dy = p2.y - p1.y;
-    float nx = -dy;
-    float ny = dx;
-    float size = std::sqrt(nx * nx + ny * ny);
-
-    nx = nx / size;
-    ny = ny / size;
-
-    Line2D res;
-    res.nx = nx;
-    res.ny = ny;
-    res.c = nx * p1.x + ny * p1.y;
-    return res;
-}
-
-std::vector<FreehandDrawingPoint> prune_freehand_drawing_points(const std::vector<FreehandDrawingPoint>& points) {
-
-    if (points.size() < 3) {
-        return points;
-    }
-
-    std::vector<FreehandDrawingPoint> pruned_points;
-    pruned_points.push_back(points[0]);
-    int candid_index = 1;
-
-    while (candid_index < points.size() - 1) {
-        int next_index = candid_index + 1;
-        if ((points[candid_index].pos.x == pruned_points.back().pos.x) && (points[candid_index].pos.y == pruned_points.back().pos.y)) {
-            candid_index++;
-            continue;
-        }
-
-        float dx0 = points[candid_index].pos.x - pruned_points.back().pos.x;
-        float dy0 = points[candid_index].pos.y - pruned_points.back().pos.y;
-
-        float dx1 = points[next_index].pos.x - points[candid_index].pos.x;
-        float dy1 = points[next_index].pos.y - points[candid_index].pos.y;
-        float dot_product = dx0 * dx1 + dy0 * dy1;
-
-        Line2D line = line_from_points(pruned_points.back().pos, points[next_index].pos);
-        float thickness_factor = std::min(points[candid_index].thickness, 1.0f);
-        if ((dot_product < 0) || (point_distance_from_line(points[candid_index].pos, line) > (0.2f * thickness_factor))) {
-            pruned_points.push_back(points[candid_index]);
-        }
-
-
-        candid_index++;
-    }
-
-    pruned_points.push_back(points[points.size() - 1]);
-
-
-    return pruned_points;
 }
 
 float rect_area(fz_rect rect) {
@@ -3351,22 +3245,6 @@ std::string new_uuid_utf8() {
 
 bool are_same(float f1, float f2) {
     return std::abs(f1 - f2) < 0.01;
-}
-
-bool are_same(const FreehandDrawing& lhs, const FreehandDrawing& rhs) {
-    if (lhs.points.size() != rhs.points.size()) {
-        return false;
-    }
-    if (lhs.type != rhs.type) {
-        return false;
-    }
-    for (int i = 0; i < lhs.points.size(); i++) {
-        if (!are_same(lhs.points[i].pos, rhs.points[i].pos)) {
-            return false;
-        }
-    }
-    return true;
-
 }
 
 PagelessDocumentRect get_range_rect_union(const std::vector<PagelessDocumentRect>& rects, int first_index, int last_index) {

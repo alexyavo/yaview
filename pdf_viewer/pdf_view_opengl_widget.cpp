@@ -15,17 +15,7 @@
 #include "config.h"
 #include "utils.h"
 
-#ifndef GL_MULTISAMPLE
-#define GL_MULTISAMPLE  0x809D
-#endif
-
-#ifndef GL_PRIMITIVE_RESTART_FIXED_INDEX
-#define GL_PRIMITIVE_RESTART_FIXED_INDEX  0x8D69
-#endif
-
 extern bool RECTO_VERSO_ADJUSTMENT;
-extern bool DEBUG_DISPLAY_FREEHAND_POINTS;
-extern bool DEBUG_SMOOTH_FREEHAND_DRAWINGS;
 extern Path shader_path;
 extern float GAMMA;
 extern float BACKGROUND_COLOR[3];
@@ -176,31 +166,6 @@ GLfloat rotation_uvs[4][8] = {
 };
 
 OpenGLSharedResources PdfViewOpenGLWidget::shared_gl_objects;
-
-void generate_bezier_with_endpoints_and_velocity(
-    Vec<float, 2> p0, 
-    Vec<float, 2> p1, 
-    Vec<float, 2> v0, 
-    Vec<float, 2> v1, 
-    int n_points,
-    float thickness,
-    std::vector<FreehandDrawingPoint>& output
-    ) {
-    float alpha = 1.0f / n_points;
-    auto q0 = p0;
-    auto q1 = v0;
-    auto q2 = (p1 - p0) * 3 - v0 * 2 - v1;
-    auto q3 = (p0 - p1) * 2 + v0 + v1;
-
-    for (int i = 0; i < n_points; i++) {
-        float t = alpha * i;
-        float tt = t * t;
-        float ttt = tt * t;
-        Vec<float, 2> point = q0 + q1 *t + q2 * tt + q3 * ttt;
-        output.push_back(FreehandDrawingPoint{AbsoluteDocumentPos{point.x(), point.y()}, thickness});
-    }
-
-}
 
 bool num_slices_for_page_rect(PagelessDocumentRect page_rect, int* h_slices, int* v_slices) {
     /*
@@ -354,9 +319,6 @@ void PdfViewOpenGLWidget::initializeGL() {
         shared_gl_objects.custom_color_program = LoadShaders(shader_path.slash(L"simple.vertex"), shader_path.slash(L"custom_colors.fragment"));
         shared_gl_objects.separator_program = LoadShaders(shader_path.slash(L"simple.vertex"), shader_path.slash(L"separator.fragment"));
         shared_gl_objects.stencil_program = LoadShaders(shader_path.slash(L"stencil.vertex"), shader_path.slash(L"stencil.fragment"));
-        shared_gl_objects.line_program = LoadShaders(shader_path.slash(L"line.vertex"), shader_path.slash(L"line.fragment"));
-        shared_gl_objects.compiled_drawing_program = LoadShaders(shader_path.slash(L"compiled_drawing.vertex"), shader_path.slash(L"compiled_line.fragment"));
-        shared_gl_objects.compiled_dots_program = LoadShaders(shader_path.slash(L"dot.vertex"), shader_path.slash(L"dot.fragment"));
 
         shared_gl_objects.dark_mode_contrast_uniform_location = glGetUniformLocation(shared_gl_objects.rendered_dark_program, "contrast");
         //shared_gl_objects.gamma_uniform_location = glGetUniformLocation(shared_gl_objects.rendered_program, "gamma");
@@ -370,48 +332,9 @@ void PdfViewOpenGLWidget::initializeGL() {
         shared_gl_objects.custom_color_transform_uniform_location = glGetUniformLocation(shared_gl_objects.custom_color_program, "transform_matrix");
 
         shared_gl_objects.separator_background_color_uniform_location = glGetUniformLocation(shared_gl_objects.separator_program, "background_color");
-        shared_gl_objects.freehand_line_color_uniform_location = glGetUniformLocation(shared_gl_objects.line_program, "line_color");
-
-        shared_gl_objects.compiled_drawing_offset_uniform_location = glGetUniformLocation(shared_gl_objects.compiled_drawing_program, "offset");
-        shared_gl_objects.compiled_drawing_scale_uniform_location = glGetUniformLocation(shared_gl_objects.compiled_drawing_program, "scale");
-        shared_gl_objects.compiled_drawing_colors_uniform_location = glGetUniformLocation(shared_gl_objects.compiled_drawing_program, "type_colors");
-
-        shared_gl_objects.compiled_dot_color_uniform_location = glGetUniformLocation(shared_gl_objects.compiled_dots_program, "type_colors");
-        shared_gl_objects.compiled_dot_offset_uniform_location = glGetUniformLocation(shared_gl_objects.compiled_dots_program, "offset");
-        shared_gl_objects.compiled_dot_scale_uniform_location = glGetUniformLocation(shared_gl_objects.compiled_dots_program, "scale");
-
-        //{ // test
-        //    float vertex_data[] = {
-        //        -0.5f, -0.1f,
-        //        -0.5f, 0.1f,
-        //        0.5f, -0.1f,
-        //        0.5f, 0.1f, // end of strip 1
-        //        -0.5f, -0.4f,
-        //        -0.5f, -0.2f,
-        //        0.5f, -0.4f,
-        //        0.5f, -0.2f
-        //    };
-
-        //    unsigned int index_data[] = {0, 1, 2, 3, 0xFFFFFFFF, 4, 5, 6, 7};
-
-        //    glGenVertexArrays(1, &shared_gl_objects.test_vao);
-        //    glGenBuffers(1, &shared_gl_objects.test_vbo);
-        //    glGenBuffers(1, &shared_gl_objects.test_ibo);
-
-        //    glBindVertexArray(shared_gl_objects.test_vao);
-        //    glBindBuffer(GL_ARRAY_BUFFER, shared_gl_objects.test_vbo);
-        //    glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_data), vertex_data, GL_STATIC_DRAW);
-        //    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-        //    glEnableVertexAttribArray(0);
-
-        //    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, shared_gl_objects.test_ibo);
-        //    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_data), index_data, GL_STATIC_DRAW);
-        //    glBindVertexArray(0);
-        //}
 
         glGenBuffers(1, &shared_gl_objects.vertex_buffer_object);
         glGenBuffers(1, &shared_gl_objects.uv_buffer_object);
-        glGenBuffers(1, &shared_gl_objects.line_points_buffer_object);
 
         glBindBuffer(GL_ARRAY_BUFFER, shared_gl_objects.vertex_buffer_object);
         glBufferData(GL_ARRAY_BUFFER, sizeof(g_quad_vertex), g_quad_vertex, GL_DYNAMIC_DRAW);
@@ -601,13 +524,7 @@ void PdfViewOpenGLWidget::render_highlight_window(GLuint program, NormalizedWind
 }
 
 void PdfViewOpenGLWidget::render_highlight_absolute(GLuint program, AbsoluteRect absolute_document_rect, int flags) {
-    NormalizedWindowRect window_rect;
-    if (scratchpad) {
-        window_rect = scratchpad->absolute_to_window_rect(absolute_document_rect);
-    }
-    else {
-        window_rect = absolute_document_rect.to_window_normalized(document_view);
-    }
+    NormalizedWindowRect window_rect = absolute_document_rect.to_window_normalized(document_view);
     render_highlight_window(program, window_rect, flags);
 }
 
@@ -616,101 +533,6 @@ void PdfViewOpenGLWidget::render_highlight_document(GLuint program, DocumentRect
     render_highlight_window(program, window_rect, flags);
 }
 
-void PdfViewOpenGLWidget::render_scratchpad(QPainter* painter) {
-
-    /* bool use_cached_framebuffer = can_use_cached_scratchpad_framebuffer(); */
-
-    painter->beginNativePainting();
-    clear_background_color();
-    painter->endNativePainting();
-
-    for (auto [pixmap, rect] : scratchpad->pixmaps) {
-        WindowRect window_rect = rect.to_window(scratchpad);
-
-        QRect window_qrect = QRect(
-            window_rect.x0,
-            window_rect.y0,
-            window_rect.width(),
-            window_rect.height()
-        );
-        painter->drawPixmap(window_qrect, pixmap);
-    }
-
-    for (auto [pixmap, rect] : moving_pixmaps) { // highlight moving pixmaps
-        WindowRect window_rect = rect.to_window(scratchpad);
-        QRect window_qrect = QRect(window_rect.x0, window_rect.y0, window_rect.width(), window_rect.height());
-        painter->fillRect(window_qrect.adjusted(-2, -2, 2, 2), QColor(255, 255, 0));
-        painter->drawPixmap(window_qrect, pixmap);
-    }
-
-    /* if (use_cached_framebuffer) { */
-    /*     painter->drawImage(rect(), cached_framebuffer.value()); */
-    /* } */
-
-    painter->beginNativePainting();
-
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
-    glBindVertexArray(vertex_array_object);
-    bind_default();
-
-
-    std::vector<FreehandDrawing> pending_drawing;
-    if (current_drawing.points.size() > 1) {
-        pending_drawing.push_back(current_drawing);
-    }
-
-
-     //std::vector<FreehandDrawing> debug_darwings;
-     //std::vector<FreehandDrawingPoint> debug_points;
-
-     //debug_points.push_back(FreehandDrawingPoint{ AbsoluteDocumentPos{-100, 0}, 1 });
-     //debug_points.push_back(FreehandDrawingPoint{ AbsoluteDocumentPos{0, 100}, 1 });
-     //debug_points.push_back(FreehandDrawingPoint{ AbsoluteDocumentPos{100, 0}, 1 });
-     //debug_points.push_back(FreehandDrawingPoint{ AbsoluteDocumentPos{200, -100}, 1 });
-     //debug_points.push_back(FreehandDrawingPoint{ AbsoluteDocumentPos{300, -100}, 1 });
-     //debug_points.push_back(FreehandDrawingPoint{ AbsoluteDocumentPos{300, -200}, 1 });
-
-     //FreehandDrawing debug_drawing;
-     //debug_drawing.type = 'r';
-     //debug_drawing.points = debug_points;
-     //debug_darwings.push_back(debug_drawing);
-     //debug_darwings.push_back(generate_debug_drawing());
-     //render_drawings(scratchpad, debug_darwings);
-
-
-
-     if (scratchpad->get_non_compiled_drawings().size() > 50 || scratchpad->is_compile_invalid()) {
-         compile_drawings(scratchpad, scratchpad->get_all_drawings());
-     }
-
-     glEnable(GL_MULTISAMPLE);
-
-     render_compiled_drawings();
-     glEnableVertexAttribArray(0);
-     glUseProgram(shared_gl_objects.line_program);
-     render_drawings(scratchpad, scratchpad->get_non_compiled_drawings());
-     render_drawings(scratchpad, moving_drawings, true);
-     render_drawings(scratchpad, moving_drawings, false);
-     render_drawings(scratchpad, pending_drawing);
-
-    glDisable(GL_MULTISAMPLE);
-
-    bind_default();
-    glBindBuffer(GL_ARRAY_BUFFER, shared_gl_objects.vertex_buffer_object);
-    glUseProgram(shared_gl_objects.highlight_program);
-
-    render_selected_rectangle();
-
-    painter->endNativePainting();
-
-}
-
-//void PdfViewOpenGLWidget::update_framebuffer_cache(){
-//    last_cache_num_drawings = scratchpad->drawings.size();
-//    cached_framebuffer = grabFramebuffer();
-//}
-
 void PdfViewOpenGLWidget::paintGL() {
 
     QPainter painter(this);
@@ -718,12 +540,7 @@ void PdfViewOpenGLWidget::paintGL() {
     QColor red_color = QColor::fromRgb(255, 0, 0);
     painter.setPen(red_color);
 
-    if (scratchpad == nullptr) {
-        my_render(&painter);
-    }
-    else {
-        render_scratchpad(&painter);
-    }
+    my_render(&painter);
 
     //painter.drawText(-100, -100, "1234567890");
 }
@@ -750,9 +567,6 @@ PdfViewOpenGLWidget::PdfViewOpenGLWidget(DocumentView* document_view, PdfRendere
 
     overview_offset_x = OVERVIEW_OFFSET[0];
     overview_offset_y = OVERVIEW_OFFSET[1];
-    for (int i = 0; i < 26; i++) {
-        visible_drawing_mask[i] = true;
-    }
 
     //bookmark_pixmap = QPixmap(":/icons/B.svg");
     bookmark_icon = QIcon(":/icons/B.svg");
@@ -1282,35 +1096,6 @@ void PdfViewOpenGLWidget::render_page(int page_number, bool in_overview, ColorPa
 
 void PdfViewOpenGLWidget::my_render(QPainter* painter) {
 
-    //if (true) {
-    //    painter->beginNativePainting();
-    //    float offset[] = {0.0f, 0.0f};
-    //    float scale[] = { 1.0f, 1.0f };
-    //    float color[] = { 1.0f, 0.0f, 0.0f, 1.0f };
-
-    //    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-    //    glClear(GL_COLOR_BUFFER_BIT);
-
-    //    glDisable(GL_CULL_FACE);
-    //    glDisable(GL_BLEND);
-    //    glBindVertexArray(shared_gl_objects.test_vao);
-
-    //    glUseProgram(shared_gl_objects.compiled_drawing_program);
-
-    //    glBindBuffer(GL_ARRAY_BUFFER, shared_gl_objects.test_vbo);
-    //    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, shared_gl_objects.test_ibo);
-    //    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-    //    glUniform2fv(shared_gl_objects.compiled_drawing_offset_uniform_location, 1, offset);
-    //    glUniform2fv(shared_gl_objects.compiled_drawing_scale_uniform_location, 1, scale);
-    //    glUniform4fv(shared_gl_objects.compiled_drawing_color_uniform_location, 1, color);
-    //    glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
-    //    glEnableVertexAttribArray(0);
-    //    glDrawElements(GL_TRIANGLE_STRIP, 9, GL_UNSIGNED_INT, 0);
-    //    bind_default();
-    //    return;
-    //}
-
     painter->beginNativePainting();
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -1644,27 +1429,6 @@ void PdfViewOpenGLWidget::my_render(QPainter* painter) {
         }
     }
 
-
-
-    {
-        glUseProgram(shared_gl_objects.line_program);
-        glEnableVertexAttribArray(0);
-        std::vector<FreehandDrawing> pending_drawing;
-        if (current_drawing.points.size() > 1) {
-            pending_drawing.push_back(current_drawing);
-        }
-        glEnable(GL_MULTISAMPLE);
-        for (auto page : visible_pages) {
-
-            render_drawings(document_view, document_view->get_document()->get_page_drawings(page));
-        }
-        render_drawings(document_view, moving_drawings, true);
-        render_drawings(document_view, moving_drawings, false);
-        render_drawings(document_view, pending_drawing);
-        glDisable(GL_MULTISAMPLE);
-        bind_default();
-    }
-
     painter->endNativePainting();
 
 
@@ -1676,9 +1440,7 @@ void PdfViewOpenGLWidget::my_render(QPainter* painter) {
             render_portal_rect(painter, pending_download_portals[i], true);
         }
         for (int i = 0; i < portals.size(); i++) {
-            if (portals[i].is_visible()) {
-                render_portal_rect(painter, portals[i].get_rectangle(), false);
-            }
+            render_portal_rect(painter, portals[i].get_rectangle(), false);
         }
 
         if (pending_portal_rect) {
@@ -2823,12 +2585,6 @@ std::map<int, std::vector<MarkedDataRect>> PdfViewOpenGLWidget::get_marked_data_
     return res;
 }
 
-void PdfViewOpenGLWidget::bind_points(const std::vector<float>& points) {
-    glBindBuffer(GL_ARRAY_BUFFER, shared_gl_objects.line_points_buffer_object);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(points[0]) * points.size(), &points[0], GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-}
-
 void PdfViewOpenGLWidget::bind_default() {
     glBindBuffer(GL_ARRAY_BUFFER, shared_gl_objects.vertex_buffer_object);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
@@ -2836,575 +2592,6 @@ void PdfViewOpenGLWidget::bind_default() {
     glBindBuffer(GL_ARRAY_BUFFER, shared_gl_objects.uv_buffer_object);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0);
 }
-
-void PdfViewOpenGLWidget::add_coordinates_for_window_point(DocumentView* dv, float window_x, float window_y, float r, int point_polygon_vertices, std::vector<float>& out_coordinates){
-
-    float thickness_x = dv->get_zoom_level() / width();
-    float thickness_y = dv->get_zoom_level() / height();
-
-    out_coordinates.push_back(window_x);
-    out_coordinates.push_back(window_y);
-
-    for (int i = 0; i <= point_polygon_vertices; i++) {
-        out_coordinates.push_back(window_x + r * thickness_x * std::cos(2 * M_PI * i / point_polygon_vertices) / 2);
-        out_coordinates.push_back(window_y + r * thickness_y * std::sin(2 * M_PI * i / point_polygon_vertices) / 2);
-    }
-}
-
-template<typename T>
-T lerp(T p1, T p2, float alpha) {
-    float x = p1.x + alpha * (p2.x - p1.x);
-    float y = p1.y + alpha * (p2.y - p1.y);
-    return T{ x, y };
-}
-
-template<typename T>
-T bezier_lerp(T p1, T p2, T p3, T p4, float alpha) {
-    T q1 = lerp(p1, p2, alpha);
-    T q2 = lerp(p2, p3, alpha);
-    T q3 = lerp(p3, p4, alpha);
-
-    T r1 = lerp(q1, q2, alpha);
-    T r2 = lerp(q2, q3, alpha);
-    return lerp(r1, r2, alpha);
-}
-
-
-FreehandDrawing smoothen_drawing(FreehandDrawing original) {
-    if (original.points.size() < 3) {
-        return original;
-    }
-
-    std::vector<Vec<float, 2>> velocities_at_points;
-    velocities_at_points.reserve(original.points.size());
-
-    velocities_at_points.push_back(original.points[1].pos - original.points[0].pos);
-
-    for (int i = 1; i < original.points.size()-1; i++) {
-        float alpha = 0.5f;
-        velocities_at_points.push_back((original.points[i+1].pos - original.points[i - 1].pos) * alpha);
-    }
-    velocities_at_points.push_back(original.points[original.points.size()-1].pos - original.points[original.points.size()-2].pos);
-
-    int N_POINTS = 4;
-    FreehandDrawing smoothed_drawing;
-    smoothed_drawing.creattion_time = original.creattion_time;
-    smoothed_drawing.type = original.type;
-    smoothed_drawing.alpha = original.alpha;
-    smoothed_drawing.points.reserve((original.points.size()-1) * N_POINTS);
-
-    for (int i = 0; i < original.points.size()-1; i++){
-        generate_bezier_with_endpoints_and_velocity(
-            original.points[i].pos,
-            original.points[i + 1].pos,
-            velocities_at_points[i],
-            velocities_at_points[i + 1],
-            N_POINTS,
-            original.points[i].thickness,
-            smoothed_drawing.points
-        );
-        /* for (auto p : bezier_curve) { */
-        /*     smoothed_drawing.points.push_back(FreehandDrawingPoint{ AbsoluteDocumentPos{ p.x(), p.y() }, original.points[i].thickness}); */
-        /* } */
-    }
-    return smoothed_drawing;
-
-}
-
-void PdfViewOpenGLWidget::compile_drawings(DocumentView* dv, const std::vector<FreehandDrawing>& drawings) {
-    if (scratchpad->cached_compiled_drawing_data) {
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-
-        glDeleteBuffers(1, &scratchpad->cached_compiled_drawing_data->index_buffer);
-        glDeleteBuffers(1, &scratchpad->cached_compiled_drawing_data->vertex_buffer);
-        glDeleteBuffers(1, &scratchpad->cached_compiled_drawing_data->dots_index_buffer);
-        glDeleteBuffers(1, &scratchpad->cached_compiled_drawing_data->dots_vertex_buffer);
-        glDeleteBuffers(1, &scratchpad->cached_compiled_drawing_data->dots_uv_buffer);
-        glDeleteBuffers(1, &scratchpad->cached_compiled_drawing_data->lines_type_index_buffer);
-        glDeleteBuffers(1, &scratchpad->cached_compiled_drawing_data->dots_type_index_buffer);
-        glDeleteVertexArrays(1, &scratchpad->cached_compiled_drawing_data->vao);
-        scratchpad->cached_compiled_drawing_data = {};
-    }
-    if (drawings.size() == 0) {
-        scratchpad->on_compile();
-        return;
-    }
-
-
-    //float thickness_x = dv->get_zoom_level() / width();
-    //float thickness_y = dv->get_zoom_level() / height();
-
-    float thickness_x = 0.5f;
-    float thickness_y = 0.5f;
-
-    std::vector<float> coordinates;
-    std::vector<unsigned int> indices;
-    std::vector<GLint> type_indices;
-    /* std::vector<short> */ 
-
-    std::vector<float> dot_coordinates;
-    std::vector<unsigned int> dot_indices;
-    std::vector<GLint> dot_type_indices;
-    /* std::vector<short> */ 
-    GLuint primitive_restart_index = 0xFFFFFFFF;
-
-    int index = 0;
-    int dot_index = 0;
-
-    auto add_point_coords = [&](FreehandDrawingPoint p, char index) {
-        dot_coordinates.push_back(p.pos.x - p.thickness / 2);
-        dot_coordinates.push_back(p.pos.y - p.thickness / 2);
-        dot_type_indices.push_back(index);
-        dot_indices.push_back(dot_index++);
-
-        dot_coordinates.push_back(p.pos.x - p.thickness / 2);
-        dot_coordinates.push_back(p.pos.y + p.thickness / 2);
-        dot_type_indices.push_back(index);
-        dot_indices.push_back(dot_index++);
-
-        dot_coordinates.push_back(p.pos.x + p.thickness / 2);
-        dot_coordinates.push_back(p.pos.y - p.thickness / 2);
-        dot_type_indices.push_back(index);
-        dot_indices.push_back(dot_index++);
-
-        dot_coordinates.push_back(p.pos.x + p.thickness / 2);
-        dot_coordinates.push_back(p.pos.y + p.thickness / 2);
-        dot_type_indices.push_back(index);
-        dot_indices.push_back(dot_index++);
-
-        dot_indices.push_back(0xFFFFFFFF);
-    };
-
-    for (auto drawing : drawings) {
-        if (DEBUG_SMOOTH_FREEHAND_DRAWINGS) {
-            drawing = smoothen_drawing(drawing);
-        }
-
-        if (drawing.points.size() <= 0) {
-            continue;
-        }
-        if (!visible_drawing_mask[drawing.type - 'a']) {
-            continue;
-        }
-        if (drawing.points.size() == 1) {
-            add_point_coords(drawing.points[0], drawing.type - 'a');
-
-            continue;
-
-        }
-
-        float first_line_x = (drawing.points[1].pos.x - drawing.points[0].pos.x) * width();
-        float first_line_y = (drawing.points[1].pos.y - drawing.points[0].pos.y) * height();
-        float first_line_size = sqrt(first_line_x * first_line_x + first_line_y * first_line_y);
-        first_line_x = first_line_x / first_line_size;
-        first_line_y = first_line_y / first_line_size;
-
-        float first_ortho_x = -first_line_y * thickness_x * drawing.points[0].thickness;
-        float first_ortho_y = first_line_x * thickness_y * drawing.points[0].thickness;
-
-
-        coordinates.push_back(drawing.points[0].pos.x - first_ortho_x);
-        coordinates.push_back(drawing.points[0].pos.y - first_ortho_y);
-        type_indices.push_back(drawing.type - 'a');
-        indices.push_back(index++);
-        coordinates.push_back(drawing.points[0].pos.x + first_ortho_x);
-        coordinates.push_back(drawing.points[0].pos.y + first_ortho_y);
-        type_indices.push_back(drawing.type - 'a');
-        indices.push_back(index++);
-
-        float prev_line_x = first_line_x;
-        float prev_line_y = first_line_y;
-
-        add_point_coords(drawing.points[0], drawing.type - 'a');
-        add_point_coords(drawing.points.back(), drawing.type - 'a');
-        for (int line_index = 0; line_index < drawing.points.size() - 1; line_index++) {
-            float line_direction_x = (drawing.points[line_index + 1].pos.x - drawing.points[line_index].pos.x);
-            float line_direction_y = (drawing.points[line_index + 1].pos.y - drawing.points[line_index].pos.y);
-            float line_size = sqrt(line_direction_x * line_direction_x + line_direction_y * line_direction_y);
-            line_direction_x = line_direction_x / line_size;
-            line_direction_y = line_direction_y / line_size;
-
-            float ortho_x1 = -line_direction_y * thickness_x * drawing.points[line_index].thickness;
-            float ortho_y1 = line_direction_x * thickness_y * drawing.points[line_index].thickness;
-
-            float ortho_x2 = -line_direction_y * thickness_x * drawing.points[line_index + 1].thickness;
-            float ortho_y2 = line_direction_x * thickness_y * drawing.points[line_index + 1].thickness;
-
-            coordinates.push_back(drawing.points[line_index].pos.x - ortho_x1);
-            coordinates.push_back(drawing.points[line_index].pos.y - ortho_y1);
-            type_indices.push_back(drawing.type - 'a');
-            indices.push_back(index++);
-
-            coordinates.push_back(drawing.points[line_index].pos.x + ortho_x1);
-            coordinates.push_back(drawing.points[line_index].pos.y + ortho_y1);
-            type_indices.push_back(drawing.type - 'a');
-            indices.push_back(index++);
-
-            coordinates.push_back(drawing.points[line_index + 1].pos.x - ortho_x1);
-            coordinates.push_back(drawing.points[line_index + 1].pos.y - ortho_y1);
-            type_indices.push_back(drawing.type - 'a');
-            indices.push_back(index++);
-
-            coordinates.push_back(drawing.points[line_index + 1].pos.x + ortho_x2);
-            coordinates.push_back(drawing.points[line_index + 1].pos.y + ortho_y2);
-            type_indices.push_back(drawing.type - 'a');
-            indices.push_back(index++);
-
-        }
-        indices.push_back(primitive_restart_index);
-
-        //std::vector<int> indices;
-
-        //bind_points(coordinates);
-        //glDrawArrays(GL_TRIANGLE_STRIP, 0, coordinates.size() / 2);
-    }
-    scratchpad->cached_compiled_drawing_data = compile_drawings_into_vertex_and_index_buffers(
-        coordinates,
-        indices,
-        type_indices,
-        dot_coordinates,
-        dot_indices,
-        dot_type_indices);
-    scratchpad->on_compile();
-}
-
-//void PdfViewOpenGLWidget::compile_drawings_into_vertex_and_index_buffers(std::vector<float>& line_coordinates) {
-
-CompiledDrawingData PdfViewOpenGLWidget::compile_drawings_into_vertex_and_index_buffers(const std::vector<float>& line_coordinates,
-    const std::vector<unsigned int>& indices,
-    const std::vector<GLint>& line_type_indices,
-    const std::vector<float>& dot_coordinates,
-    const std::vector<unsigned int>& dot_indices,
-    const std::vector<GLint>& dot_type_indices){
-    //std::vector<unsigned int> indices;
-    //int num_rectangles = line_coordinates.size() / 
-
-    std::vector<float> dot_uv_coordinates;
-    dot_uv_coordinates.reserve(dot_coordinates.size());
-    float uv_map[4 * 2] = { 0.0f, 0.0f,
-                            1.0f, 0.0f,
-                            0.0f, 1.0f,
-                            1.0f, 1.0f
-    };
-
-    for (int i = 0; i < dot_coordinates.size(); i++) {
-        dot_uv_coordinates.push_back(uv_map[i % 8]);
-    }
-
-    GLuint compiled_drawing_vao;
-    glGenVertexArrays(1, &compiled_drawing_vao);
-    GLuint compiled_vertex_array,
-        compiled_index_array,
-        dots_vertex_buffer,
-        dots_index_buffer,
-        dots_uv_buffer,
-        lines_type_index_buffer,
-        dots_type_index_buffer;
-
-    glGenBuffers(1, &compiled_vertex_array);
-    glGenBuffers(1, &compiled_index_array);
-    glGenBuffers(1, &dots_vertex_buffer);
-    glGenBuffers(1, &dots_index_buffer);
-    glGenBuffers(1, &dots_uv_buffer);
-    glGenBuffers(1, &lines_type_index_buffer);
-    glGenBuffers(1, &dots_type_index_buffer);
-
-    glBindVertexArray(compiled_drawing_vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, compiled_vertex_array);
-    glBufferData(GL_ARRAY_BUFFER, line_coordinates.size() * sizeof(float), line_coordinates.data(), GL_STATIC_DRAW);
-
-
-    //glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    //glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, lines_type_index_buffer);
-    glBufferData(GL_ARRAY_BUFFER, line_type_indices.size() * sizeof(GLint), line_type_indices.data(), GL_STATIC_DRAW);
-
-    //glVertexAttribPointer(1, 1, GL_INT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    //glEnableVertexAttribArray(1);
-
-    glBindBuffer(GL_ARRAY_BUFFER, dots_vertex_buffer);
-    glBufferData(GL_ARRAY_BUFFER, dot_coordinates.size() * sizeof(float), dot_coordinates.data(), GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ARRAY_BUFFER, dots_uv_buffer);
-    glBufferData(GL_ARRAY_BUFFER, dot_uv_coordinates.size() * sizeof(float), dot_uv_coordinates.data(), GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ARRAY_BUFFER, dots_type_index_buffer);
-    glBufferData(GL_ARRAY_BUFFER, dot_type_indices.size() * sizeof(GLint), dot_type_indices.data(), GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, compiled_index_array);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, dots_index_buffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, dot_indices.size() * sizeof(unsigned int), dot_indices.data(), GL_STATIC_DRAW);
-
-    CompiledDrawingData res;
-    res.vao = compiled_drawing_vao;
-    res.vertex_buffer = compiled_vertex_array;
-    res.index_buffer = compiled_index_array;
-    res.dots_vertex_buffer = dots_vertex_buffer;
-    res.dots_index_buffer = dots_index_buffer;
-    res.dots_uv_buffer = dots_uv_buffer;
-    res.lines_type_index_buffer = lines_type_index_buffer;
-    res.dots_type_index_buffer = dots_type_index_buffer;
-    res.n_elements = indices.size();
-    res.n_dot_elements = dot_indices.size();
-    return res;
-
-}
-
-void PdfViewOpenGLWidget::render_compiled_drawings() {
-    //NormalizedWindowPos res;
-    //float half_width = static_cast<float>(view_width) / zoom_level / 2;
-    //float half_height = static_cast<float>(view_height) / zoom_level / 2;
-
-    //res.x = (abs.x + offset_x) / half_width;
-    //res.y = (-abs.y + offset_y) / half_height;
-    // res.x = abs.x / half_width + offset_x / half_width
-    //return res;
-    float mode_highlight_colors[26 * 3];
-    for (int i = 0; i < 26; i++) {
-        auto res = cc3(&HIGHLIGHT_COLORS[3 * i]);
-        mode_highlight_colors[i * 3 + 0] = res[0];
-        mode_highlight_colors[i * 3 + 1] = res[1];
-        mode_highlight_colors[i * 3 + 2] = res[2];
-    }
-
-    if (scratchpad->cached_compiled_drawing_data.has_value()) {
-        float scale[] = {
-            2 * scratchpad->get_zoom_level() / scratchpad->get_view_width() ,
-            2 * scratchpad->get_zoom_level() / scratchpad->get_view_height()
-        };
-        float offset[] = { scratchpad->get_offset_x() * scale[0], scratchpad->get_offset_y() * scale[1]};
-        float color[] = { 1.0f, 0.0f, 0.0f, 1.0f };
-        //float color[] = {1.0f, 0.0f, 0.0f, 1.0f};
-
-        glBindVertexArray(scratchpad->cached_compiled_drawing_data->vao);
-
-        glBindBuffer(GL_ARRAY_BUFFER, scratchpad->cached_compiled_drawing_data->vertex_buffer);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-        glEnableVertexAttribArray(0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, scratchpad->cached_compiled_drawing_data->lines_type_index_buffer);
-        glVertexAttribIPointer(1, 1, GL_INT, 0, 0);
-        glEnableVertexAttribArray(1);
-
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scratchpad->cached_compiled_drawing_data->index_buffer);
-
-        glUseProgram(shared_gl_objects.compiled_drawing_program);
-        glUniform2fv(shared_gl_objects.compiled_drawing_offset_uniform_location, 1, offset);
-        glUniform2fv(shared_gl_objects.compiled_drawing_scale_uniform_location, 1, scale);
-        glUniform3fv(shared_gl_objects.compiled_drawing_colors_uniform_location, 26, mode_highlight_colors);
-        //glUniform4fv(shared_gl_objects.compiled_drawing_color_uniform_location, 1, color);
-        glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
-        glDrawElements(GL_TRIANGLE_STRIP, scratchpad->cached_compiled_drawing_data->n_elements, GL_UNSIGNED_INT, 0);
-
-        //// bind dots buffers
-        glBindBuffer(GL_ARRAY_BUFFER, scratchpad->cached_compiled_drawing_data->dots_vertex_buffer);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-        glEnableVertexAttribArray(0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, scratchpad->cached_compiled_drawing_data->dots_uv_buffer);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0);
-        glEnableVertexAttribArray(1);
-
-        glBindBuffer(GL_ARRAY_BUFFER, scratchpad->cached_compiled_drawing_data->dots_type_index_buffer);
-        glVertexAttribIPointer(2, 1, GL_INT, 0, 0);
-        glEnableVertexAttribArray(2);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scratchpad->cached_compiled_drawing_data->dots_index_buffer);
-
-        glUseProgram(shared_gl_objects.compiled_dots_program);
-        glUniform2fv(shared_gl_objects.compiled_dot_offset_uniform_location, 1, offset);
-        glUniform2fv(shared_gl_objects.compiled_dot_scale_uniform_location, 1, scale);
-        glUniform3fv(shared_gl_objects.compiled_dot_color_uniform_location, 26, mode_highlight_colors);
-
-        glEnable(GL_BLEND);
-        glDrawElements(GL_TRIANGLE_STRIP, scratchpad->cached_compiled_drawing_data->n_dot_elements, GL_UNSIGNED_INT, 0);
-        glDisable(GL_BLEND);
-
-    }
-}
-
-void PdfViewOpenGLWidget::render_drawings(DocumentView* dv, const std::vector<FreehandDrawing>& drawings, bool highlighted) {
-
-    if (drawings.size() == 0) return;
-
-    glEnable(GL_BLEND);
-    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE);
-    glEnable(GL_DEPTH_TEST);
-    glClear(GL_DEPTH_BUFFER_BIT);
-
-    float time_diff = last_scratchpad_update_datetime.msecsTo(QDateTime::currentDateTime());
-    last_scratchpad_update_datetime = QDateTime::currentDateTime();
-
-    const int N_POINT_VERTICES = 10;
-    float thickness_x = dv->get_zoom_level() / width();
-    float thickness_y = dv->get_zoom_level() / height();
-    //float thickness_y = thickness_x * width() / height();
-
-    for (int i = drawings.size() - 1; i >= 0; i--) {
-        auto drawing = drawings[i];
-
-        if (DEBUG_SMOOTH_FREEHAND_DRAWINGS) {
-            drawing = smoothen_drawing(drawing);
-        }
-        //if (drawings.size() % 2 == 0){
-        //    drawing = smoothen_drawing(drawing);
-        //}
-
-        if (drawing.points.size() <= 0) {
-            continue;
-        }
-        if (!visible_drawing_mask[drawing.type - 'a']) {
-            continue;
-        }
-
-        float current_drawing_color_[4] = { HIGHLIGHT_COLORS[(drawing.type - 'a') * 3],
-            HIGHLIGHT_COLORS[(drawing.type - 'a') * 3 + 1],
-             HIGHLIGHT_COLORS[(drawing.type - 'a') * 3 + 2],
-            drawing.alpha
-        };
-        float current_drawing_color[4] = {0};
-        get_color_for_current_mode(current_drawing_color_, current_drawing_color);
-        current_drawing_color[3] = current_drawing_color_[3];
-
-        if (highlighted) {
-            current_drawing_color[0] = 1.0f;
-            current_drawing_color[1] = 1.0f;
-            current_drawing_color[2] = 0.0f;
-
-        }
-
-        if (drawing.points.size() == 1) {
-            std::vector<float> coordinates;
-            //float window_x, window_y;
-            float thickness = drawing.points[0].thickness;
-
-            NormalizedWindowPos window_pos = dv->absolute_to_window_pos({ drawing.points[0].pos.x, drawing.points[0].pos.y });
-            add_coordinates_for_window_point(dv, window_pos.x, window_pos.y, thickness * 2, N_POINT_VERTICES, coordinates);
-
-            bind_points(coordinates);
-            glUniform4fv(shared_gl_objects.freehand_line_color_uniform_location, 1, current_drawing_color);
-            glDrawArrays(GL_TRIANGLE_FAN, 0, coordinates.size() / 2);
-            continue;
-        }
-
-        if (DEBUG_DISPLAY_FREEHAND_POINTS) {
-            for (auto point : drawing.points) {
-                std::vector<float> coordinates;
-                //float window_x, window_y;
-                float thickness = drawing.points[0].thickness;
-
-                NormalizedWindowPos window_pos = dv->absolute_to_window_pos({ point.pos.x, point.pos.y });
-                add_coordinates_for_window_point(dv, window_pos.x, window_pos.y, thickness * 2, N_POINT_VERTICES, coordinates);
-
-                bind_points(coordinates);
-                glUniform4fv(shared_gl_objects.freehand_line_color_uniform_location, 1, current_drawing_color);
-                glDrawArrays(GL_TRIANGLE_FAN, 0, coordinates.size() / 2);
-            }
-            continue;
-        }
-
-        glUniform4fv(shared_gl_objects.freehand_line_color_uniform_location, 1, current_drawing_color);
-
-        std::vector<NormalizedWindowPos> window_positions;
-        window_positions.reserve(drawing.points.size());
-
-        for (auto p : drawing.points) {
-            NormalizedWindowPos window_pos = dv->absolute_to_window_pos({ p.pos.x, p.pos.y });
-            window_positions.push_back(NormalizedWindowPos{ window_pos.x, window_pos.y });
-        }
-
-        std::vector<float> coordinates;
-        /* coordinates.reserve(drawing.points.size() * 8 - 4); */
-        std::vector<float> begin_point_coordinates;
-        std::vector<float> end_point_coordinates;
-        /* std::vector<std::vector<float>> all_point_coordinates; */
-
-        float first_line_x = (window_positions[1].x - window_positions[0].x) * width();
-        float first_line_y = (window_positions[1].y - window_positions[0].y) * height();
-        float first_line_size = sqrt(first_line_x * first_line_x + first_line_y * first_line_y);
-        first_line_x = first_line_x / first_line_size;
-        first_line_y = first_line_y / first_line_size;
-        float highlight_factor = highlighted ? 3.0f : 1.0f;
-
-        float first_ortho_x = -first_line_y * thickness_x * drawing.points[0].thickness * highlight_factor;
-        float first_ortho_y = first_line_x * thickness_y * drawing.points[0].thickness * highlight_factor;
-
-
-        coordinates.push_back(window_positions[0].x - first_ortho_x);
-        coordinates.push_back(window_positions[0].y - first_ortho_y);
-        coordinates.push_back(window_positions[0].x + first_ortho_x);
-        coordinates.push_back(window_positions[0].y + first_ortho_y);
-        add_coordinates_for_window_point(dv, window_positions[0].x, window_positions[0].y, drawing.points[0].thickness * 2, N_POINT_VERTICES, begin_point_coordinates);
-        float prev_line_x = first_line_x;
-        float prev_line_y = first_line_y;
-
-        for (int line_index = 0; line_index < drawing.points.size() - 1; line_index++) {
-            float line_direction_x = (window_positions[line_index + 1].x - window_positions[line_index].x) * width();
-            float line_direction_y = (window_positions[line_index + 1].y - window_positions[line_index].y) * height();
-            float line_size = sqrt(line_direction_x * line_direction_x + line_direction_y * line_direction_y);
-            line_direction_x = line_direction_x / line_size;
-            line_direction_y = line_direction_y / line_size;
-
-            float ortho_x1 = -line_direction_y * thickness_x * drawing.points[line_index].thickness * highlight_factor;
-            float ortho_y1 = line_direction_x * thickness_y * drawing.points[line_index].thickness * highlight_factor;
-
-            float ortho_x2 = -line_direction_y * thickness_x * drawing.points[line_index + 1].thickness * highlight_factor;
-            float ortho_y2 = line_direction_x * thickness_y * drawing.points[line_index + 1].thickness * highlight_factor;
-
-            float dot_prod_with_prev_direction = (prev_line_x * line_direction_x + prev_line_y * line_direction_y);
-
-            coordinates.push_back(window_positions[line_index].x - ortho_x1);
-            coordinates.push_back(window_positions[line_index].y - ortho_y1);
-            coordinates.push_back(window_positions[line_index].x + ortho_x1);
-            coordinates.push_back(window_positions[line_index].y + ortho_y1);
-
-            coordinates.push_back(window_positions[line_index + 1].x - ortho_x1);
-            coordinates.push_back(window_positions[line_index + 1].y - ortho_y1);
-            coordinates.push_back(window_positions[line_index + 1].x + ortho_x2);
-            coordinates.push_back(window_positions[line_index + 1].y + ortho_y2);
-
-            /* std::vector<float> point_coordinates; */
-            /* add_coordinates_for_window_point(dv, window_positions[line_index+1].x, window_positions[line_index+1].y, drawing.points[line_index+1].thickness * 2, N_POINT_VERTICES, point_coordinates); */
-            /* all_point_coordinates.push_back(point_coordinates); */
-
-        }
-
-        add_coordinates_for_window_point(dv,
-            window_positions[drawing.points.size() - 1].x,
-            window_positions[drawing.points.size() - 1].y,
-            drawing.points[drawing.points.size() - 1].thickness * 2 * highlight_factor,
-            N_POINT_VERTICES,
-            end_point_coordinates
-        );
-
-        std::vector<int> indices;
-
-
-        //draw the lines
-        bind_points(coordinates);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, coordinates.size() / 2);
-
-        // draw a point at the start and end of drawing
-        bind_points(begin_point_coordinates);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, begin_point_coordinates.size() / 2);
-        bind_points(end_point_coordinates);
-        glDrawArrays(GL_TRIANGLE_FAN, 1, end_point_coordinates.size() / 2);
-
-        //for (auto coords : all_point_coordinates) {
-        //    bind_points(coords);
-        //    glDrawArrays(GL_TRIANGLE_FAN, 0, coords.size() / 2);
-        //}
-    }
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
-}
-
 
 bool PdfViewOpenGLWidget::is_normalized_y_in_window(float y) {
     return (y >= -1) && (y <= 1);
@@ -3723,14 +2910,6 @@ void PdfViewOpenGLWidget::zoom_out_overview(){
     zoom_overview(1.0f / ZOOM_INC_FACTOR);
 }
 
-void PdfViewOpenGLWidget::set_scratchpad(ScratchPad* pad) {
-    scratchpad = pad;
-}
-
-ScratchPad* PdfViewOpenGLWidget::get_scratchpad() {
-    return scratchpad;
-}
-
 void PdfViewOpenGLWidget::render_selected_rectangle() {
 
     if (selected_rectangle) {
@@ -3752,21 +2931,6 @@ void PdfViewOpenGLWidget::render_selected_rectangle() {
 
         disable_stencil();
     }
-}
-
-bool PdfViewOpenGLWidget::can_use_cached_scratchpad_framebuffer() {
-    float current_offset_x = scratchpad->get_offset_x();
-    float current_offset_y = scratchpad->get_offset_y();
-    float current_zoom_level = scratchpad->get_zoom_level();
-    if ((current_offset_x == last_cache_offset_x) && (current_offset_y == last_cache_offset_y) && (current_zoom_level == last_cache_zoom_level)){
-        return true;
-    }
-    /* if (current_drawing.points.size() > 0 && cached_framebuffer.has_value()) { */
-    /*     if (last_cache_num_drawings == scratchpad->drawings.size()) { */
-    /*         return true; */
-    /*     } */
-    /* } */
-    return false;
 }
 
 void PdfViewOpenGLWidget::clear_background_color() {
