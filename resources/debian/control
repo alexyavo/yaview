@@ -8,5 +8,5 @@ Build-Depends: debhelper (>= 10) , libharfbuzz-dev, libfreetype-dev, libjbig2dec
 Package: yaview
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description:  PDF viewer
- Yaview is a PDF viewer optimized for reading research papers and textbooks.
+Description: PDF reader
+ yaview is a lightweight PDF reader with Vim ergonomics.

@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Yaview
-Comment=PDF viewer for reading research papers and technical books
+Comment=Lightweight PDF reader with Vim ergonomics
 Keywords=pdf;viewer;reader;research;
 TryExec=yaview
 Exec=yaview %f
