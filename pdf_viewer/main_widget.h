@@ -195,6 +195,9 @@ public:
     // custom message to be displayed in yaview's statusbar
     std::wstring custom_status_message = L"";
 
+    // the paths of the documents in this window's tab bar, in tab order; every window has its own tabs
+    std::vector<std::wstring> tabs;
+
     // A flag which indicates whether the application should quit. We use this to inform other threads
     // (e.g. the PDF rendering thread) that they should exit.
     bool* should_quit = nullptr;
@@ -589,6 +592,7 @@ public:
     std::optional<std::wstring> get_paper_name_under_cursor(bool use_last_hold_point = false);
     fz_stext_char* get_closest_character_to_cusrsor(QPoint pos);
     void set_status_message(std::wstring new_status_string);
+    void show_status_notification(const std::wstring& message);
     void remove_self_from_windows();
     //void handle_additional_command(std::wstring command_name, bool wait=false);
     std::optional<DocumentPos> get_overview_position();
@@ -620,6 +624,13 @@ public:
     static void update_all_tab_bars();
     void close_current_tab();
     void close_tab_with_path(const std::wstring& path);
+    int get_tab_index(const std::wstring& path);
+    // adds a tab for `path` unless it has one, right after `after_path`'s tab (the end when it has none)
+    void add_tab_after(const std::wstring& path, const std::optional<std::wstring>& after_path);
+    void remove_tab(const std::wstring& path);
+    // the tabs of every window without duplicates, this window's first
+    std::vector<std::wstring> get_all_windows_tabs();
+    void move_current_tab_to_new_window();
     // go back / forward in the jump history (mouse back and forward buttons)
     void navigate_history(bool forward);
 
@@ -650,6 +661,7 @@ public:
     void show_opened_documents(bool include_current);
     void handle_move_screen(int amount);
     MainWidget* handle_new_window();
+    void copy_color_mode(MainWidget* source);
     void handle_open_link(const std::wstring& text, bool copy = false);
     void handle_overview_link(const std::wstring& text);
     void handle_portal_to_link(const std::wstring& text);
@@ -909,7 +921,7 @@ public:
     void free_document(Document* doc);
     bool is_helper_visible();
     std::wstring get_current_tabs_file_names();
-    void open_tabs(const std::vector<std::wstring>& tabs);
+    void open_tabs(const std::vector<std::wstring>& paths);
     void handle_goto_tab(const std::wstring& path);
     void get_document_views_referencing_doc(std::wstring doc_path, std::vector<DocumentView*>& document_views, std::vector<MainWidget*>& corresponding_widgets, std::vector<bool>& is_helper);
     void restore_document_view_states(const std::vector<DocumentView*>& document_views, const std::vector<DocumentViewState>& states);

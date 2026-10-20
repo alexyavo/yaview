@@ -1453,6 +1453,22 @@ public:
 
 };
 
+class MoveTabToNewWindowCommand : public Command {
+public:
+    static inline const std::string cname = "move_tab_to_new_window";
+    static inline const std::string hname = "Move the current tab into a new window.";
+    MoveTabToNewWindowCommand(MainWidget* w) : Command(cname, w) {}
+
+    void perform() {
+        widget->move_current_tab_to_new_window();
+    }
+
+    std::string get_name() {
+        return cname;
+    }
+
+};
+
 class NextItemCommand : public Command {
 public:
     static inline const std::string cname = "next_item";
@@ -6816,6 +6832,7 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<GotoLoadedDocumentCommand>();
     register_command<GotoNextTabCommand>();
     register_command<CloseTabCommand>();
+    register_command<MoveTabToNewWindowCommand>();
     register_command<GotoPrevTabCommand>();
     register_command<NextItemCommand>();
     register_command<PrevItemCommand>();

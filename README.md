@@ -51,6 +51,7 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
   search_url_s https://kagi.com/search?q=
   ```
 
+- <kbd>Ctrl</kbd>+<kbd>\\</kbd> <kbd>n</kbd> move the current tab into a new window.
 - <kbd>:</kbd> for commands
 - <kbd>/</kbd> to search. <kbd>n</kbd> / <kbd>Shift</kbd>+<kbd>n</kbd> to go to the next/previous match.
 

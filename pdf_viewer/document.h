@@ -437,17 +437,9 @@ private:
     fz_context* mupdf_context = nullptr;
     DatabaseManager* db_manager = nullptr;
     std::unordered_map<std::wstring, Document*> cached_documents;
-    std::vector<std::wstring> tabs;
 public:
 
     DocumentManager(fz_context* mupdf_context, DatabaseManager* db_manager);
-
-    int get_tab_index(const std::wstring& path);
-    int add_tab(const std::wstring& path);
-    // like add_tab, but a new tab goes right after `after_path`'s tab (the end when it has none)
-    int add_tab_after(const std::wstring& path, const std::optional<std::wstring>& after_path);
-    void remove_tab(const std::wstring& path);
-    std::vector<std::wstring> get_tabs();
 
     Document* get_document(const std::wstring& path);
     std::optional<Document*> get_cached_document(const std::wstring& path);

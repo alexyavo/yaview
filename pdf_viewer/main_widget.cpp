@@ -290,6 +290,9 @@ const int MAX_SCROLLBAR = 10000;
 extern int RELOAD_INTERVAL_MILISECONDS;
 
 const unsigned int INTERVAL_TIME = 200;
+const int STATUS_NOTIFICATION_DURATION_MS = 3000;
+// how far a window made from a tab is moved from its original window, in pixels
+const int NEW_WINDOW_CASCADE_OFFSET = 30;
 
 #ifdef Q_OS_MACOS
 extern float MACOS_TITLEBAR_COLOR[3];
@@ -851,16 +854,15 @@ void MainWidget::persist() {
         last_path_file.close();
     }
     else {
-        // write the address of the current document in a file so that the next time
-        // we launch the application, we open this document
-        if (main_document_view->get_document()) {
-            std::ofstream last_path_file(last_opened_file_address_path.get_path_utf8());
-
-            //std::string encoded_file_name_str = utf8_encode(main_document_view->get_document()->get_path());
-            std::string encoded_file_name_str = utf8_encode(get_current_tabs_file_names());
+        // write the paths of the open tabs in a file so that the next time we launch the application,
+        // we open them. Also without a document: a window closed with its last tab leaves the tabs of
+        // the other windows, or nothing to restore.
+        std::ofstream last_path_file(last_opened_file_address_path.get_path_utf8());
+        std::string encoded_file_name_str = utf8_encode(get_current_tabs_file_names());
+        if (!encoded_file_name_str.empty()) {
             last_path_file << encoded_file_name_str.c_str() << std::endl;
-            last_path_file.close();
         }
+        last_path_file.close();
     }
 }
 void MainWidget::closeEvent(QCloseEvent* close_event) {
@@ -1029,9 +1031,9 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     tab_bar->setUsesScrollButtons(false);
     tab_scroll_area->setWidget(tab_bar);
     TabBarMouseFilter* tab_bar_mouse_filter = new TabBarMouseFilter(tab_bar, tab_scroll_area, [this](int index) {
-        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
         if (index < static_cast<int>(tabs.size())) {
-            close_tab_with_path(tabs[index]);
+            std::wstring path = tabs[index];
+            close_tab_with_path(path);
         }
         }, [this](bool is_double_click) {
 #ifdef Q_OS_MACOS
@@ -1091,11 +1093,11 @@ MainWidget::MainWidget(fz_context* mupdf_context,
 #endif
 
     QObject::connect(tab_bar, &QTabBar::currentChanged, [this](int index) {
-        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
         if (index < 0 || index >= static_cast<int>(tabs.size())) return;
         if (index == get_current_tab_index()) return;
+        std::wstring path = tabs[index];
         push_state();
-        open_document(tabs[index]);
+        open_document(path);
         invalidate_render();
         });
     // After a failed open the bar can highlight a tab whose document is not shown (Qt always keeps a
@@ -1104,10 +1106,10 @@ MainWidget::MainWidget(fz_context* mupdf_context,
     QObject::connect(tab_bar, &QTabBar::tabBarClicked, [this](int index) {
         if (!(QGuiApplication::mouseButtons() & Qt::LeftButton)) return;
         if (index < 0 || index != tab_bar->currentIndex()) return;
-        std::vector<std::wstring> tabs = this->document_manager->get_tabs();
         if (index >= static_cast<int>(tabs.size()) || index == get_current_tab_index()) return;
+        std::wstring path = tabs[index];
         push_state();
-        open_document(tabs[index]);
+        open_document(path);
         invalidate_render();
         });
 
@@ -2209,7 +2211,7 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
     adjust_two_page_mode_document_zoom_and_offset(doc()->get_path());
 
     if (doc()) {
-        document_manager->add_tab_after(doc()->get_path(), previous_path);
+        add_tab_after(doc()->get_path(), previous_path);
         //doc()->set_only_for_portal(false);
     }
     update_all_tab_bars();
@@ -4580,7 +4582,7 @@ void MainWidget::open_document(const std::wstring& doc_path,
     main_document_view->open_document(doc_path, invalid_flag, load_prev_state, prev_state, force_load_dimensions);
 
     if (doc()) {
-        document_manager->add_tab_after(doc()->get_path(), previous_path);
+        add_tab_after(doc()->get_path(), previous_path);
         //doc()->set_only_for_portal(false);
     }
     update_all_tab_bars();
@@ -5344,6 +5346,19 @@ std::wstring MainWidget::synctex_under_pos(WindowPos position) {
 
 void MainWidget::set_status_message(std::wstring new_status_string) {
     custom_status_message = new_status_string;
+}
+
+// Shows a notice in the status bar instead of a dialog and clears it after a few seconds, unless another
+// message replaced it in the meantime.
+void MainWidget::show_status_notification(const std::wstring& message) {
+    set_status_message(message);
+    is_ui_invalidated = true;
+    QTimer::singleShot(STATUS_NOTIFICATION_DURATION_MS, this, [this, message]() {
+        if (custom_status_message == message) {
+            set_status_message(L"");
+            is_ui_invalidated = true;
+        }
+        });
 }
 
 void MainWidget::remove_self_from_windows() {
@@ -6169,7 +6184,8 @@ void MainWidget::handle_goto_toc() {
 
     }
     else {
-        show_error_message(L"This document doesn't have a table of contents");
+        show_status_notification(L"This document doesn't have a table of contents");
+        pending_command_instance = nullptr;
     }
 }
 
@@ -6193,14 +6209,8 @@ MainWidget* MainWidget::create_restored_window(MainWidget* sibling, const Window
         new_w->apply_window_params_for_one_window_mode();
     }
     
-    auto color_mode = sibling->opengl_widget->get_current_color_mode();
-    if (color_mode == PdfViewOpenGLWidget::ColorPalette::Dark) {
-        new_w->opengl_widget->set_dark_mode(true);
-    }
-    else if (color_mode == PdfViewOpenGLWidget::ColorPalette::Custom) {
-        new_w->opengl_widget->set_custom_color_mode(true);
-    }
-    
+    new_w->copy_color_mode(sibling);
+
     new_w->show();
     windows.push_back(new_w);
     return new_w;
@@ -6233,16 +6243,43 @@ MainWidget* MainWidget::handle_new_window() {
     new_widget->apply_window_params_for_one_window_mode();
     new_widget->execute_macro_if_enabled(STARTUP_COMMANDS);
 
-    auto color_mode = opengl_widget->get_current_color_mode();
-    if (color_mode == PdfViewOpenGLWidget::ColorPalette::Dark) {
-        new_widget->opengl_widget->set_dark_mode(true);
-    }
-    else if (color_mode == PdfViewOpenGLWidget::ColorPalette::Custom) {
-        new_widget->opengl_widget->set_custom_color_mode(true);
-    }
+    new_widget->copy_color_mode(this);
 
     windows.push_back(new_widget);
     return new_widget;
+}
+
+void MainWidget::copy_color_mode(MainWidget* source) {
+    auto color_mode = source->opengl_widget->get_current_color_mode();
+    if (color_mode == PdfViewOpenGLWidget::ColorPalette::Dark) {
+        opengl_widget->set_dark_mode(true);
+    }
+    else if (color_mode == PdfViewOpenGLWidget::ColorPalette::Custom) {
+        opengl_widget->set_custom_color_mode(true);
+    }
+}
+
+// Like tmux's break-pane: the current tab leaves this window and opens, at the same place in the
+// document, in a new window of the same size, placed a little below and to the right of this one.
+void MainWidget::move_current_tab_to_new_window() {
+    if (tabs.size() < 2) {
+        show_status_notification(L"This is the only tab in this window");
+        return;
+    }
+    std::wstring path = doc()->get_path();
+    float offset_x = main_document_view->get_offset_x();
+    float offset_y = main_document_view->get_offset_y();
+    float zoom_level = main_document_view->get_zoom_level();
+    close_current_tab();
+
+    MainWidget* new_window = new MainWidget(this);
+    new_window->execute_macro_if_enabled(STARTUP_COMMANDS);
+    new_window->open_document(path, offset_x, offset_y, zoom_level);
+    new_window->resize(size());
+    new_window->move(pos() + QPoint(NEW_WINDOW_CASCADE_OFFSET, NEW_WINDOW_CASCADE_OFFSET));
+    new_window->copy_color_mode(this);
+    new_window->show();
+    windows.push_back(new_window);
 }
 
 std::optional<PdfLink> MainWidget::get_selected_link(const std::wstring& text) {
@@ -8070,18 +8107,12 @@ int MainWidget::get_current_tab_index(){
         current_document_path = main_document_view->last_opened_file_path;
     }
 
-    std::vector<std::wstring> loaded_document_paths_ = document_manager->get_tabs();
-    auto loc = std::find(loaded_document_paths_.begin(), loaded_document_paths_.end(), current_document_path);
-    int index = -1;
-    if (loc != loaded_document_paths_.end()) {
-        index = loc - loaded_document_paths_.begin();
-    }
-    return index;
+    return get_tab_index(current_document_path);
 }
 
 void MainWidget::goto_ith_next_tab(int i){
     int current_tab_index = get_current_tab_index();
-    std::vector<std::wstring> loaded_document_paths = document_manager->get_tabs();
+    std::vector<std::wstring> loaded_document_paths = tabs;
     if (loaded_document_paths.size() > 1){
         int new_index = current_tab_index + i;
         while (new_index < 0 ){
@@ -8094,8 +8125,6 @@ void MainWidget::goto_ith_next_tab(int i){
 
 void MainWidget::update_tab_bar() {
     if (tab_bar == nullptr) return;
-
-    std::vector<std::wstring> tabs = document_manager->get_tabs();
 
     tab_bar->blockSignals(true);
     while (tab_bar->count() > 0) {
@@ -8279,12 +8308,47 @@ void MainWidget::navigate_history(bool forward) {
 
 void MainWidget::close_tab_with_path(const std::wstring& path) {
     int current_index = get_current_tab_index();
-    if ((current_index >= 0) && (document_manager->get_tabs()[current_index] == path)) {
+    if ((current_index >= 0) && (tabs[current_index] == path)) {
         close_current_tab();
         return;
     }
-    document_manager->remove_tab(path);
+    remove_tab(path);
     update_all_tab_bars();
+}
+
+int MainWidget::get_tab_index(const std::wstring& path) {
+    auto found = std::find(tabs.begin(), tabs.end(), path);
+    return found == tabs.end() ? -1 : static_cast<int>(found - tabs.begin());
+}
+
+void MainWidget::add_tab_after(const std::wstring& path, const std::optional<std::wstring>& after_path) {
+    if (get_tab_index(path) != -1) return;
+    int after_index = after_path ? get_tab_index(after_path.value()) : -1;
+    if (after_index == -1) {
+        tabs.push_back(path);
+    }
+    else {
+        tabs.insert(tabs.begin() + after_index + 1, path);
+    }
+}
+
+void MainWidget::remove_tab(const std::wstring& path) {
+    int index = get_tab_index(path);
+    if (index != -1) {
+        tabs.erase(tabs.begin() + index);
+    }
+}
+
+std::vector<std::wstring> MainWidget::get_all_windows_tabs() {
+    std::vector<std::wstring> res = tabs;
+    for (auto window : windows) {
+        for (const auto& path : window->tabs) {
+            if (std::find(res.begin(), res.end(), path) == res.end()) {
+                res.push_back(path);
+            }
+        }
+    }
+    return res;
 }
 
 void MainWidget::update_all_tab_bars() {
@@ -8298,20 +8362,22 @@ void MainWidget::close_current_tab() {
     if (index < 0) return;
 
     // the path from the tab list, because the current tab's file may have failed to open (no doc())
-    std::wstring path = document_manager->get_tabs()[index];
-    document_manager->remove_tab(path);
-    std::vector<std::wstring> tabs = document_manager->get_tabs();
+    std::wstring path = tabs[index];
+    remove_tab(path);
 
     if (tabs.size() > 0) {
         // like closing a browser tab: show the tab that took its place, or the new last tab
         int next_index = std::min(std::max(index, 0), static_cast<int>(tabs.size()) - 1);
+        std::wstring next_path = tabs[next_index];
         push_state();
-        open_document(tabs[next_index]);
+        open_document(next_path);
     }
     else {
+        // like browsers, closing a window's last tab closes the window (and yaview, when it is the last one)
         main_document_view->persist();
         main_document_view->set_null_document();
-        setWindowTitle("yaview");
+        close();
+        return;
     }
     // The Document stays cached in document_manager so reopening it is fast; it is not freed here
     // because history entries and other views may still refer to it.
@@ -8323,7 +8389,7 @@ void MainWidget::handle_goto_loaded_document() {
     // opens a list of currently loaded documents. This is basically yaview's "tab" feature
     // the user can "unload" a document by pressing the delete key while it is highlighted in the list
 
-    std::vector<std::wstring> loaded_document_paths_ = document_manager->get_tabs();
+    std::vector<std::wstring> loaded_document_paths_ = tabs;
     std::vector<std::wstring> loaded_document_paths = get_path_unique_prefix(loaded_document_paths_);
     std::vector<std::wstring> detected_paper_names;
     for (auto path : loaded_document_paths_) {
@@ -8353,7 +8419,7 @@ void MainWidget::handle_goto_loaded_document() {
         [&](std::wstring* path) {
             std::optional<Document*> doc_to_delete = document_manager->get_cached_document(*path);
             if (!doc_to_delete) {
-                document_manager->remove_tab(*path);
+                remove_tab(*path);
             }
             for (auto window : windows) {
                 if (window->doc() && window->doc()->get_path() == *path) {
@@ -8363,13 +8429,13 @@ void MainWidget::handle_goto_loaded_document() {
                 }
             }
             if (doc_to_delete && (doc_to_delete.value() != doc())) {
-                document_manager->remove_tab(*path);
+                remove_tab(*path);
                 free_document(doc_to_delete.value());
             }
             else if (doc_to_delete) {
                 // removing the current document, close the document
                 main_document_view->set_null_document();
-                document_manager->remove_tab(*path);
+                remove_tab(*path);
                 free_document(doc_to_delete.value());
             }
             update_all_tab_bars();
@@ -9796,7 +9862,8 @@ bool MainWidget::is_helper_visible() {
 
 std::wstring MainWidget::get_current_tabs_file_names() {
     std::wstring res;
-    std::vector<std::wstring> file_names = document_manager->get_tabs();
+    // Restoring only one window brings back the tabs of every window in it.
+    std::vector<std::wstring> file_names = RESTORE_ALL_WINDOWS_ON_STARTUP ? tabs : get_all_windows_tabs();
     std::wstring current_doc_path;
     if (doc()) {
         current_doc_path = doc()->get_path();
@@ -9810,15 +9877,16 @@ std::wstring MainWidget::get_current_tabs_file_names() {
 
     for (int i = begin_index; i < file_names.size(); i++) {
         if (file_names[i] == current_doc_path) continue;
-        res += L"\n" + file_names[i];
+        if (!res.empty()) res += L"\n";
+        res += file_names[i];
     }
 
     return res;
 }
 
-void MainWidget::open_tabs(const std::vector<std::wstring>& tabs) {
-    for (auto tab : tabs) {
-        document_manager->add_tab(tab);
+void MainWidget::open_tabs(const std::vector<std::wstring>& paths) {
+    for (const auto& path : paths) {
+        add_tab_after(path, std::nullopt);
     }
     update_all_tab_bars();
 }
@@ -11633,10 +11701,10 @@ void MainWidget::show_mark_list(std::function<void(Mark*)> on_select, bool can_e
     show_current_widget();
 }
 
-// The documents the bookmark and highlight lists of several documents show: the open ones (the tabs)
-// and the recent_documents_in_annotation_lists most recently opened ones, from the database.
+// The documents the bookmark and highlight lists of several documents show: the open ones (the tabs of
+// every window) and the recent_documents_in_annotation_lists most recently opened ones, from the database.
 std::vector<std::wstring> MainWidget::get_open_and_recent_document_paths() {
-    std::vector<std::wstring> paths = document_manager->get_tabs();
+    std::vector<std::wstring> paths = get_all_windows_tabs();
     std::vector<std::pair<std::wstring, std::wstring>> documents;
     db_manager->select_documents(documents);
     int num_recent = 0;
@@ -11802,12 +11870,12 @@ void MainWidget::handle_open_all_docs() {
 
 void MainWidget::clear_document_history() {
     // An entry also holds the document's reading position, so documents open in tabs keep theirs.
-    std::vector<std::wstring> tabs = document_manager->get_tabs();
+    std::vector<std::wstring> open_paths = get_all_windows_tabs();
     std::vector<std::pair<std::wstring, std::wstring>> documents;
     db_manager->select_documents(documents);
 
     for (const auto& [path, name] : documents) {
-        if (std::find(tabs.begin(), tabs.end(), path) != tabs.end()) continue;
+        if (std::find(open_paths.begin(), open_paths.end(), path) != open_paths.end()) continue;
         db_manager->delete_document(path);
     }
 }

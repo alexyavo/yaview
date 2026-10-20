@@ -3392,49 +3392,6 @@ QJsonArray Document::get_marks_json() {
     return export_array(marks);
 }
 
-int DocumentManager::get_tab_index(const std::wstring& path) {
-    auto found = std::find(tabs.begin(), tabs.end(), path);
-    if (found != tabs.end()) {
-        return found - tabs.begin();
-    }
-    return -1;
-}
-
-
-int DocumentManager::add_tab(const std::wstring& path) {
-    int tab_index = get_tab_index(path);
-    if (tab_index == -1) {
-        tabs.push_back(path);
-    }
-    return tab_index;
-}
-
-int DocumentManager::add_tab_after(const std::wstring& path, const std::optional<std::wstring>& after_path) {
-    int tab_index = get_tab_index(path);
-    if (tab_index != -1) {
-        return tab_index;
-    }
-    int after_index = after_path ? get_tab_index(after_path.value()) : -1;
-    if (after_index == -1) {
-        tabs.push_back(path);
-    }
-    else {
-        tabs.insert(tabs.begin() + after_index + 1, path);
-    }
-    return -1;
-}
-
-void DocumentManager::remove_tab(const std::wstring& path) {
-    int index = get_tab_index(path);
-    if (index != -1) {
-        tabs.erase(tabs.begin() + index);
-    }
-}
-
-std::vector<std::wstring> DocumentManager::get_tabs() {
-    return tabs;
-}
-
 std::wstring Document::detect_paper_name() {
     return detect_paper_name(context, doc);
 }

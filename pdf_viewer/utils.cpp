@@ -4043,7 +4043,7 @@ std::vector<std::wstring> get_last_opened_file_name() {
     std::ifstream last_state_file(last_opened_file_address_path.get_path_utf8());
     std::vector<std::wstring> res;
     while (std::getline(last_state_file, file_path_)) {
-        if (file_path_.rfind("[window]", 0) == 0) {
+        if (file_path_.empty() || file_path_.rfind("[window]", 0) == 0) {
             continue;
         }
         res.push_back(utf8_decode(file_path_));
