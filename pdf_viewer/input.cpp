@@ -4187,6 +4187,31 @@ public:
 
 };
 
+class CopyFilePathCommand : public Command {
+public:
+    static inline const std::string cname = "copy_file_path";
+    static inline const std::string hname = "Copy the current file's full path";
+    CopyFilePathCommand(MainWidget* w) : Command(cname, w) {};
+
+    void perform() {
+        copy_to_clipboard(widget->doc()->get_path());
+        widget->show_status_notification(L"Copied file path to clipboard");
+    }
+};
+
+class CopyFileNameCommand : public Command {
+public:
+    static inline const std::string cname = "copy_file_name";
+    static inline const std::string hname = "Copy the current file's name (including extension)";
+    CopyFileNameCommand(MainWidget* w) : Command(cname, w) {};
+
+    void perform() {
+        QFileInfo file_info(QString::fromStdWString(widget->doc()->get_path()));
+        copy_to_clipboard(file_info.fileName().toStdWString());
+        widget->show_status_notification(L"Copied file name to clipboard");
+    }
+};
+
 #ifdef Q_OS_MACOS
 class MacosLookupCommand : public Command {
 public:
@@ -6947,6 +6972,8 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<OpenDocumentEmbeddedCommand>();
     register_command<OpenDocumentEmbeddedFromCurrentPathCommand>();
     register_command<CopyCommand>();
+    register_command<CopyFilePathCommand>();
+    register_command<CopyFileNameCommand>();
 #ifdef Q_OS_MACOS
     register_command<MacosLookupCommand>();
 #endif
