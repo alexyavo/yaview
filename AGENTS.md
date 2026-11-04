@@ -19,6 +19,7 @@ yaview is the user's fork of [sioyek](https://github.com/ahrm/sioyek), renamed f
 
 ## Customizations on `main`
 
+- Table-of-contents navigation: `get_toc_node_from_indices_helper` checks the selected row at each level, not the remaining nesting depth. Comparing the depth with the number of siblings rejected nested entries under a single root (such as a document-title heading), so selecting them closed the list without navigating. Empty and invalid index paths return no node.
 - `copy_file_path` and `copy_file_name` (command palette only, no default keys) copy the current document's full path or file name including its extension to the clipboard, with a brief status bar confirmation. Both require an open document.
 - Vim-style `h`/`l` horizontal scrolling in `pdf_viewer/keys.config`, using mode-prefixed bindings (first matching mode wins; `t` = text selected, `r` = visual mark/ruler mode). `h` still adds a highlight when text is selected. `l` still runs `overview_definition` in ruler mode.
 - `ss` (`external_search` + `s`) searches selected text on Google in the default browser (Kagi until 2026-10-16, when the user asked for Google as the default). Google Scholar moved from `s` to `sc`. Both `pdf_viewer/prefs.config` and the hardcoded defaults in `pdf_viewer/main.cpp` were changed. The user's own `~/.config/yaview/yaview.config` sets `search_url_s` to Kagi; their default browser is Waterfox.
