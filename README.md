@@ -27,6 +27,7 @@ show too; marks are saved in the file as well. yaview only ever appends to a PDF
   forgets where you were in the removed documents.
 - `:copy_file_path` copy the current file's full path to the clipboard.
 - `:copy_file_name` copy the current file's name, including its extension, to the clipboard.
+- <kbd>Cmd</kbd>+<kbd>c</kbd> copy selected text (also: <kbd>Ctrl</kbd>+<kbd>c</kbd>).
 - <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd> navigation.
 - <kbd>←</kbd> / <kbd>→</kbd> go to the previous/next page (also: <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> /
   <kbd>Ctrl</kbd>+<kbd>PageDown</kbd>).
